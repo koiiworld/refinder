@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>반품 전자기기 검색</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d1f23; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #2563eb; --accent-soft: #eaf1ff;
+    --save: #dc2626; --warn: #b45309; --warn-soft: #fef3c7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #14161a; --card: #1e2127; --text: #f1f2f4; --muted: #9ca3af;
+      --line: #2c3038; --accent: #60a5fa; --accent-soft: #1d2a40; --save: #f87171; --warn: #fbbf24; --warn-soft: #3b2f10; }
+  }
+  :root[data-theme="dark"] { --bg: #14161a; --card: #1e2127; --text: #f1f2f4; --muted: #9ca3af;
+    --line: #2c3038; --accent: #60a5fa; --accent-soft: #1d2a40; --save: #f87171; --warn: #fbbf24; --warn-soft: #3b2f10; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; line-height: 1.5; }
+  .top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+  .top-in { max-width: 960px; margin: 0 auto; }
+  .search { width: 100%; padding: 14px 16px; font-size: 16px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  .search:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+  .label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .chip { border: 1px solid var(--line); background: var(--card); color: var(--text);
+    padding: 5px 11px; border-radius: 999px; font-size: 13px; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 13px; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 12px 16px 40px; }
+  .count { font-size: 13px; color: var(--muted); margin: 6px 0 12px; }
+  .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+  .tag { padding: 2px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+  .tag.grade { background: var(--line); color: var(--text); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .name { font-size: 15px; font-weight: 600; margin: 0; word-break: keep-all; }
+  .states { display: flex; flex-wrap: wrap; gap: 6px; }
+  .st { border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 6px 10px; border-radius: 10px; font-size: 12px; cursor: pointer; text-align: left; }
+  .st .p { display: block; font-weight: 700; font-size: 13px; }
+  .st.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .prices { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 14px; }
+  .prices .k { color: var(--muted); font-size: 12px; align-self: center; }
+  .prices .sale { font-size: 18px; font-weight: 700; }
+  .prices .orig { color: var(--muted); text-decoration: line-through; }
+  .diff { font-weight: 700; color: var(--save); }
+  .diff.na { color: var(--muted); font-weight: 400; }
+  .note { font-size: 12px; color: var(--muted); margin: 0; }
+  .btn { margin-top: auto; text-align: center; text-decoration: none; padding: 11px; border-radius: 10px;
+    background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  details.guide { margin-top: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 13px; }
+  details.guide summary { cursor: pointer; font-weight: 600; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-in">
+    <input id="q" class="search" type="search" placeholder="상품명·브랜드·모델명 검색 (예: 맥미니, 허브, 갤럭시)">
+    <div class="row" id="cats"></div>
+    <div class="row" id="grades"></div>
+    <div class="row">
+      <span class="label">정렬</span>
+      <select id="sort">
+        <option value="gap">차이 큰순 (쿠팡최저가 대비)</option>
+        <option value="disc">할인율 높은순</option>
+        <option value="low">반품가 낮은순</option>
+        <option value="high">반품가 높은순</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="count" id="count"></div>
+  <div class="list" id="list"></div>
+
+  <details class="guide">
+    <summary>읽는 법</summary>
+    <ul>
+      <li><b>상태 선택</b>: 상품 카드 안에서 상태(미개봉·최상·상·중·새 상품)를 고르면 가격과 "상품 보기" 링크가 함께 바뀝니다.</li>
+      <li><b>쿠팡최저가</b>: 쿠팡에서 확인한 새 상품 기준 최저가이고, <b>차이</b>는 쿠팡최저가에서 선택한 상태의 반품가를 뺀 금액입니다.</li>
+      <li><b>확인 필요</b>: 상태별 링크나 쿠팡최저가를 아직 확인하지 않은 상품입니다.</li>
+    </ul>
+  </details>
+
+  <footer>
+    <p>이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+    <p>이 사이트는 쿠팡(주)과 무관한 독립 링크 모음입니다. 가격과 재고는 수시로 바뀌며, 2026-10-12 확인 기준입니다.</p>
+  </footer>
+</div>
+
+<script>
+/* =========================================================
+   상품 데이터
+   - name: 상품명. " · " 앞부분이 같으면 같은 상품으로 묶입니다 (상태별 옵션).
+   - cat: 카테고리 / grade: 상태 (미개봉·최상·상·중·새 상품)
+   - price: 반품가(원) / lowest: 쿠팡최저가(원, 없으면 생략)
+   - link: 파트너스 링크(또는 쿠팡 링크) / verified: 상태별 링크 확인 여부
+   ========================================================= */
+const PRODUCTS = [
+  // 맥 미니 (파트너스 링크 생성 완료)
+  { name: "Apple 맥 미니 M4 Pro · 24GB · 1TB", cat: "데스크탑", grade: "미개봉", price: 2898240, lowest: 3150270, link: "https://link.coupang.com/a/hLAbMnfjps", verified: true, note: "거의 새것" },
+  { name: "Apple 맥 미니 M4 Pro · 24GB · 1TB · 새 상품", cat: "데스크탑", grade: "새 상품", price: 3150270, lowest: 3150270, link: "https://link.coupang.com/a/hLAdhUiIea", verified: true, note: "" },
+  // 맥북 프로 (파트너스 링크 미생성)
+  { name: "Apple 맥북 프로 14 M5 Pro · 24GB · 2TB", cat: "노트북", grade: "미개봉", price: 4636800, link: "https://www.coupang.com/vp/products/9140128274?itemId=27961799030&vendorItemId=95830523336&landingType=USED_DETAIL&sourceType=OFFER_LIST", verified: false, note: "파트너스 링크 미생성 · 같은 옵션 최저 4,219,020원" },
+  { name: "Apple 맥북 프로 16 M5 Max · 36GB · 2TB", cat: "노트북", grade: "미개봉", price: 6702200, link: "https://www.coupang.com/vp/products/9410700446?itemId=27961799448&vendorItemId=95846812365&landingType=USED_DETAIL&sourceType=OFFER_LIST", verified: false, note: "파트너스 링크 미생성 · 같은 옵션 최저 6,166,020원" },
+  // ipTIME 5포트 스위칭 허브 (상태별 파트너스 링크)
+  { name: "ipTIME 5포트 스위칭 허브 · 새 상품", cat: "네트워크", grade: "새 상품", price: 13160, lowest: 13160, link: "https://link.coupang.com/a/hLEc5dlyM0", verified: true, note: "ipTIME 브랜드샵 · 무료배송" },
+  { name: "ipTIME 5포트 스위칭 허브 · 반품 최상 A", cat: "네트워크", grade: "최상", price: 13440, lowest: 13160, link: "https://link.coupang.com/a/hLEdUsNkPc", verified: true, note: "사용감 없음 · 추가 할인 시 12,230원" },
+  { name: "ipTIME 5포트 스위칭 허브 · 반품 최상 B", cat: "네트워크", grade: "최상", price: 13410, lowest: 13160, link: "https://link.coupang.com/a/hLEeMKMjNA", verified: true, note: "사용감 없음" },
+  { name: "ipTIME 5포트 스위칭 허브 · 반품 상", cat: "네트워크", grade: "상", price: 14280, lowest: 13160, link: "https://link.coupang.com/a/hLEeYWkXtY", verified: true, note: "사용감 적음" },
+  { name: "ipTIME 5포트 스위칭 허브 · 반품 미개봉 A", cat: "네트워크", grade: "미개봉", price: 14450, lowest: 13160, link: "https://link.coupang.com/a/hLEfa6OLds", verified: true, note: "거의 새것" },
+  { name: "ipTIME 5포트 스위칭 허브 · 반품 최상 C", cat: "네트워크", grade: "최상", price: 15120, lowest: 13160, link: "https://link.coupang.com/a/hLEfnnxJOm", verified: true, note: "사용감 없음" },
+  { name: "ipTIME 5포트 스위칭 허브 · 반품 미개봉 B", cat: "네트워크", grade: "미개봉", price: 16300, lowest: 13160, link: "https://link.coupang.com/a/hLEfzxCRpc", verified: true, note: "거의 새것" },
+  // 이전 수집분 (상태별 링크 확인 전)
+  { name: "실크펜슬 V4 무선충전 아이패드 호환 스타일러스 펜슬, 화이트", cat: "액세서리", grade: "여러 상태", price: 13300, link: "https://www.coupang.com/vp/products/8320686960", verified: false },
+  { name: "핌핀 TV 셋톱박스 통합 무설정 리모콘 PB-9788", cat: "생활가전", grade: "여러 상태", price: 1450, link: "https://www.coupang.com/vp/products/7635376564", verified: false },
+  { name: "구스페리 스테레오 커널형 유선 이어폰 3.5mm, 화이트", cat: "이어폰·헤드폰", grade: "상", price: 2260, link: "https://www.coupang.com/vp/products/8785758741", verified: false },
+  { name: "메디니스 프로 바디 플래티넘 무선 발판 마사지기 MDF-30G", cat: "생활가전", grade: "중", price: 82090, link: "https://www.coupang.com/vp/products/7141640769", verified: false },
+  { name: "위니즈 슬림 맥북 프로 14.2 A2442 케이스 SANDGRAY", cat: "액세서리", grade: "여러 상태", price: 6910, link: "https://www.coupang.com/vp/products/8190796120", verified: false },
+  { name: "무쿠 BLDC 초소형 냉각 손 선풍기 3단 풍속 NCFA-2KC-12-SQ", cat: "생활가전", grade: "여러 상태", price: 7390, link: "https://www.coupang.com/vp/products/9512257181", verified: false },
+  { name: "휴심 타이거 손목 발목 마사지기 MDM-1", cat: "생활가전", grade: "상", price: 22560, link: "https://www.coupang.com/vp/products/8048994459", verified: false },
+  { name: "라헨느 프리미엄 카본 탄소 워셔블 전기요 싱글 100x180cm", cat: "생활가전", grade: "중", price: 13120, link: "https://www.coupang.com/vp/products/8336295905", verified: false },
+  { name: "위니즈 레터 패션 태블릿 파우치 WZFLP 레드", cat: "액세서리", grade: "상", price: 5280, link: "https://www.coupang.com/vp/products/8316114209", verified: false },
+  { name: "무쿠 BLDC 초소형 손 선풍기 3단풍속 NCFA-1K2-12-SQ", cat: "생활가전", grade: "여러 상태", price: 7050, link: "https://www.coupang.com/vp/products/9501093196", verified: false },
+  { name: "오펜트 더블 프로텍션 V2 하드 케이스 베이비핑크", cat: "액세서리", grade: "중", price: 7680, link: "https://www.coupang.com/vp/products/8437007486", verified: false },
+  { name: "태블리스 슬라이드 핏 투웨이 커버 케이스 크림", cat: "액세서리", grade: "여러 상태", price: 5450, link: "https://www.coupang.com/vp/products/7798037222", verified: false },
+  { name: "스코코 ASUS ROG ALLY X 외부보호필름 세트", cat: "액세서리", grade: "상", price: 3670, link: "https://www.coupang.com/vp/products/8473947250", verified: false },
+  { name: "모아브 아이패드 파우치 그레이", cat: "액세서리", grade: "최상", price: 5630, link: "https://www.coupang.com/vp/products/8497849981", verified: false },
+  { name: "신지모루 스마트커버 애플펜슬 수납 폴리오 태블릿 케이스", cat: "액세서리", grade: "중", price: 7290, link: "https://www.coupang.com/vp/products/9717968681", verified: false },
+  { name: "고부기 갤럭시 북4 엣지 16 액정보호필름 세트", cat: "액세서리", grade: "중", price: 6360, link: "https://www.coupang.com/vp/products/8710697577", verified: false },
+  { name: "벨킨 울트라차지 프로 3in1 Qi2 25W 무선 충전 스탠드 샌드", cat: "액세서리", grade: "여러 상태", price: 143200, link: "https://www.coupang.com/vp/products/9041573246", verified: false },
+  { name: "갤럭시 버디2 128GB SM-M236 미사용 공기계 라이트 블루", cat: "휴대폰", grade: "새 상품", price: 222810, link: "https://www.coupang.com/vp/products/6890919430", verified: false },
+  { name: "삼성전자 갤럭시 노트20 울트라 256GB 미스틱 브론즈", cat: "휴대폰", grade: "중", price: 493010, link: "https://www.coupang.com/vp/products/2212460436", verified: false },
+  { name: "샤오미 포코 X8 PRO 자급제 8GB 256GB 블랙", cat: "휴대폰", grade: "상", price: 421810, link: "https://www.coupang.com/vp/products/9760941472", verified: false },
+  { name: "DJI Osmo Mobile 8P 스탠더드 콤보", cat: "기타", grade: "여러 상태", price: 137690, link: "https://www.coupang.com/vp/products/9456833937", verified: false },
+  { name: "벨킨 부스트업 프로 Qi2 15W 마그네틱 스탠드 화이트", cat: "액세서리", grade: "여러 상태", price: 95200, link: "https://www.coupang.com/vp/products/8174327606", verified: false },
+  { name: "삼성전자 갤럭시 S25 FE SM-S731N 256GB 아이스블루", cat: "휴대폰", grade: "중", price: 737730, link: "https://www.coupang.com/vp/products/9018833831", verified: false },
+  { name: "슈피겐 스마트워치 모던핏 티타늄 스트랩", cat: "스마트워치", grade: "여러 상태", price: 100140, link: "https://www.coupang.com/vp/products/8736599937", verified: false },
+  { name: "벨킨 부스트차지 프로 맥세이프 15W 독 2in1 무선 충전기 샌드", cat: "액세서리", grade: "중", price: 84320, link: "https://www.coupang.com/vp/products/7761817264", verified: false },
+  { name: "삼성전자 갤럭시 Z플립7 SM-F766N 512GB 제트 블랙", cat: "휴대폰", grade: "상", price: 1119990, link: "https://www.coupang.com/vp/products/8847553625", verified: false },
+  { name: "벨킨 부스트차지 프로 Qi2 15W 마그네틱 독 2in1 무선 충전기 샌드", cat: "액세서리", grade: "여러 상태", price: 111200, link: "https://www.coupang.com/vp/products/9129134625", verified: false },
+  { name: "클릭스 아이폰 키보드 케이스 아이폰 17 프로 스모크", cat: "액세서리", grade: "여러 상태", price: 161360, link: "https://www.coupang.com/vp/products/9412033547", verified: false },
+  { name: "삼성전자 갤럭시 점프 2 5G SM-M336K 128GB 블루", cat: "휴대폰", grade: "박스 훼손", price: 352570, link: "https://www.coupang.com/vp/products/6495363628", verified: false },
+  { name: "삼성전자 갤럭시 A16 자급제 SM-A165N 128GB 그레이", cat: "휴대폰", grade: "중", price: 203980, link: "https://www.coupang.com/vp/products/8401785735", verified: false },
+  { name: "삼성전자 갤럭시워치7 SM-L310N 그린 44mm", cat: "스마트워치", grade: "중", price: 400000, link: "https://www.coupang.com/vp/products/8151207802", verified: false },
+];
+
+const CATEGORIES = ["전체", "노트북", "데스크탑", "휴대폰", "스마트워치", "이어폰·헤드폰", "생활가전", "액세서리", "네트워크", "기타"];
+const GRADES = ["전체", "미개봉", "최상", "상", "중", "새 상품"];
+
+let state = { q: "", cat: "전체", grade: "전체", sort: "gap" };
+let selected = {}; // 상품명(묶음 키) -> 선택한 링크
+
+const won = n => n.toLocaleString("ko-KR") + "원";
+const pctOf = p => (p.lowest && p.lowest > p.price) ? Math.round((1 - p.price / p.lowest) * 100) : 0;
+const gapOf = p => (p.lowest && p.lowest > p.price) ? p.lowest - p.price : 0;
+const keyOf = p => p.name.split(" · ")[0];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function chips(id, list, key, label) {
+  document.getElementById(id).innerHTML = `<span class="label">${label}</span>` +
+    list.map(v => `<button class="chip ${state[key] === v ? "on" : ""}" data-key="${key}" data-val="${v}">${v}</button>`).join("");
+}
+
+// 필터 → 묶음(상품 단위)으로 정리
+function groups() {
+  const words = state.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const map = new Map();
+  PRODUCTS.forEach(p => {
+    if (state.cat !== "전체" && p.cat !== state.cat) return;
+    if (state.grade !== "전체" && p.grade !== state.grade) return;
+    const hay = [p.name, p.cat, p.grade, p.note || ""].join(" ").toLowerCase();
+    if (!words.every(w => hay.includes(w))) return;
+    const k = keyOf(p);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(p);
+  });
+  const arr = [...map.entries()].map(([k, opts]) => {
+    opts.sort((a, b) => a.price - b.price);
+    return { k, opts, rep: opts[0] };
+  });
+  const sorters = {
+    gap:  (a, b) => Math.max(...b.opts.map(gapOf)) - Math.max(...a.opts.map(gapOf)),
+    disc: (a, b) => Math.max(...b.opts.map(pctOf)) - Math.max(...a.opts.map(pctOf)),
+    low:  (a, b) => a.rep.price - b.rep.price,
+    high: (a, b) => b.rep.price - a.rep.price,
+  };
+  return arr.sort(sorters[state.sort]);
+}
+
+function card(g) {
+  const opts = g.opts;
+  const cur = opts.find(o => o.link === selected[g.k]) || opts[0];
+  const d = pctOf(cur), gp = gapOf(cur);
+  const diffHtml = gp
+    ? `<span class="diff">−${won(gp)} (${d}%)</span>`
+    : (cur.lowest && cur.price > cur.lowest)
+      ? `<span class="diff na">쿠팡최저가보다 +${won(cur.price - cur.lowest)}</span>`
+      : (cur.lowest ? `<span class="diff na">쿠팡최저가와 같음</span>` : `<span class="diff na">확인 필요</span>`);
+  const states = opts.length > 1
+    ? `<div class="states">${opts.map(o => `<button class="st ${o === cur ? "on" : ""}" data-group="${esc(g.k)}" data-link="${esc(o.link)}">${esc(o.grade)}<span class="p">${won(o.price)}</span></button>`).join("")}</div>`
+    : "";
+  const warn = cur.verified ? "" : `<span class="tag warn">확인 필요</span>`;
+  return `
+    <div class="item">
+      <div class="meta">
+        <span class="tag">${esc(cur.cat)}</span>
+        <span class="tag grade">${esc(cur.grade)}</span>
+        ${warn}
+      </div>
+      <p class="name">${esc(g.k)}</p>
+      ${states}
+      <div class="prices">
+        <span class="k">반품가</span><span class="sale">${won(cur.price)}</span>
+        ${cur.lowest ? `<span class="k">쿠팡최저가</span><span class="orig">${won(cur.lowest)}</span>` : ""}
+        <span class="k">차이</span>${diffHtml}
+      </div>
+      ${cur.note ? `<p class="note">${esc(cur.note)}</p>` : ""}
+      <a class="btn" href="${esc(cur.link)}" target="_blank" rel="noopener noreferrer">상품 보기</a>
+    </div>`;
+}
+
+function render() {
+  chips("cats", CATEGORIES, "cat", "카테고리");
+  chips("grades", GRADES, "grade", "상태");
+  const gs = groups();
+  document.getElementById("count").textContent = `${gs.length}개 상품`;
+  document.getElementById("list").innerHTML = gs.length
+    ? gs.map(card).join("")
+    : `<div class="empty">조건에 맞는 상품이 없습니다. 검색어나 필터를 바꿔 보세요.</div>`;
+}
+
+document.addEventListener("click", e => {
+  const st = e.target.closest(".st");
+  if (st) { selected[st.dataset.group] = st.dataset.link; render(); return; }
+  const b = e.target.closest(".chip");
+  if (!b) return;
+  state[b.dataset.key] = b.dataset.val;
+  render();
+});
+document.getElementById("q").addEventListener("input", e => { state.q = e.target.value; render(); });
+document.getElementById("sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
+
+render();
+</script>
+</body>
+</html>
