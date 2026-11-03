@@ -1,0 +1,219 @@
+import "server-only";
+import type { ProviderId } from "../types";
+
+/**
+ * 공식 HTTP API 직접 호출 (SDK 미사용, 서버에서만 실행)
+ * - OpenAI: Chat Completions API
+ * - Anthropic: Messages API
+ * - Google: Gemini generateContent API
+ * - template: 외부 호출 없이 입력값으로 구조만 채우는 오프라인 초안 (AI 아님)
+ */
+
+export interface AiRequest {
+  system: string;
+  prompt: string;
+  model: string;
+  maxTokens?: number;
+  json?: boolean;
+  temperature?: number;
+}
+
+export interface AiResponse {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export class AiError extends Error {
+  constructor(
+    message: string,
+    public retryable: boolean,
+    public status?: number,
+  ) {
+    super(message);
+  }
+}
+
+export const PROVIDER_LABELS: Record<ProviderId, string> = {
+  openai: "ChatGPT (OpenAI)",
+  anthropic: "Claude (Anthropic)",
+  google: "Gemini (Google)",
+  template: "템플릿 (오프라인·AI 아님)",
+};
+
+const ENV_KEYS: Record<Exclude<ProviderId, "template">, string> = {
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+  google: "GOOGLE_AI_API_KEY",
+};
+
+export function providerKey(p: ProviderId): string | undefined {
+  if (p === "template") return undefined;
+  const v = process.env[ENV_KEYS[p]]?.trim();
+  return v ? v : undefined;
+}
+
+export function isConnected(p: ProviderId): boolean {
+  return p === "template" || !!providerKey(p);
+}
+
+export function connectionStatus() {
+  return (["openai", "anthropic", "google"] as const).map((p) => ({
+    provider: p,
+    label: PROVIDER_LABELS[p],
+    envKey: ENV_KEYS[p],
+    connected: !!providerKey(p),
+  }));
+}
+
+const TIMEOUT_MS = 180_000;
+
+// 공식 API 기본 주소 (프록시·게이트웨이 사용 시 *_BASE_URL 환경 변수로 변경 가능)
+const DEFAULT_BASE: Record<Exclude<ProviderId, "template">, [string, string]> = {
+  openai: ["OPENAI_BASE_URL", "https://api.openai.com"],
+  anthropic: ["ANTHROPIC_BASE_URL", "https://api.anthropic.com"],
+  google: ["GOOGLE_AI_BASE_URL", "https://generativelanguage.googleapis.com"],
+};
+function base(p: Exclude<ProviderId, "template">) {
+  const [env, def] = DEFAULT_BASE[p];
+  return (process.env[env]?.trim() || def).replace(/\/$/, "");
+}
+
+async function postJson(url: string, headers: Record<string, string>, body: unknown) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const text = await res.text();
+    let data: unknown = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      /* 응답이 JSON이 아님 */
+    }
+    if (!res.ok) {
+      const msg =
+        (data as { error?: { message?: string } })?.error?.message || text.slice(0, 300) || res.statusText;
+      const retryable = res.status === 429 || res.status >= 500;
+      throw new AiError(`HTTP ${res.status}: ${msg}`, retryable, res.status);
+    }
+    return data as Record<string, unknown>;
+  } catch (e) {
+    if (e instanceof AiError) throw e;
+    const err = e as Error;
+    throw new AiError(err.name === "AbortError" ? "요청 시간 초과" : `네트워크 오류: ${err.message}`, true);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callOpenAI(key: string, r: AiRequest): Promise<AiResponse> {
+  const body: Record<string, unknown> = {
+    model: r.model,
+    messages: [
+      { role: "system", content: r.system },
+      { role: "user", content: r.prompt },
+    ],
+    max_completion_tokens: r.maxTokens ?? 8000,
+  };
+  if (r.json) body.response_format = { type: "json_object" };
+  const data = (await postJson(`${base("openai")}/v1/chat/completions`, { authorization: `Bearer ${key}` }, body)) as {
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  return {
+    text: data.choices?.[0]?.message?.content ?? "",
+    inputTokens: data.usage?.prompt_tokens ?? 0,
+    outputTokens: data.usage?.completion_tokens ?? 0,
+  };
+}
+
+async function callAnthropic(key: string, r: AiRequest): Promise<AiResponse> {
+  const data = (await postJson(
+    `${base("anthropic")}/v1/messages`,
+    { "x-api-key": key, "anthropic-version": "2023-06-01" },
+    {
+      model: r.model,
+      max_tokens: r.maxTokens ?? 8000,
+      system: r.system,
+      messages: [{ role: "user", content: r.prompt }],
+    },
+  )) as {
+    content?: { type: string; text?: string }[];
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+  return {
+    text: (data.content ?? [])
+      .filter((c) => c.type === "text")
+      .map((c) => c.text ?? "")
+      .join(""),
+    inputTokens: data.usage?.input_tokens ?? 0,
+    outputTokens: data.usage?.output_tokens ?? 0,
+  };
+}
+
+async function callGoogle(key: string, r: AiRequest): Promise<AiResponse> {
+  const generationConfig: Record<string, unknown> = { maxOutputTokens: r.maxTokens ?? 8000 };
+  if (r.json) generationConfig.responseMimeType = "application/json";
+  const data = (await postJson(
+    `${base("google")}/v1beta/models/${encodeURIComponent(r.model)}:generateContent`,
+    { "x-goog-api-key": key },
+    {
+      systemInstruction: { parts: [{ text: r.system }] },
+      contents: [{ role: "user", parts: [{ text: r.prompt }] }],
+      generationConfig,
+    },
+  )) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  };
+  return {
+    text: (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join(""),
+    inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
+    outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+  };
+}
+
+export async function callProvider(
+  provider: ProviderId,
+  r: AiRequest,
+  templateFn?: () => string,
+): Promise<AiResponse> {
+  if (provider === "template") {
+    if (!templateFn) throw new AiError("이 작업은 템플릿 모드를 지원하지 않습니다.", false);
+    return { text: templateFn(), inputTokens: 0, outputTokens: 0 };
+  }
+  const key = providerKey(provider);
+  if (!key) throw new AiError(`${PROVIDER_LABELS[provider]} API 키가 설정되지 않았습니다.`, false);
+  if (provider === "openai") return callOpenAI(key, r);
+  if (provider === "anthropic") return callAnthropic(key, r);
+  return callGoogle(key, r);
+}
+
+/** 공식 모델 목록 API로 실제 사용 가능한 모델 조회 */
+export async function listModels(provider: Exclude<ProviderId, "template">): Promise<string[]> {
+  const key = providerKey(provider);
+  if (!key) throw new AiError("API 키가 설정되지 않았습니다.", false);
+  let url = "";
+  let headers: Record<string, string> = {};
+  if (provider === "openai") {
+    url = `${base("openai")}/v1/models`;
+    headers = { authorization: `Bearer ${key}` };
+  } else if (provider === "anthropic") {
+    url = `${base("anthropic")}/v1/models?limit=100`;
+    headers = { "x-api-key": key, "anthropic-version": "2023-06-01" };
+  } else {
+    url = `${base("google")}/v1beta/models?pageSize=200`;
+    headers = { "x-goog-api-key": key };
+  }
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new AiError(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`, false, res.status);
+  const data = (await res.json()) as { data?: { id: string }[]; models?: { name: string }[] };
+  if (provider === "google") return (data.models ?? []).map((m) => m.name.replace(/^models\//, ""));
+  return (data.data ?? []).map((m) => m.id);
+}
