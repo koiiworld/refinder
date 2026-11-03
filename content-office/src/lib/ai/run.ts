@@ -127,8 +127,42 @@ export function extractJson<T>(text: string): T {
   try {
     return JSON.parse(cleaned.slice(start, end + 1)) as T;
   } catch {
-    throw new AiError("AI 응답 JSON 파싱 실패", true);
+    const repaired = repairJson(cleaned.slice(start));
+    if (repaired !== null) return repaired as T;
+    throw new AiError("AI 응답이 중간에 끊겨 읽을 수 없습니다. 다시 시도합니다.", true);
   }
+}
+
+/** 중간에 잘린 JSON: 마지막으로 완성된 값까지 남기고 열린 괄호를 닫아 복구 */
+function repairJson(text: string): unknown {
+  for (let cut = text.length; cut > 1; cut--) {
+    const ch = text[cut - 1];
+    if (ch !== "}" && ch !== "]" && ch !== '"' && !/[0-9el]/.test(ch)) continue;
+    const head = text.slice(0, cut);
+    const stack: string[] = [];
+    let inStr = false;
+    let esc = false;
+    for (const c of head) {
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') inStr = true;
+      else if (c === "{" || c === "[") stack.push(c);
+      else if (c === "}" || c === "]") stack.pop();
+    }
+    if (inStr) continue;
+    const closing = stack.reverse().map((c) => (c === "{" ? "}" : "]")).join("");
+    try {
+      return JSON.parse(head.replace(/,\s*$/, "") + closing);
+    } catch {
+      /* 더 앞에서 잘라 봄 */
+    }
+    if (text.length - cut > 4000) break;
+  }
+  return null;
 }
 
 /** AI가 만든 HTML에서 위험 요소 제거 */
@@ -171,26 +205,44 @@ export async function runStep(o: Omit<RunOptions, "role" | "override"> & { step:
   const primary = stepAi[o.step];
   const order: RoleAssignment[] = [primary];
   for (const p of ["google", "openai", "anthropic"] as const) {
-    if (p !== primary.provider) order.push({ provider: p, model: FALLBACK_MODELS[p] });
+    if (p !== primary.provider || primary.model !== FALLBACK_MODELS[p]) order.push({ provider: p, model: FALLBACK_MODELS[p] });
+    // Gemini 가 붐빌 때를 대비한 같은 키의 가벼운 모델
+    if (p === "google") order.push({ provider: "google", model: "gemini-3.5-flash-lite" });
   }
   const now = Date.now();
-  const candidates = order.filter((c) => isConnected(c.provider) && (unhealthy.get(c.provider) ?? 0) < now);
-  let lastErr: unknown = null;
+  const seen = new Set<string>();
+  const candidates = order.filter((c) => {
+    const k = `${c.provider}:${c.model}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return isConnected(c.provider) && (unhealthy.get(c.provider) ?? 0) < now;
+  });
+  const problems: string[] = [];
+  let anyBusy = false;
   for (const c of candidates) {
     try {
-      const r = await runAI({ ...o, role: o.role ?? "writer", override: c });
-      return c.provider === primary.provider ? r : { ...r, substitutedFor: `${PROVIDER_LABELS[primary.provider]} (${primary.model})` };
+      const r = await runAI({ ...o, role: o.role ?? "writer", override: c, retries: o.retries ?? 1 });
+      return c.provider === primary.provider && c.model === primary.model ? r : { ...r, substitutedFor: `${PROVIDER_LABELS[primary.provider]} (${primary.model})` };
     } catch (e) {
-      lastErr = e;
+      const name = `${PROVIDER_LABELS[c.provider]}`;
       if (unusable(e)) {
         unhealthy.set(c.provider, Date.now() + 10 * 60_000); // 10분간 건너뜀
+        problems.push(`${name}: 크레딧·키 문제`);
         continue;
       }
-      if (busy(e)) continue;
+      if (busy(e) || (e instanceof AiError && e.retryable)) {
+        anyBusy = true;
+        problems.push(`${name}(${c.model}): ${busy(e) ? "서버 혼잡" : "응답 오류"}`);
+        continue;
+      }
       throw e;
     }
   }
-  if (lastErr) throw lastErr;
+  for (const [p, until] of unhealthy) if (until >= now && !problems.some((x) => x.startsWith(PROVIDER_LABELS[p as ProviderId]))) problems.push(`${PROVIDER_LABELS[p as ProviderId]}: 크레딧·키 문제(최근)`);
+  if (problems.length) {
+    // 혼잡이 섞여 있으면 재시도 가능한 오류로 → 작업 큐가 잠시 뒤 다시 시도
+    throw new AiError(`지금 쓸 수 있는 AI가 없습니다 — ${problems.join(" / ")}. ${anyBusy ? "잠시 뒤 다시 시도하면 됩니다." : "설정에서 AI 연결·크레딧을 확인하세요."}`, anyBusy, anyBusy ? 503 : undefined);
+  }
   if (o.template) {
     const { fallbackToTemplate } = await getSettings();
     if (fallbackToTemplate) return runAI({ ...o, role: o.role ?? "writer", override: { provider: "template", model: "offline-template" } });

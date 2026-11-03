@@ -192,7 +192,8 @@ async function inlineImages(urls: string[] = []) {
 }
 
 async function callGoogle(key: string, r: AiRequest): Promise<AiResponse> {
-  const generationConfig: Record<string, unknown> = { maxOutputTokens: r.maxTokens ?? 8000 };
+  // 최신 Gemini 는 답하기 전 '생각'에도 출력 한도를 쓰므로 넉넉히 잡음 (부족하면 답이 잘림)
+  const generationConfig: Record<string, unknown> = { maxOutputTokens: Math.max(16384, (r.maxTokens ?? 8000) * 2) };
   if (r.json) generationConfig.responseMimeType = "application/json";
   const data = (await postJson(
     `${base("google")}/v1beta/models/${encodeURIComponent(r.model)}:generateContent`,
@@ -203,11 +204,14 @@ async function callGoogle(key: string, r: AiRequest): Promise<AiResponse> {
       generationConfig,
     },
   )) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
     usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
   };
+  if (data.candidates?.[0]?.finishReason === "MAX_TOKENS" && r.json) {
+    throw new AiError("Gemini 답이 출력 한도에 걸려 잘렸습니다. 다시 시도합니다.", true);
+  }
   return {
-    text: (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join(""),
+    text: (data.candidates?.[0]?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? "").join(""),
     inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
     outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
   };

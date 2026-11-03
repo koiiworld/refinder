@@ -104,6 +104,16 @@ test("크레딧 없는 AI는 자동으로 다른 AI로 대체", async () => {
   await call("/api/settings", "PUT", { stepAi: { titles: { provider: "openai", model: "gpt-5.4-mini" } } });
 });
 
+test("AI 답이 중간에 잘려도 완성된 항목까지 살려서 사용", async () => {
+  await call("/api/settings", "PUT", { stepAi: { keywords: { provider: "google", model: "truncate-model" } } });
+  const r = await call("/api/keywords", "POST", { action: "recommend", blogId: "blog_naver_life" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const picks = (await call("/api/keywords?blogId=blog_naver_life")).data.map((p) => p.keyword);
+  assert.ok(picks.includes("잘림테스트1") && picks.includes("잘림테스트2"));
+  assert.ok(!picks.some((k) => k === "잘림"), "잘린 항목은 버림");
+  await call("/api/settings", "PUT", { stepAi: { keywords: { provider: "openai", model: "gpt-5.4-mini" } } });
+});
+
 test("모델 목록 · Higgsfield 연결 확인", async () => {
   assert.deepEqual((await call("/api/ai/models?provider=openai")).data.models, ["gpt-mock-1", "gpt-mock-2"]);
   assert.match((await call("/api/ai/models?provider=higgsfield")).data.note, /인증 성공/);

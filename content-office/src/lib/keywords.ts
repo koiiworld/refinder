@@ -93,7 +93,7 @@ export async function recommendKeywords(blogId: string, hint = "") {
     existing: existing.map((e) => e.keyword).slice(0, 80),
     hint,
   });
-  const res = await runStep({ step: "keywords", role: "ideas", purpose: "keywords", blog, system, prompt, json: true, retries: 1, maxTokens: 3000 });
+  const res = await runStep({ step: "keywords", role: "ideas", purpose: "keywords", blog, system, prompt, json: true, retries: 1, maxTokens: 6000 });
   const ai = (extractJson<{ keywords?: { keyword?: string; reason?: string; season?: string }[] }>(res.text).keywords ?? [])
     .map((k) => ({ keyword: String(k.keyword ?? "").trim(), reason: String(k.reason ?? ""), season: String(k.season ?? "") }))
     .filter((k) => k.keyword);

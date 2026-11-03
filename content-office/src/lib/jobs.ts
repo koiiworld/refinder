@@ -135,7 +135,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     }
     const { system, prompt } = titlesPrompt(blog, keyword, related);
     const res = await runStep({
-      step: "titles", role: "planner", purpose: "titles", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 3000,
+      step: "titles", role: "planner", purpose: "titles", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 6000,
       template: () => JSON.stringify({ candidates: [{ title: `${keyword} 총정리`, reason: "템플릿" }, { title: `${keyword} 알아보기`, reason: "템플릿" }], best: 0, bestReason: "⚠ AI 미연결: 템플릿 제목", subKeywords: [] }),
     });
     const raw = extractJson<{ candidates?: { title?: string; reason?: string }[]; best?: number; bestReason?: string; subKeywords?: string[] }>(res.text);

@@ -111,6 +111,7 @@ http
     const m = url.pathname.match(/^\/v1beta\/models\/(.+):generateContent$/);
     if (m) {
       if (req.headers["x-goog-api-key"] !== "test-google") return send(res, 403, { error: { message: "bad key" } });
+      if (m[1] === "truncate-model") return send(res, 200, { candidates: [{ content: { parts: [{ text: '{"keywords":[{"keyword":"잘림테스트1","reason":"r"},{"keyword":"잘림테스트2","reason":"r2"},{"keyword":"잘림' }] }, finishReason: "STOP" }] });
       const parts = body.contents?.[0]?.parts ?? [];
       const text = answer(sysOf(body), parts.map((p) => p.text ?? "").join(""));
       return send(res, 200, { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 400 } });
