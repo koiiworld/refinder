@@ -1,7 +1,7 @@
 import "server-only";
 import { q, q1, newId, j } from "./db";
 import type { Blog, Job, Plan, Project, ReviewResult, RoleAssignment } from "./types";
-import { addEvent, createVersion, getBlog, getDocument, getProject, getVersion, updateProject, writeAiDraft } from "./repo";
+import { addEvent, createVersion, getBlog, getBlogForAi, getDocument, getProject, getVersion, updateProject, writeAiDraft } from "./repo";
 import { runAI, extractJson, sanitizeHtml } from "./ai/run";
 import { AiError } from "./ai/providers";
 import {
@@ -114,7 +114,7 @@ export function jobLabel(type: string) {
 async function load(job: Job): Promise<{ project: Project; blog: Blog }> {
   const project = await getProject(job.project_id!);
   if (!project) throw new Error("프로젝트를 찾을 수 없습니다.");
-  const blog = await getBlog(project.blog_id);
+  const blog = await getBlogForAi(project.blog_id);
   if (!blog) throw new Error("블로그를 찾을 수 없습니다.");
   return { project, blog };
 }

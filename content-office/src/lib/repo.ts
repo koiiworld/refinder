@@ -13,6 +13,17 @@ export async function getBlog(id: string) {
   return q1<Blog>("SELECT * FROM blogs WHERE id=$1", [id]);
 }
 
+/** 말투 예시 파일(사용 중인 것)을 붙인 블로그 — AI 작업 전용 */
+export async function getBlogForAi(id: string) {
+  const blog = await getBlog(id);
+  if (!blog) return null;
+  blog.style_samples = await q<{ filename: string; content: string }>(
+    "SELECT filename, content FROM blog_samples WHERE blog_id=$1 AND enabled=TRUE ORDER BY created_at",
+    [id],
+  );
+  return blog;
+}
+
 export async function getProject(id: string) {
   return q1<Project>("SELECT * FROM projects WHERE id=$1", [id]);
 }

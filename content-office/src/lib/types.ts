@@ -26,6 +26,8 @@ export interface Blog {
   archived: boolean;
   created_at: string;
   updated_at: string;
+  /** AI 작업 시 서버가 채워 넣는 말투 예시 (DB 컬럼 아님) */
+  style_samples?: { filename: string; content: string }[];
 }
 
 export interface Source {

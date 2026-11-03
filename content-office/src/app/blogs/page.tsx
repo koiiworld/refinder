@@ -10,6 +10,8 @@ export default async function Blogs() {
     "SELECT blog_id, COUNT(*)::int AS n, SUM(CASE WHEN stage='done' THEN 1 ELSE 0 END)::int AS done FROM projects GROUP BY blog_id",
   );
   const c = Object.fromEntries(counts.map((x) => [x.blog_id, x]));
+  const sampleRows = await q<{ blog_id: string; n: number }>("SELECT blog_id, COUNT(*)::int AS n FROM blog_samples WHERE enabled=TRUE GROUP BY blog_id");
+  const sc = Object.fromEntries(sampleRows.map((x) => [x.blog_id, x.n]));
   return (
     <div className="page">
       <div className="page-head">
@@ -30,7 +32,7 @@ export default async function Blogs() {
             <div className="small muted">{b.category}</div>
             <div className="small" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{b.style_guide}</div>
             <div className="row tiny muted">
-              <span>프로젝트 {c[b.id]?.n ?? 0}</span>·<span>완료 {c[b.id]?.done ?? 0}</span>·<span>검수 규칙 {b.review_rules.length}개</span>
+              <span>프로젝트 {c[b.id]?.n ?? 0}</span>·<span>완료 {c[b.id]?.done ?? 0}</span>·<span>검수 규칙 {b.review_rules.length}개</span>·<span>말투 예시 {sc[b.id] ?? 0}개</span>
               {b.archived && <span className="badge">보관됨</span>}
             </div>
           </Link>

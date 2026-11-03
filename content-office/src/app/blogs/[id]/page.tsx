@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getBlog } from "@/lib/repo";
 import { connectionStatus } from "@/lib/ai/providers";
 import BlogForm from "@/components/BlogForm";
+import StyleSamples from "@/components/StyleSamples";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,10 @@ export default async function BlogDetail({ params }: { params: Promise<{ id: str
           <Link className="btn btn-sm btn-primary" href={`/projects/new?blog=${blog.id}`}>+ 새 글</Link>
         </div>
       </div>
-      <BlogForm blog={JSON.parse(JSON.stringify(blog))} connections={connections} />
+      <div className="stack" style={{ gap: 16 }}>
+        <StyleSamples blogId={blog.id} />
+        <BlogForm blog={JSON.parse(JSON.stringify(blog))} connections={connections} />
+      </div>
     </div>
   );
 }

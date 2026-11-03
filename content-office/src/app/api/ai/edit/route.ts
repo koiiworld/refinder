@@ -1,6 +1,6 @@
 import { resolveAssignment, runAI } from "@/lib/ai/run";
 import { editPrompt } from "@/lib/ai/prompts";
-import { addEvent, getBlog, getProject } from "@/lib/repo";
+import { addEvent, getBlogForAi, getProject } from "@/lib/repo";
 import type { ProviderId } from "@/lib/types";
 import { body, fail, handle, ok } from "@/lib/api";
 
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     const b = await body<{ projectId: string; selected: string; instruction: string; context?: string; provider?: ProviderId; model?: string }>(req);
     const project = await getProject(b.projectId);
     if (!project) return fail("프로젝트 없음", 404);
-    const blog = (await getBlog(project.blog_id))!;
+    const blog = (await getBlogForAi(project.blog_id))!;
     if (!b.selected?.trim()) return fail("수정할 부분을 선택하세요.");
     if (!b.instruction?.trim()) return fail("수정 지시를 입력하세요.");
     const override = b.provider && b.model ? { provider: b.provider, model: b.model } : null;

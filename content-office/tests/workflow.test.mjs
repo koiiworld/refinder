@@ -225,3 +225,20 @@ test("프롬프트 수정실: 대상 AI×용도 조합 검증, 버전·직접 �
   assert.ok(list.data.length >= combos.length);
   assert.equal((await call(`/api/prompts/${last.id}`, "DELETE")).status, 200);
 });
+
+test("말투 예시 파일: 업로드 형식 검증, 목록, 사용 전환, 삭제", async () => {
+  const bad = await call("/api/blogs/blog_naver_life/samples", "POST", { files: [{ filename: "a.pdf", content: "x" }] });
+  assert.equal(bad.status, 400);
+  const empty = await call("/api/blogs/blog_naver_life/samples", "POST", { files: [{ filename: "a.md", content: "  " }] });
+  assert.equal(empty.status, 400);
+  const up = await call("/api/blogs/blog_naver_life/samples", "POST", { files: [{ filename: "후기1.md", content: "# 제목\r\n오늘은 우리 아이랑 다녀왔어요 😊" }, { filename: "일상.txt", content: "짧게 써볼게요." }] });
+  assert.equal(up.status, 201);
+  let list = (await call("/api/blogs/blog_naver_life/samples")).data;
+  assert.equal(list.length, 2);
+  assert.ok(!list[0].content.includes("\r"), "줄바꿈 정리");
+  await call(`/api/blogs/blog_naver_life/samples/${list[0].id}`, "PATCH", { enabled: false });
+  list = (await call("/api/blogs/blog_naver_life/samples")).data;
+  assert.equal(list.find((s) => s.filename === "후기1.md").enabled, false);
+  for (const s of list) await call(`/api/blogs/blog_naver_life/samples/${s.id}`, "DELETE");
+  assert.equal((await call("/api/blogs/blog_naver_life/samples")).data.length, 0);
+});

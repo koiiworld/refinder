@@ -1,6 +1,6 @@
 import "server-only";
 import { q, q1, newId, j } from "./db";
-import { getBlog } from "./repo";
+import { getBlogForAi } from "./repo";
 import { extractJson, resolveAssignment, runAI } from "./ai/run";
 import { promptRefinePrompt, promptRefineTemplate } from "./ai/prompts";
 import { getGuide, supports, type PromptKind, type PromptMedia, type PromptTarget, type RefineResult } from "./prompt-guides";
@@ -44,7 +44,7 @@ export function validate(target: string, kind: string, media: string) {
 
 async function refine(row: Pick<PromptRow, "target" | "kind" | "media" | "blog_id" | "input" | "goal">, previous: RefineResult | null, feedback: string, override: RoleAssignment | null) {
   const guide = getGuide(row.target, row.kind, row.media)!;
-  const blog = row.blog_id ? await getBlog(row.blog_id) : null;
+  const blog = row.blog_id ? await getBlogForAi(row.blog_id) : null;
   const { system, prompt } = promptRefinePrompt({ ...row, original: row.input, guide, blog, previous, feedback });
   const { fallback, assignment } = await resolveAssignment(blog, "prompter", override);
   const res = await runAI({

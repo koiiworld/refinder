@@ -7,6 +7,7 @@ export async function GET(req: Request) {
     const scope = new URL(req.url).searchParams.get("scope") ?? "all";
     const data: Record<string, unknown> = { exportedAt: new Date().toISOString(), app: "ai-content-office", scope };
     data.blogs = await q("SELECT * FROM blogs ORDER BY created_at");
+    data.blog_samples = await q("SELECT * FROM blog_samples ORDER BY created_at");
     data.settings = await q("SELECT * FROM settings");
     if (scope === "all") {
       for (const t of ["ideas", "research_snapshots", "projects", "documents", "versions", "approvals", "reviews", "jobs", "ai_runs", "events"]) {

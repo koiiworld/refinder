@@ -146,3 +146,23 @@ test("Higgsfield: 연결 확인, 이미지 생성→완료, 그 이미지로 영
   const wan = log.find((l) => l.path === "/wan/v2.6/image-to-video");
   assert.deepEqual(wan.body, { prompt: "steam rising", image_url: "https://cdn.example.com/out.png", duration: 10, resolution: "720p", negative_prompt: "hands" });
 });
+
+test("말투 예시 파일이 AI 요청에 포함되고, '사용' 해제 시 빠진다", async () => {
+  await call("/api/blogs/blog_tistory/samples", "POST", { files: [{ filename: "내글.md", content: "말투마커XYZ 입니다. 저는 이렇게 씁니다." }] });
+  const projects = (await call("/api/projects?blogId=blog_tistory")).data;
+  const pid = projects[0].id;
+  await call("/__reset", "POST", undefined, MOCK);
+  const e1 = await call("/api/ai/edit", "POST", { projectId: pid, selected: "문장", instruction: "다듬기" });
+  assert.equal(e1.status, 200, JSON.stringify(e1.data));
+  let log = (await call("/__log", "GET", undefined, MOCK)).data;
+  let msg = log.find((l) => l.path === "/v1/messages");
+  assert.ok(msg.body.messages[0].content.includes("말투마커XYZ"), "예시가 프롬프트에 포함");
+  assert.ok(msg.body.messages[0].content.includes('<sample file="내글.md">'));
+  const s = (await call("/api/blogs/blog_tistory/samples")).data[0];
+  await call(`/api/blogs/blog_tistory/samples/${s.id}`, "PATCH", { enabled: false });
+  await call("/__reset", "POST", undefined, MOCK);
+  await call("/api/ai/edit", "POST", { projectId: pid, selected: "문장", instruction: "다듬기" });
+  log = (await call("/__log", "GET", undefined, MOCK)).data;
+  msg = log.find((l) => l.path === "/v1/messages");
+  assert.ok(!msg.body.messages[0].content.includes("말투마커XYZ"), "사용 해제 시 제외");
+});

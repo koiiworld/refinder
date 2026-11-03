@@ -202,3 +202,14 @@ CREATE TABLE IF NOT EXISTS media_jobs (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS media_jobs_prompt_idx ON media_jobs(prompt_id, created_at);
+
+-- 블로그별 말투 예시 파일 (마크다운·텍스트). AI 원고 작성·수정·검수 시 문체 참고용
+CREATE TABLE IF NOT EXISTS blog_samples (
+  id          TEXT PRIMARY KEY,
+  blog_id     TEXT NOT NULL REFERENCES blogs(id) ON DELETE CASCADE,
+  filename    TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS blog_samples_blog_idx ON blog_samples(blog_id, created_at);

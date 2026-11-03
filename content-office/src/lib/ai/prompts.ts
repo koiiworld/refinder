@@ -29,6 +29,26 @@ function sourcesText(sources: Source[]) {
     .join("\n");
 }
 
+/** 블로그 말투 예시 파일 → 프롬프트 블록 (토큰 비용을 위해 총 글자 수 제한) */
+export const MAX_SAMPLE_CHARS = 8000;
+export function styleSamplesText(blog: Blog | null | undefined): string {
+  const samples = blog?.style_samples ?? [];
+  if (!samples.length) return "";
+  const per = Math.floor(MAX_SAMPLE_CHARS / samples.length);
+  const body = samples
+    .map((s) => {
+      const text = s.content.trim();
+      return `<sample file="${s.filename}">\n${text.length > per ? text.slice(0, per) + "\n…(이하 생략)" : text}\n</sample>`;
+    })
+    .join("\n");
+  return `
+[말투 예시 - 이 블로그 운영자가 실제로 쓴 글]
+아래 예시의 말투, 어미, 문장 길이, 문단 나누기, 이모티콘·강조 사용 습관, 도입과 마무리 방식을 그대로 따라 쓰세요.
+예시의 내용·사실·문장을 복사하지 말고 '쓰는 방식'만 참고하세요. 예시와 작성 문체 설명이 다르면 예시를 우선합니다.
+${body}
+`;
+}
+
 // ───────────────────────── 기획안 ─────────────────────────
 
 export function planPrompt(blog: Blog, project: Project, feedback?: string, previous?: Plan | null) {
@@ -96,6 +116,7 @@ export function draftPrompt(blog: Blog, project: Project, plan: Plan) {
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 블로그 문체를 정확히 따릅니다.${BASE_RULES}\n${HTML_RULES}`;
   const prompt = `${blogContext(blog)}
 
+${styleSamplesText(blog)}
 [승인된 기획안]
 ${JSON.stringify(plan, null, 2)}
 
@@ -114,6 +135,7 @@ export function revisePrompt(blog: Blog, plan: Plan | null, currentHtml: string,
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다.${BASE_RULES}\n${HTML_RULES}`;
   const prompt = `${blogContext(blog)}
 
+${styleSamplesText(blog)}
 ${plan ? `[기획안]\n${JSON.stringify(plan, null, 2)}\n` : ""}
 [현재 원고]
 ${currentHtml}
@@ -155,6 +177,7 @@ ${plan ? `[기획안]\n${JSON.stringify(plan, null, 2)}\n` : ""}
 [출처 자료]
 ${sourcesText(project.sources)}
 
+${styleSamplesText(blog)}
 [검수 대상 원고 (HTML)]
 ${html}
 
@@ -166,6 +189,7 @@ ${html}
   "factChecks": [{"claim": "사실 주장", "status": "consistent_with_sources|needs_verification|likely_incorrect", "note": "근거"}],
   "ruleChecks": [{"rule": "블로그 검수 규칙 원문", "passed": true, "note": ""}]
 }
+말투 예시가 있으면 원고의 말투가 예시와 다른 부분을 issues 에 type "style" 로 지적하세요.
 ruleChecks 에는 위 검수 규칙을 모두 하나씩 포함하세요.`;
   return { system, prompt };
 }
@@ -192,6 +216,7 @@ export function editPrompt(blog: Blog, selected: string, instruction: string, co
   const system = `당신은 블로그 문장 교정 전문가입니다. 선택된 부분만 수정해 결과 텍스트만 출력합니다 (설명·따옴표·마크다운 없이).${BASE_RULES}`;
   const prompt = `${blogContext(blog)}
 
+${styleSamplesText(blog)}
 [주변 문맥]
 ${context.slice(0, 3000)}
 
@@ -260,7 +285,7 @@ export function promptRefinePrompt(input: {
 ${g.tips.map((t) => `- ${t}`).join("\n")}
 [피할 것]
 ${g.avoid.map((t) => `- ${t}`).join("\n")}
-${input.blog ? `\n[블로그 맥락: ${input.blog.name}]\n분야: ${input.blog.category}\n${input.kind === "visual" ? `이미지 스타일: ${input.blog.image_style}` : `문체: ${input.blog.style_guide}`}\n` : ""}
+${input.kind === "writing" ? styleSamplesText(input.blog) : ""}${input.blog ? `\n[블로그 맥락: ${input.blog.name}]\n분야: ${input.blog.category}\n${input.kind === "visual" ? `이미지 스타일: ${input.blog.image_style}` : `문체: ${input.blog.style_guide}`}\n` : ""}
 [사용자 원래 프롬프트]
 ${input.original}
 
