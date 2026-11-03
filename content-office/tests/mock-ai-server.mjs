@@ -6,29 +6,7 @@ import crypto from "node:crypto";
 
 const PORT = Number(process.env.MOCK_PORT ?? 4010);
 const log = [];
-let googleFailOnce = true;
 const hfJobs = new Map();
-
-const plan = {
-  titleCandidates: ["모의 제목 A", "모의 제목 B"],
-  selectedTitle: "모의 제목 A",
-  mainKeyword: "모의 키워드",
-  subKeywords: ["연관1", "연관2"],
-  searchIntent: "정보형",
-  targetReader: "입문자",
-  direction: "비교 중심",
-  outline: [{ heading: "도입", points: ["요약"] }, { heading: "비교", points: ["표"] }],
-  sources: [{ title: "지어낸 출처", url: "https://fake.example.com/made-up", note: "AI가 만든 URL (앱이 걸러내야 함)" }],
-  imagePlan: [{ position: "도입부", description: "대표 이미지" }],
-  notes: "",
-};
-const review = {
-  summary: "모의 검수 결과",
-  score: 82,
-  issues: [{ type: "fact", severity: "medium", quote: "본문", comment: "출처 필요", suggestion: "출처 추가" }],
-  factChecks: [{ claim: "주장", status: "needs_verification", note: "" }],
-  ruleChecks: [{ rule: "규칙", passed: true, note: "" }],
-};
 
 function send(res, status, body) {
   res.writeHead(status, { "content-type": "application/json" });
@@ -46,7 +24,6 @@ http
     if (url.pathname === "/__log") return send(res, 200, log);
     if (url.pathname === "/__reset") {
       log.length = 0;
-      googleFailOnce = true;
       return send(res, 200, { ok: true });
     }
 
@@ -102,20 +79,31 @@ http
       return send(res, 404, { detail: "not found" });
     }
 
+    // ── 텍스트 AI 3사: 시스템 프롬프트 내용으로 단계별 응답 ──
+    const answer = (system, prompt) => {
+      if (system.includes("SEO 키워드 전문가")) return JSON.stringify({ keywords: [{ keyword: "김장 양념", reason: "김장철", season: "김장철" }, { keyword: "절임배추", reason: "수요 큼", season: "김장철" }, { keyword: "굴보쌈", reason: "제철", season: "" }] });
+      if (system.includes("SEO 제목 전문가")) return JSON.stringify({ candidates: [{ title: "절임배추 20kg 김장 양념 황금비율", reason: "검색량 큰 연관어" }, { title: "초보 김장 가이드", reason: "입문자" }], best: 0, bestReason: "메인 키워드 앞배치", subKeywords: ["김장양념", "절임배추20kg"] });
+      if (system.includes("전속 작가")) return JSON.stringify({ html: "<h2>김장 준비</h2><p>본문 " + (prompt.includes("말투마커") ? "말투반영" : "") + "</p><p>[이미지 1]</p><h2>양념</h2><p>[이미지 2]</p><script>x()</script>", hashtags: ["#김장", "절임배추", "김장 양념"], images: [{ prompt: "Top-down kimchi", alt: "김치", aspect: "4:3" }, { prompt: "Seasoning bowl", alt: "양념", aspect: "1:1" }] });
+      if (system.includes("편집장이자 팩트체커")) return JSON.stringify({ summary: "모의 검수", score: 88, issues: [{ type: "fact", severity: "low", quote: "본문", comment: "확인", suggestion: "" }], factChecks: [], ruleChecks: [], imageChecks: [{ index: 1, ok: true, note: "좋음" }] });
+      if (system.includes("교정")) return "AI가 다듬은 문장입니다.";
+      return "{}";
+    };
+    const sysOf = (b) => (typeof b.system === "string" ? b.system : b.messages?.find?.((m) => m.role === "system")?.content ?? b.systemInstruction?.parts?.[0]?.text ?? "");
+    const promptOf = (c) => (typeof c === "string" ? c : Array.isArray(c) ? c.filter((x) => x.type === "text").map((x) => x.text).join("") : "");
+
     // OpenAI Chat Completions
     if (url.pathname === "/v1/chat/completions") {
       if (req.headers.authorization !== "Bearer test-openai") return send(res, 401, { error: { message: "bad key" } });
-      if (body.model === "bad-model") return send(res, 404, { error: { message: "The model `bad-model` does not exist" } });
-      const content = JSON.stringify(review);
-      return send(res, 200, { choices: [{ message: { content } }], usage: { prompt_tokens: 1200, completion_tokens: 300 } });
+      if (body.model === "no-credit-model") return send(res, 429, { error: { message: "You have no credits remaining.", code: "credit_balance_exhausted" } });
+      const user = body.messages.find((m) => m.role === "user");
+      return send(res, 200, { choices: [{ message: { content: answer(sysOf(body), promptOf(user.content)) } }], usage: { prompt_tokens: 1200, completion_tokens: 300 } });
     }
     if (url.pathname === "/v1/models" && req.headers.authorization) return send(res, 200, { data: [{ id: "gpt-mock-1" }, { id: "gpt-mock-2" }] });
 
     // Anthropic Messages
     if (url.pathname === "/v1/messages") {
       if (req.headers["x-api-key"] !== "test-anthropic" || !req.headers["anthropic-version"]) return send(res, 401, { error: { message: "bad key" } });
-      const isEdit = String(body.system).includes("교정");
-      const text = isEdit ? "AI가 다듬은 문장입니다." : "```html\n<h2>모의 소제목</h2><p>Claude 모의 원고 본문.</p><script>alert(1)</script><p onclick=\"x()\">클릭</p>\n```";
+      const text = answer(sysOf(body), promptOf(body.messages[0].content));
       return send(res, 200, { content: [{ type: "text", text }], usage: { input_tokens: 2000, output_tokens: 800 } });
     }
 
@@ -123,25 +111,9 @@ http
     const m = url.pathname.match(/^\/v1beta\/models\/(.+):generateContent$/);
     if (m) {
       if (req.headers["x-goog-api-key"] !== "test-google") return send(res, 403, { error: { message: "bad key" } });
-      const prompt = body.contents?.[0]?.parts?.[0]?.text ?? "";
-      const sys = body.systemInstruction?.parts?.[0]?.text ?? "";
-      if (sys.includes("프롬프트 엔지니어")) {
-        const refined = { prompt: "Close-up of a golden Korean rolled omelette, gentle steam rising, slow dolly-in, soft window light.", promptKo: "황금빛 계란말이 클로즈업, 김이 피어오름", negative: "hands, morphing, text", changes: ["영어로 변환", "카메라 지정"], questions: ["영상 길이는?"], settings: ["9:16, 8초"] };
-        return send(res, 200, { candidates: [{ content: { parts: [{ text: JSON.stringify(refined) }] } }], usageMetadata: { promptTokenCount: 700, candidatesTokenCount: 250 } });
-      }
-      if (prompt.includes("시즌 키워드 8~12개")) {
-        const text = JSON.stringify({ keywords: [{ keyword: "김장 양념 황금비율", intent: "방법형", angle: "10포기 기준 양념 계량", timing: "D-21~D-7" }, { keyword: "절임배추 고르는 법", intent: "정보형", angle: "주문 시 체크리스트", timing: "D-14" }] });
-        return send(res, 200, { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 300 } });
-      }
-      if (prompt.includes("글감 6개")) {
-        const text = JSON.stringify({ ideas: [{ title: "모의 글감 1", keywords: ["k1"], reason: "주제 적합" }, { title: "모의 글감 2", keywords: [], reason: "독자 관심" }] });
-        return send(res, 200, { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 200 } });
-      }
-      if (googleFailOnce) {
-        googleFailOnce = false;
-        return send(res, 503, { error: { message: "overloaded (mock)" } });
-      }
-      return send(res, 200, { candidates: [{ content: { parts: [{ text: JSON.stringify(plan) }] } }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 400 } });
+      const parts = body.contents?.[0]?.parts ?? [];
+      const text = answer(sysOf(body), parts.map((p) => p.text ?? "").join(""));
+      return send(res, 200, { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 400 } });
     }
     if (url.pathname === "/v1beta/models") return send(res, 200, { models: [{ name: "models/gemini-mock" }] });
 

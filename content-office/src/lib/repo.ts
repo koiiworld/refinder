@@ -1,7 +1,6 @@
 import "server-only";
 import { q, q1, newId, j } from "./db";
 import type { Blog, DocumentRow, Idea, Job, Project, Version } from "./types";
-import { isAfterDraftApproval } from "./stages";
 
 export async function listBlogs(includeArchived = false) {
   return q<Blog>(
@@ -182,16 +181,12 @@ export async function saveUserDocument(
     await createVersion({ projectId, kind: "draft", title: input.title, content: input.html, source: "autosave", label: "자동 저장" });
   }
 
-  // 승인 이후 변경 감지 → 재검수 필요 표시
+  // 검수가 끝난 뒤(발행 대기·발행 완료) 글을 고치면 '다시 검수 권장' 표시
   const project = await getProject(projectId);
   let needsRereview = false;
-  if (project && project.approved_version_id && isAfterDraftApproval(project.stage)) {
-    const approved = await getVersion(project.approved_version_id);
-    needsRereview = !!approved && approved.content !== input.html;
-    if (needsRereview !== project.needs_rereview) {
-      await updateProject(projectId, { needs_rereview: needsRereview });
-      if (needsRereview) await addEvent(projectId, "rereview", "승인된 원고가 수정되어 재검수가 필요합니다.");
-    }
+  if (project && (project.stage === "ready" || project.stage === "published") && project.review) {
+    needsRereview = true;
+    if (!project.needs_rereview) await updateProject(projectId, { needs_rereview: true });
   }
   if (project) await q("UPDATE projects SET updated_at=NOW() WHERE id=$1", [projectId]);
   return { ok: true, revision, needsRereview };

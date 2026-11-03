@@ -1,5 +1,4 @@
 import { createVersion, getDocument, getProject, addEvent } from "@/lib/repo";
-import { projectBundle } from "@/lib/bundle";
 import { body, Ctx, fail, handle, ok } from "@/lib/api";
 
 /** 현재 원고(또는 기획안)를 수동으로 버전 저장 */
@@ -19,6 +18,6 @@ export async function POST(req: Request, { params }: Ctx) {
       const v = await createVersion({ projectId: id, kind: "draft", title: doc.title, content: doc.content_html, source: "user", label: b.label || "수동 저장" });
       await addEvent(id, "version", `원고 v${v.number} 수동 저장`);
     }
-    return ok(await projectBundle(id));
+    return ok({ ok: true });
   });
 }

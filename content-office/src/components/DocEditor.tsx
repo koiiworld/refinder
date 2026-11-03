@@ -53,7 +53,11 @@ export default function DocEditor({
     ],
     content: serverDoc?.content_html ?? "",
     editorProps: { attributes: { class: "prose", "aria-label": "원고 본문" } },
-    onUpdate: () => markDirty(),
+    // 사용자가 실제로 편집했을 때만 저장 (불러올 때의 자동 정리·변환은 무시)
+    onUpdate: ({ editor: e, transaction }) => {
+      if (!transaction.docChanged || !e.isFocused) return;
+      markDirty();
+    },
   });
 
   const save = useCallback(

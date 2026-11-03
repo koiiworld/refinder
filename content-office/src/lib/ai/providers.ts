@@ -17,6 +17,7 @@ export interface AiRequest {
   maxTokens?: number;
   json?: boolean;
   temperature?: number;
+  images?: string[]; // https 이미지 URL (비전 지원 모델에 함께 전달)
 }
 
 export interface AiResponse {
@@ -121,7 +122,12 @@ async function callOpenAI(key: string, r: AiRequest): Promise<AiResponse> {
     model: r.model,
     messages: [
       { role: "system", content: r.system },
-      { role: "user", content: r.prompt },
+      {
+        role: "user",
+        content: r.images?.length
+          ? [{ type: "text", text: r.prompt }, ...r.images.map((url) => ({ type: "image_url", image_url: { url } }))]
+          : r.prompt,
+      },
     ],
     max_completion_tokens: r.maxTokens ?? 8000,
   };
@@ -145,7 +151,14 @@ async function callAnthropic(key: string, r: AiRequest): Promise<AiResponse> {
       model: r.model,
       max_tokens: r.maxTokens ?? 8000,
       system: r.system,
-      messages: [{ role: "user", content: r.prompt }],
+      messages: [
+        {
+          role: "user",
+          content: r.images?.length
+            ? [...r.images.map((url) => ({ type: "image", source: { type: "url", url } })), { type: "text", text: r.prompt }]
+            : r.prompt,
+        },
+      ],
     },
   )) as {
     content?: { type: string; text?: string }[];
@@ -161,6 +174,23 @@ async function callAnthropic(key: string, r: AiRequest): Promise<AiResponse> {
   };
 }
 
+/** Gemini 는 이미지 URL을 직접 받지 않으므로 내려받아 base64 로 첨부 (실패한 이미지는 건너뜀) */
+async function inlineImages(urls: string[] = []) {
+  const parts: { inline_data: { mime_type: string; data: string } }[] = [];
+  for (const url of urls.slice(0, 6)) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 8 * 1024 * 1024) continue;
+      parts.push({ inline_data: { mime_type: res.headers.get("content-type")?.split(";")[0] || "image/png", data: buf.toString("base64") } });
+    } catch {
+      /* 건너뜀 */
+    }
+  }
+  return parts;
+}
+
 async function callGoogle(key: string, r: AiRequest): Promise<AiResponse> {
   const generationConfig: Record<string, unknown> = { maxOutputTokens: r.maxTokens ?? 8000 };
   if (r.json) generationConfig.responseMimeType = "application/json";
@@ -169,7 +199,7 @@ async function callGoogle(key: string, r: AiRequest): Promise<AiResponse> {
     { "x-goog-api-key": key },
     {
       systemInstruction: { parts: [{ text: r.system }] },
-      contents: [{ role: "user", parts: [{ text: r.prompt }] }],
+      contents: [{ role: "user", parts: [...(await inlineImages(r.images)), { text: r.prompt }] }],
       generationConfig,
     },
   )) as {

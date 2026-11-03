@@ -1,4 +1,4 @@
-import { STAGES, stageDef, STAGE_INDEX } from "@/lib/stages";
+import { STEP_NAMES } from "@/lib/steps";
 
 export function fmtDate(iso?: string | null, withTime = true) {
   if (!iso) return "-";
@@ -25,43 +25,6 @@ export function fmtUsd(n: number) {
   return `${usdText} (₩${krwText})`;
 }
 
-export function StageBadge({ stage, status }: { stage: string; status?: string }) {
-  const def = stageDef(stage);
-  let cls = "badge";
-  if (status === "error") cls += " badge-bad";
-  else if (status === "running") cls += " badge-accent";
-  else if (def.kind === "gate" || def.kind === "manual") cls += " badge-warn";
-  else if (stage === "done") cls += " badge-ok";
-  return (
-    <span className={cls}>
-      {status === "running" && <span className="spinner" style={{ width: 9, height: 9, borderWidth: 1.5 }} />}
-      {status === "error" ? `${def.label} 오류` : def.kind === "gate" && status !== "running" ? `${def.label} 대기` : def.label}
-    </span>
-  );
-}
-
-export function Pipeline({ stage, status }: { stage: string; status: string }) {
-  const cur = STAGE_INDEX[stage] ?? -1;
-  return (
-    <div className="pipeline" role="list" aria-label="제작 단계">
-      <div className="pipe-step done" role="listitem">
-        <div className="pipe-bar" />
-        <div className="pipe-label">글감 수집</div>
-      </div>
-      {STAGES.filter((s) => s.key !== "done").map((s, i) => {
-        const state = stage === "done" || i < cur ? "done" : i === cur ? "cur" : "";
-        const extra = i === cur ? (status === "error" ? " err" : s.kind === "gate" || s.kind === "manual" ? " gate" : "") : "";
-        return (
-          <div key={s.key} className={`pipe-step ${state}${extra} ${s.phase === 2 ? "p2" : ""}`} role="listitem" aria-current={i === cur ? "step" : undefined}>
-            <div className="pipe-bar" />
-            <div className="pipe-label">{s.label}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function BlogTag({ name, color }: { name: string; color: string }) {
   return (
     <span className="row small muted" style={{ gap: 6, flexWrap: "nowrap", minWidth: 0 }}>
@@ -71,6 +34,20 @@ export function BlogTag({ name, color }: { name: string; color: string }) {
   );
 }
 
-export function PhaseNote({ children }: { children: React.ReactNode }) {
-  return <div className="notice notice-warn small">{children}</div>;
+/** 7단계 진행 표시. current = 지금 단계(1~7), done = 끝난 단계까지 */
+export function Steps({ current, error = false }: { current: number; error?: boolean }) {
+  return (
+    <div className="pipeline" role="list" aria-label="진행 단계">
+      {STEP_NAMES.map((name, i) => {
+        const n = i + 1;
+        const state = n < current ? "done" : n === current ? `cur${error ? " err" : ""}` : "";
+        return (
+          <div key={name} className={`pipe-step ${state}`} role="listitem" aria-current={n === current ? "step" : undefined}>
+            <div className="pipe-bar" />
+            <div className="pipe-label">{n} {name}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }

@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import { q1 } from "@/lib/db";
-import { GATE_STAGES } from "@/lib/stages";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +20,10 @@ export const viewport: Viewport = {
   ],
 };
 
+/** 발행 대기(검수까지 끝난) 글 수 */
 async function pendingCount() {
   try {
-    const r = await q1<{ n: number }>(
-      `SELECT COUNT(*)::int AS n FROM projects WHERE (stage = ANY($1) OR stage IN ('images','carousel')) AND status <> 'running'`,
-      [GATE_STAGES],
-    );
+    const r = await q1<{ n: number }>("SELECT COUNT(*)::int AS n FROM projects WHERE stage='ready' AND status <> 'running'");
     return Number(r?.n ?? 0);
   } catch {
     return 0;

@@ -254,3 +254,23 @@ CREATE TABLE IF NOT EXISTS keyword_stats (
   collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (keyword, source)
 );
+
+-- ① 키워드 추천 결과 (② 사용자가 블로그별로 선택)
+CREATE TABLE IF NOT EXISTS keyword_picks (
+  id          TEXT PRIMARY KEY,
+  blog_id     TEXT NOT NULL REFERENCES blogs(id) ON DELETE CASCADE,
+  batch_id    TEXT NOT NULL,
+  keyword     TEXT NOT NULL,
+  reason      TEXT NOT NULL DEFAULT '',
+  season      TEXT NOT NULL DEFAULT '',
+  origin      TEXT NOT NULL,                 -- ai | naver_related | user
+  volume      JSONB,                         -- 네이버 검색광고 실제 월간 검색수
+  trend       JSONB,                         -- 네이버 데이터랩 최근 3개월 상대지수
+  status      TEXT NOT NULL DEFAULT 'new',   -- new | used | dismissed
+  project_id  TEXT,
+  provider    TEXT,
+  model       TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS keyword_picks_blog_idx ON keyword_picks(blog_id, created_at);
+ALTER TABLE media_jobs ADD COLUMN IF NOT EXISTS project_id TEXT;

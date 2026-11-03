@@ -28,8 +28,8 @@ export default async function BlogDetail({ params }: { params: Promise<{ id: str
           <h1>{blog.name}</h1>
         </div>
         <div className="row">
-          <Link className="btn btn-sm" href={`/projects?blog=${blog.id}`}>프로젝트 보기</Link>
-          <Link className="btn btn-sm btn-primary" href={`/projects/new?blog=${blog.id}`}>+ 새 글</Link>
+          <Link className="btn btn-sm" href="/posts">진행 현황</Link>
+          <Link className="btn btn-sm btn-primary" href="/">글 만들기</Link>
         </div>
       </div>
       <div className="stack" style={{ gap: 16 }}>

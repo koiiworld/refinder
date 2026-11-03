@@ -42,7 +42,7 @@ function buildBody(model: HfModelId, i: Record<string, unknown>) {
   return body;
 }
 
-export async function createMediaJob(input: { model: string; promptId?: string | null } & Record<string, unknown>): Promise<MediaJob> {
+export async function createMediaJob(input: { model: string; promptId?: string | null; projectId?: string | null } & Record<string, unknown>): Promise<MediaJob> {
   if (!(input.model in HF_MODELS)) throw new WorkflowError("지원하지 않는 모델입니다.");
   const model = input.model as HfModelId;
   const def = HF_MODELS[model];
@@ -51,9 +51,9 @@ export async function createMediaJob(input: { model: string; promptId?: string |
   // 같은 작업을 두 번 청구하지 않도록 작업 ID를 Idempotency-Key 로 사용
   const r = await hfSubmit(def.path, body, id);
   await q(
-    `INSERT INTO media_jobs (id, prompt_id, provider, model, media, request_id, status, status_url, cancel_url, input)
-     VALUES ($1,$2,'higgsfield',$3,$4,$5,$6,$7,$8,$9)`,
-    [id, input.promptId || null, model, def.media, r.request_id, r.status, r.status_url, r.cancel_url, j(body)],
+    `INSERT INTO media_jobs (id, prompt_id, project_id, provider, model, media, request_id, status, status_url, cancel_url, input)
+     VALUES ($1,NULL,$2,'higgsfield',$3,$4,$5,$6,$7,$8,$9)`,
+    [id, input.projectId || null, model, def.media, r.request_id, r.status, r.status_url, r.cancel_url, j(body)],
   );
   return (await getMediaJob(id))!;
 }
@@ -62,10 +62,10 @@ export async function getMediaJob(id: string) {
   return q1<MediaJob>("SELECT * FROM media_jobs WHERE id=$1", [id]);
 }
 
-export async function listMediaJobs(promptId?: string | null) {
+export async function listMediaJobs(projectId?: string | null) {
   return q<MediaJob>(
-    `SELECT * FROM media_jobs ${promptId ? "WHERE prompt_id=$1" : ""} ORDER BY created_at DESC LIMIT 100`,
-    promptId ? [promptId] : [],
+    `SELECT * FROM media_jobs ${projectId ? "WHERE project_id=$1" : ""} ORDER BY created_at DESC LIMIT 100`,
+    projectId ? [projectId] : [],
   );
 }
 

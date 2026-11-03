@@ -93,43 +93,6 @@ export default function BlogForm({ blog, connections }: { blog?: Blog; connectio
         <textarea className="textarea" value={f.image_style} onChange={(e) => set("image_style", e.target.value)} placeholder="톤, 구도, 비율 등 (이미지 스튜디오·기획안에 사용)" />
       </section>
 
-      <section className="card">
-        <div className="card-head"><h3>AI 역할 배정</h3><span className="tiny muted">모델 ID는 설정에서 '모델 목록 불러오기'로 확인</span></div>
-        <div className="list">
-          {ROLES.map(([key, label, help]) => {
-            const a = f.ai_roles[key]!;
-            return (
-              <div key={key} className="list-item" style={{ flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 180px" }}>
-                  <div className="strong small">{label}</div>
-                  <div className="tiny muted">{help}</div>
-                </div>
-                <select
-                  className="select"
-                  style={{ width: 200 }}
-                  value={a.provider}
-                  aria-label={`${label} AI`}
-                  onChange={(e) => {
-                    const p = PROVIDERS.find((x) => x.id === e.target.value)!;
-                    set("ai_roles", { ...f.ai_roles, [key]: { provider: p.id, model: p.defaultModel } });
-                  }}
-                >
-                  {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}{conn(p.id) ? "" : " - 미연결"}</option>)}
-                </select>
-                <input
-                  className="input"
-                  style={{ width: 200 }}
-                  value={a.model}
-                  disabled={a.provider === "template"}
-                  aria-label={`${label} 모델`}
-                  onChange={(e) => set("ai_roles", { ...f.ai_roles, [key]: { ...a, model: e.target.value } })}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
       {msg && <div className={`notice small ${msg.ok ? "notice-ok" : "notice-bad"}`}>{msg.text}</div>}
       <div className="row" style={{ justifyContent: "flex-end" }}>
         <button className="btn btn-primary" disabled={busy || !f.name.trim()} onClick={submit}>{busy ? <span className="spinner" /> : blog ? "설정 저장" : "블로그 추가"}</button>

@@ -2,23 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 
 const P = {
-  home: "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
-  inbox: "M3 13h5l2 3h4l2-3h5M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z",
-  folder: "M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
-  bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z",
-  cal: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
+  pen: "M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4",
+  list: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
   blog: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h5",
-  bolt: "M13 2 4 14h7l-1 8 9-12h-7z",
   gear: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.6 4.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5.3z",
-  image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01",
-  slides: "M3 6h12v12H3zM18 8v8M21 10v4",
-  pulse: "M3 12h4l3-8 4 16 3-8h4",
-  more: "M5 12h.01M12 12h.01M19 12h.01",
-  flag: "M5 21V4M5 4h11l-2 4 2 4H5",
-  wand: "M15 4V2M15 10V8M11 6h2M17 6h2M4 20 14 10M17.5 13.5l-1 1M19 9l1-1",
 };
 
 function Icon({ d }: { d: string }) {
@@ -29,27 +18,11 @@ function Icon({ d }: { d: string }) {
   );
 }
 
-// 제작 흐름 순서: 조사(연구소·마케팅 달력) → 제작(프로젝트) → 승인 → 일정
-const MAIN = [
-  { href: "/", label: "대시보드", icon: P.home },
-  { href: "/research", label: "트렌드·키워드 연구소", short: "연구소", icon: P.bulb },
-  { href: "/marketing", label: "마케팅 달력", icon: P.flag },
-  { href: "/projects", label: "프로젝트", icon: P.folder },
-  { href: "/approvals", label: "승인 대기함", icon: P.inbox, badge: true },
-  { href: "/calendar", label: "콘텐츠 캘린더", icon: P.cal },
-  { href: "/prompts", label: "프롬프트 수정실", icon: P.wand },
-];
-// 모바일 하단 탭: 자주 쓰는 4개 (나머지는 '더보기')
-const BOTTOM = ["/", "/research", "/projects", "/approvals"];
-const MANAGE = [
-  { href: "/blogs", label: "블로그 관리", icon: P.blog },
-  { href: "/runs", label: "AI 실행·비용", icon: P.bolt },
-  { href: "/settings", label: "설정·AI 연결", icon: P.gear },
-];
-const LATER = [
-  { href: "/studio/images", label: "이미지 스튜디오", icon: P.image },
-  { href: "/studio/carousel", label: "인스타 캐러셀", icon: P.slides },
-  { href: "/diagnostics", label: "블로그 진단실", icon: P.pulse },
+const ITEMS = [
+  { href: "/", label: "글 만들기", sub: "① 키워드 추천 · ② 선택", icon: P.pen },
+  { href: "/posts", label: "진행 현황", sub: "③~⑦ 제목·글·이미지·검수·발행", icon: P.list, badge: true },
+  { href: "/blogs", label: "블로그 설정", sub: "말투 예시·문체", icon: P.blog },
+  { href: "/settings", label: "설정", sub: "AI 연결·단계별 AI", icon: P.gear },
 ];
 
 function isOn(path: string, href: string) {
@@ -58,63 +31,40 @@ function isOn(path: string, href: string) {
 
 export default function Nav({ pending }: { pending: number }) {
   const path = usePathname();
-  const [open, setOpen] = useState(false);
   if (path === "/login") return null;
-
-  const link = (it: { href: string; label: string; icon: string; badge?: boolean }) => (
-    <Link key={it.href} href={it.href} className={`nav-link ${isOn(path, it.href) ? "on" : ""}`} onClick={() => setOpen(false)}>
-      <Icon d={it.icon} />
-      <span>{it.label}</span>
-      {it.badge && pending > 0 && <span className="count">{pending}</span>}
-    </Link>
-  );
-
   return (
     <>
       <aside className="side">
         <div className="brand">
           <span className="brand-mark">AI</span> 콘텐츠 오피스
         </div>
-        {MAIN.map(link)}
-        <div className="nav-group">관리</div>
-        {MANAGE.map(link)}
-        <div className="nav-group">2차 개발 예정</div>
-        {LATER.map(link)}
+        {ITEMS.map((it) => (
+          <Link key={it.href} href={it.href} className={`nav-link ${isOn(path, it.href) ? "on" : ""}`} style={{ alignItems: "flex-start" }}>
+            <Icon d={it.icon} />
+            <span style={{ display: "flex", flexDirection: "column" }}>
+              <span>{it.label}</span>
+              <span className="tiny" style={{ opacity: 0.7, fontWeight: 400 }}>{it.sub}</span>
+            </span>
+            {it.badge && pending > 0 && <span className="count" title="발행 대기">{pending}</span>}
+          </Link>
+        ))}
       </aside>
 
       <header className="topbar">
         <Link href="/" className="brand" style={{ padding: 0 }}>
           <span className="brand-mark">AI</span> 콘텐츠 오피스
         </Link>
-        <Link href="/projects/new" className="btn btn-primary btn-sm">
-          + 새 글
-        </Link>
       </header>
 
-      <nav className="bottomnav" aria-label="주요 메뉴">
-        {MAIN.filter((it) => BOTTOM.includes(it.href)).map((it) => (
+      <nav className="bottomnav" aria-label="주요 메뉴" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        {ITEMS.map((it) => (
           <Link key={it.href} href={it.href} className={isOn(path, it.href) ? "on" : ""}>
             <Icon d={it.icon} />
-            {it.short ?? it.label.replace(" 대기함", "함")}
+            {it.label}
             {it.badge && pending > 0 && <span className="dot">{pending}</span>}
           </Link>
         ))}
-        <button onClick={() => setOpen(true)} className={open ? "on" : ""}>
-          <Icon d={P.more} />
-          더보기
-        </button>
       </nav>
-
-      {open && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setOpen(false)} />
-          <div className="sheet" role="dialog" aria-label="전체 메뉴">
-            {[...MAIN.filter((it) => !BOTTOM.includes(it.href)), ...MANAGE].map(link)}
-            <div className="nav-group">2차 개발 예정</div>
-            {LATER.map(link)}
-          </div>
-        </>
-      )}
     </>
   );
 }

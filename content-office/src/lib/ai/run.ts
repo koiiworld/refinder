@@ -18,6 +18,7 @@ export interface RunOptions {
   template?: () => string;
   override?: RoleAssignment | null; // 다른 AI로 재실행/재검수
   retries?: number; // 동기 호출 시 즉시 재시도 횟수
+  images?: string[]; // 함께 보여줄 이미지 URL (검수 등)
 }
 
 export interface RunResult {
@@ -64,7 +65,7 @@ export async function runAI(o: RunOptions): Promise<RunResult> {
     try {
       const res = await callProvider(
         assignment.provider,
-        { system: o.system, prompt: o.prompt, model: assignment.model, json: o.json, maxTokens: o.maxTokens },
+        { system: o.system, prompt: o.prompt, model: assignment.model, json: o.json, maxTokens: o.maxTokens, images: o.images },
         o.template,
       );
       if (!res.text.trim()) throw new AiError("AI 응답이 비어 있습니다.", true);
@@ -140,4 +141,59 @@ export function sanitizeHtml(html: string): string {
     .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1="#"')
     .replace(/<\/?(html|head|body)[^>]*>/gi, "")
     .trim();
+}
+
+// ───────────────────────── 단계별 AI + 자동 대체 ─────────────────────────
+
+const unhealthy = new Map<string, number>(); // provider → 이 시각까지 건너뜀 (크레딧 부족 등)
+
+/** 크레딧·키·권한 문제처럼 기다려도 해결되지 않는 오류 → 다른 AI로 대체 */
+function unusable(e: unknown) {
+  if (!(e instanceof AiError)) return false;
+  return [401, 402, 403].includes(e.status ?? 0) || /credit|balance|quota|billing|insufficient|payment|permission|api key/i.test(e.message);
+}
+/** 혼잡·한도: 다른 AI가 있으면 그쪽으로, 없으면 작업 큐가 나중에 재시도 */
+function busy(e: unknown) {
+  return e instanceof AiError && (e.status === 503 || e.status === 429 || e.status === 529);
+}
+
+export interface StepRunResult extends RunResult {
+  substitutedFor?: string; // 대체됐다면 원래 담당 AI
+}
+
+/**
+ * 단계 담당 AI로 실행. 쓸 수 없으면(미연결·크레딧 부족·혼잡) 연결된 다른 AI로 자동 대체.
+ * 아무 AI도 못 쓰면 template 이 있으면 템플릿(AI 아님), 없으면 오류.
+ */
+export async function runStep(o: Omit<RunOptions, "role" | "override"> & { step: import("../steps").StepKey; role?: RoleKey }): Promise<StepRunResult> {
+  const { stepAi } = await getSettings();
+  const { FALLBACK_MODELS } = await import("../steps");
+  const primary = stepAi[o.step];
+  const order: RoleAssignment[] = [primary];
+  for (const p of ["google", "openai", "anthropic"] as const) {
+    if (p !== primary.provider) order.push({ provider: p, model: FALLBACK_MODELS[p] });
+  }
+  const now = Date.now();
+  const candidates = order.filter((c) => isConnected(c.provider) && (unhealthy.get(c.provider) ?? 0) < now);
+  let lastErr: unknown = null;
+  for (const c of candidates) {
+    try {
+      const r = await runAI({ ...o, role: o.role ?? "writer", override: c });
+      return c.provider === primary.provider ? r : { ...r, substitutedFor: `${PROVIDER_LABELS[primary.provider]} (${primary.model})` };
+    } catch (e) {
+      lastErr = e;
+      if (unusable(e)) {
+        unhealthy.set(c.provider, Date.now() + 10 * 60_000); // 10분간 건너뜀
+        continue;
+      }
+      if (busy(e)) continue;
+      throw e;
+    }
+  }
+  if (lastErr) throw lastErr;
+  if (o.template) {
+    const { fallbackToTemplate } = await getSettings();
+    if (fallbackToTemplate) return runAI({ ...o, role: o.role ?? "writer", override: { provider: "template", model: "offline-template" } });
+  }
+  throw new AiError("연결된 AI가 없습니다. 설정에서 AI API 키를 넣어 주세요.", false);
 }

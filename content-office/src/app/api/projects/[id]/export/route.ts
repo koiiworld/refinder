@@ -1,51 +1,56 @@
 import { q } from "@/lib/db";
 import { getBlog, getDocument, getProject } from "@/lib/repo";
-import { buildPackage, htmlToMarkdown, packageHtmlFile } from "@/lib/exporter";
+import { escapeHtml, htmlToMarkdown, plainText } from "@/lib/exporter";
+import type { PostExtras, PostPlan } from "@/lib/posts-types";
 import { Ctx, fail, handle } from "@/lib/api";
 
-/**
- * 내보내기
- * format=html  : 발행용 HTML 파일
- * format=md    : 마크다운
- * format=json  : 프로젝트 전체 (기획안·원고·버전·승인·검수 기록)
- */
+/** ⑦ 발행용 내려받기: format=html | md | json */
 export async function GET(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const format = new URL(req.url).searchParams.get("format") ?? "json";
+    const format = new URL(req.url).searchParams.get("format") ?? "html";
     const project = await getProject(id);
-    if (!project) return fail("프로젝트 없음", 404);
+    if (!project) return fail("글 없음", 404);
     const blog = (await getBlog(project.blog_id))!;
     const doc = await getDocument(id);
-    const pkg = project.package ?? buildPackage(blog, project, doc, null);
-    const base = `${project.id}-${(doc?.title || project.title).replace(/[^\p{L}\p{N}]+/gu, "_").slice(0, 40)}`;
+    const plan = project.plan as unknown as PostPlan | null;
+    const extras = (project.package as unknown as PostExtras | null) ?? { hashtags: [], images: [] };
+    const title = doc?.title || plan?.selectedTitle || project.title;
+    const html = doc?.content_html ?? "";
+    const tags = extras.hashtags ?? [];
+    const base = (title || project.id).replace(/[^\p{L}\p{N}]+/gu, "_").slice(0, 40);
 
     let content: string;
     let type: string;
     let ext: string;
-    if (format === "html") {
-      content = packageHtmlFile(blog, pkg);
-      type = "text/html";
-      ext = "html";
-    } else if (format === "md") {
-      content = `---\ntitle: "${pkg.title.replace(/"/g, '\\"')}"\ntags: [${pkg.tags.map((t) => `"${t}"`).join(", ")}]\ndescription: "${pkg.metaDescription.replace(/"/g, '\\"')}"\nblog: "${blog.name}"\n---\n\n# ${pkg.title}\n\n${htmlToMarkdown(doc?.content_html ?? "")}\n`;
+    if (format === "md") {
+      content = `# ${title}\n\n${htmlToMarkdown(html)}\n\n${tags.map((t) => "#" + t).join(" ")}\n`;
       type = "text/markdown";
       ext = "md";
-    } else {
-      const [versions, approvals, reviews, events, runs] = await Promise.all([
-        q("SELECT * FROM versions WHERE project_id=$1 ORDER BY kind, number", [id]),
-        q("SELECT * FROM approvals WHERE project_id=$1 ORDER BY created_at", [id]),
+    } else if (format === "json") {
+      const [versions, reviews, events, runs] = await Promise.all([
+        q("SELECT * FROM versions WHERE project_id=$1 ORDER BY number", [id]),
         q("SELECT * FROM reviews WHERE project_id=$1 ORDER BY created_at", [id]),
         q("SELECT * FROM events WHERE project_id=$1 ORDER BY created_at", [id]),
         q("SELECT * FROM ai_runs WHERE project_id=$1 ORDER BY created_at", [id]),
       ]);
-      content = JSON.stringify(
-        { exportedAt: new Date().toISOString(), blog: { id: blog.id, name: blog.name }, project, document: doc, versions, approvals, reviews, events, aiRuns: runs },
-        null,
-        2,
-      );
+      content = JSON.stringify({ exportedAt: new Date().toISOString(), blog: { id: blog.id, name: blog.name }, project, document: doc, versions, reviews, events, aiRuns: runs }, null, 2);
       type = "application/json";
       ext = "json";
+    } else {
+      content = `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(plainText(html).slice(0, 150))}">
+<style>body{max-width:760px;margin:40px auto;padding:0 16px;font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;line-height:1.7}img{max-width:100%}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px 8px}</style>
+</head><body>
+<!-- ${escapeHtml(blog.name)} -->
+<h1>${escapeHtml(title)}</h1>
+${html}
+<p>${tags.map((t) => "#" + escapeHtml(t)).join(" ")}</p>
+</body></html>`;
+      type = "text/html";
+      ext = "html";
     }
     return new Response(content, {
       headers: {

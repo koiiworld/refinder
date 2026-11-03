@@ -10,6 +10,16 @@ export async function PUT(req: Request) {
     const b = await body<Partial<AppSettings>>(req);
     const patch: Partial<AppSettings> = {};
     if (typeof b.fallbackToTemplate === "boolean") patch.fallbackToTemplate = b.fallbackToTemplate;
+    if (b.stepAi && typeof b.stepAi === "object") {
+      const ok = ["openai", "anthropic", "google"];
+      const clean: Partial<AppSettings["stepAi"]> = {};
+      for (const [k, v] of Object.entries(b.stepAi)) {
+        if (["keywords", "titles", "writing", "review"].includes(k) && v && ok.includes(v.provider) && String(v.model ?? "").trim()) {
+          clean[k as keyof AppSettings["stepAi"]] = { provider: v.provider, model: String(v.model).trim() };
+        }
+      }
+      patch.stepAi = { ...(await getSettings()).stepAi, ...clean };
+    }
     if (b.pricing && typeof b.pricing === "object") {
       const clean: AppSettings["pricing"] = {};
       for (const [k, v] of Object.entries(b.pricing)) {

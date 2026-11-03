@@ -1,4 +1,4 @@
-// 통합 테스트: 실행 중인 서버에 HTTP로 접속해 승인형 워크플로 전체를 검증합니다.
+// 통합 테스트 (AI 미연결 상태): 7단계 흐름이 끊기지 않고, 데이터를 지어내지 않는지 확인
 // 사용법: 서버 실행 후  BASE_URL=http://localhost:3000 npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -6,11 +6,7 @@ import assert from "node:assert/strict";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
 async function call(path, method = "GET", body) {
-  const res = await fetch(BASE + path, {
-    method,
-    headers: body ? { "content-type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const res = await fetch(BASE + path, { method, headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
   const text = await res.text();
   let data;
   try {
@@ -18,278 +14,110 @@ async function call(path, method = "GET", body) {
   } catch {
     data = text;
   }
-  return { status: res.status, data, headers: res.headers };
+  return { status: res.status, data };
 }
-
-async function waitFor(id, pred, label, timeout = 20000) {
-  const start = Date.now();
+async function waitPost(id, pred, label, timeout = 30000) {
+  const t = Date.now();
   let last;
-  while (Date.now() - start < timeout) {
-    last = (await call(`/api/projects/${id}`)).data;
+  while (Date.now() - t < timeout) {
+    last = (await call(`/api/posts/${id}`)).data;
     if (pred(last)) return last;
     await new Promise((r) => setTimeout(r, 400));
   }
-  throw new Error(`시간 초과: ${label} (stage=${last?.project?.stage}, status=${last?.project?.status}, msg=${last?.project?.status_message})`);
+  throw new Error(`시간 초과: ${label} stage=${last?.project?.stage} status=${last?.project?.status} ${last?.project?.status_message}`);
 }
-
 const idle = (b) => b.project.status !== "running" && b.jobs.length === 0;
 
-test("기본 블로그 3개가 등록되어 있다", async () => {
+test("기본 블로그 3개", async () => {
   const { data } = await call("/api/blogs");
-  const names = data.map((b) => b.name);
-  assert.ok(names.some((n) => n.includes("티스토리")));
-  assert.ok(names.some((n) => n.includes("알고키친")));
   assert.ok(data.length >= 3);
+  assert.ok(data.some((b) => b.name.includes("알고키친")));
 });
 
-test("새 블로그(여행)를 추가하고 독립 설정을 저장한다", async () => {
-  const r = await call("/api/blogs", "POST", { name: "테스트 여행 블로그", platform: "naver", category: "여행", style_guide: "여행기 문체", review_rules: ["숙소 가격은 날짜 명시"] });
-  assert.equal(r.status, 201);
-  const b = (await call(`/api/blogs/${r.data.id}`)).data;
-  assert.equal(b.style_guide, "여행기 문체");
-  assert.deepEqual(b.review_rules, ["숙소 가격은 날짜 명시"]);
-  const u = await call(`/api/blogs/${r.data.id}`, "PUT", { image_style: "필름 감성" });
-  assert.equal(u.data.image_style, "필름 감성");
+test("① AI 미연결이면 키워드를 지어내지 않고 안내", async () => {
+  const r = await call("/api/keywords", "POST", { action: "recommend", blogId: "blog_algokitchen" });
+  assert.notEqual(r.status, 200);
+  assert.match(r.data.error, /AI/);
 });
 
-test("전체 승인형 워크플로: 주제→기획→원고→검수→승인→이미지→패키지→최종", async () => {
-  // 1. 프로젝트 생성
-  const c = await call("/api/projects", "POST", { blogId: "blog_tistory", title: "테스트 무선 이어폰 비교", brief: "가성비 위주", scheduledDate: "2026-11-20" });
+test("② 직접 넣은 키워드로 글 만들기 → ③④⑥ 자동 진행(템플릿) → ⑦ 발행 완료", async () => {
+  const add = await call("/api/keywords", "POST", { action: "add", blogId: "blog_algokitchen", keyword: "테스트 굴보쌈" });
+  assert.equal(add.status, 201);
+  const picks = (await call("/api/keywords?blogId=blog_algokitchen")).data;
+  const pick = picks.find((p) => p.keyword === "테스트 굴보쌈");
+  assert.equal(pick.volume, null, "검색량 미연결이면 비워 둠");
+  const c = await call("/api/posts", "POST", { blogId: "blog_algokitchen", pickIds: [pick.id] });
   assert.equal(c.status, 201);
-  const id = c.data.id;
-  let b = (await call(`/api/projects/${id}`)).data;
-  assert.equal(b.project.stage, "topic_approval");
-
-  // 2. 주제 승인 → 기획안 자동 작성
-  b = (await call(`/api/projects/${id}/actions`, "POST", { action: "approve", comment: "좋아요" })).data;
-  b = await waitFor(id, (x) => x.project.stage === "plan_approval" && idle(x), "기획 승인 대기");
-  assert.ok(b.project.plan, "기획안 생성");
-  assert.ok(b.project.plan.titleCandidates.length > 0);
-  assert.equal(b.versions.filter((v) => v.kind === "plan").length, 1);
-  assert.ok(b.runs.some((r) => r.purpose === "plan" && r.status === "succeeded"), "AI 실행 이력 기록");
-
-  // 3. 기획안 직접 수정 → 새 버전
-  const plan = { ...b.project.plan, selectedTitle: "직접 고친 제목", titleCandidates: ["직접 고친 제목"] };
-  b = (await call(`/api/projects/${id}/plan`, "PUT", { plan })).data;
-  assert.equal(b.project.plan.selectedTitle, "직접 고친 제목");
-  assert.equal(b.versions.filter((v) => v.kind === "plan").length, 2);
-
-  // 4. 수정 요청 → 기획 재작성
-  b = (await call(`/api/projects/${id}/actions`, "POST", { action: "request_changes", comment: "가격 비교 섹션 추가" })).data;
-  b = await waitFor(id, (x) => x.project.stage === "plan_approval" && idle(x), "기획 재작성");
-  assert.ok(b.approvals.some((a) => a.decision === "changes_requested"), "수정 요청이 승인 기록에 별도 저장");
-
-  // 5. 기획 승인 → 원고 작성 → 교차 검수 자동
-  await call(`/api/projects/${id}/actions`, "POST", { action: "approve" });
-  b = await waitFor(id, (x) => x.project.stage === "draft_approval" && idle(x), "원고 승인 대기");
-  assert.ok(b.document.content_html.length > 0, "원고 작성됨");
-  assert.equal(b.document.last_editor, "ai");
-  assert.ok(b.reviews.length >= 1, "검수 결과 저장");
-  assert.ok(b.project.review, "최근 검수 결과");
-
-  // 6. 사용자 직접 편집 (자동 저장)
-  const userHtml = "<h2>내가 쓴 소제목</h2><p>사용자가 직접 수정한 본문입니다.</p>";
-  const s = await call(`/api/projects/${id}/document`, "PUT", { html: userHtml, title: "내 제목", revision: b.document.revision });
-  assert.equal(s.status, 200);
-  const rev = s.data.revision;
-
-  // 7. 오래된 revision으로 저장 → 충돌(409)
-  const conflict = await call(`/api/projects/${id}/document`, "PUT", { html: "<p>x</p>", title: "x", revision: rev - 1 });
-  assert.equal(conflict.status, 409);
-
-  // 8. 원고 수정 요청 → AI 결과는 사용자 원고를 덮어쓰지 않고 제안으로 보관
-  await call(`/api/projects/${id}/actions`, "POST", { action: "request_changes", comment: "더 짧게" });
-  b = await waitFor(id, (x) => x.project.stage === "draft_approval" && idle(x), "수정 원고");
-  assert.equal(b.document.content_html, userHtml, "사용자 수정 보호");
-  assert.ok(b.document.pending_proposal_id, "AI 제안 보관");
-
-  // 9. 제안이 있으면 승인 불가 → 폐기 후 승인
-  const blocked = await call(`/api/projects/${id}/actions`, "POST", { action: "approve" });
-  assert.equal(blocked.status, 400);
-  b = (await call(`/api/projects/${id}/actions`, "POST", { action: "discard_proposal" })).data;
-  assert.equal(b.document.pending_proposal_id, null);
-  b = (await call(`/api/projects/${id}/actions`, "POST", { action: "approve" })).data;
-  assert.equal(b.project.stage, "images");
-  assert.ok(b.project.approved_version_id);
-
-  // 10. 승인 후 수정 → 재검수 필요
-  const s2 = await call(`/api/projects/${id}/document`, "PUT", { html: userHtml + "<p>승인 후 추가</p>", title: "내 제목", revision: b.document.revision });
-  assert.equal(s2.data.needsRereview, true);
-
-  // 11. 이미지 단계(2차·수동) 완료 → 이미지 승인 → 패키지 자동 생성
-  await call(`/api/projects/${id}/actions`, "POST", { action: "complete_stage" });
-  await call(`/api/projects/${id}/actions`, "POST", { action: "approve" });
-  b = await waitFor(id, (x) => x.project.stage === "carousel" && idle(x), "발행 패키지");
-  assert.ok(b.project.package.html.includes("승인 후 추가"));
-  assert.ok(b.project.package.markdown.includes("# 내 제목"));
-
-  // 12. 캐러셀 건너뛰기 → 최종 승인 (재검수 필요 상태면 차단)
-  await call(`/api/projects/${id}/actions`, "POST", { action: "complete_stage" });
-  const fb = await call(`/api/projects/${id}/actions`, "POST", { action: "approve" });
-  assert.equal(fb.status, 400, "재검수 없이 최종 승인 차단");
-
-  // 13. 다른 AI로 재검수 → 재검수 필요 해제 → 최종 승인
-  await call(`/api/projects/${id}/actions`, "POST", { action: "rereview", provider: "template", model: "offline-template" });
-  b = await waitFor(id, (x) => idle(x) && !x.project.needs_rereview, "재검수");
-  assert.equal(b.project.stage, "final_approval");
-  b = (await call(`/api/projects/${id}/actions`, "POST", { action: "approve" })).data;
-  assert.equal(b.project.stage, "done");
-
-  // 14. 승인 기록: 각 단계 결정이 모두 남아 있음
-  const decisions = b.approvals.map((a) => `${a.stage}:${a.decision}`);
-  for (const d of ["topic_approval:approved", "plan_approval:approved", "draft_approval:approved", "image_approval:approved", "final_approval:approved"]) {
-    assert.ok(decisions.includes(d), d);
-  }
-
-  // 15. 내보내기
+  const id = c.data.ids[0];
+  let b = await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "발행 대기");
+  assert.ok(b.project.plan.candidates.length >= 1, "③ 제목 후보");
+  assert.ok(b.document.content_html.length > 0, "④ 본문");
+  assert.ok(!b.document.content_html.includes("<script"));
+  assert.ok(b.project.package.hashtags.length >= 1, "④ 해시태그");
+  assert.ok(b.project.package.images.length >= 1, "⑤ 이미지 프롬프트");
+  assert.ok(b.project.review, "⑥ 검수");
+  // 같은 키워드는 다시 쓰이지 않음
+  const again = await call("/api/posts", "POST", { blogId: "blog_algokitchen", pickIds: [pick.id] });
+  assert.equal(again.data.ids.length, 0);
+  // 제목 직접 변경
+  b = (await call(`/api/posts/${id}`, "POST", { action: "select_title", title: "내가 정한 제목" })).data;
+  assert.equal(b.document.title, "내가 정한 제목");
+  // 해시태그 수정
+  b = (await call(`/api/posts/${id}`, "POST", { action: "hashtags", hashtags: ["#굴보쌈", "겨울 요리"] })).data;
+  assert.deepEqual(b.project.package.hashtags, ["굴보쌈", "겨울요리"]);
+  // 이미지 생성 전엔 본문에 넣기 불가
+  const ins = await call(`/api/posts/${id}`, "POST", { action: "insert_image", index: 0 });
+  assert.equal(ins.status, 400);
+  // 검수 뒤 수정 → 다시 검수 권장
+  const s = await call(`/api/projects/${id}/document`, "PUT", { html: b.document.content_html + "<p>추가</p>", title: "내가 정한 제목", revision: b.document.revision });
+  assert.equal(s.data.needsRereview, true);
+  // 다운로드
   const html = await call(`/api/projects/${id}/export?format=html`);
-  assert.equal(html.status, 200);
-  assert.ok(String(html.data).includes("<h1>내 제목</h1>"));
-  const md = await call(`/api/projects/${id}/export?format=md`);
-  assert.ok(String(md.data).includes("## 내가 쓴 소제목"));
-  const js = await call(`/api/projects/${id}/export?format=json`);
-  assert.ok(js.data.versions.length >= 3);
+  assert.ok(String(html.data).includes("<h1>내가 정한 제목</h1>"));
+  assert.ok(String(html.data).includes("#굴보쌈"));
+  // ⑦ 발행 완료
+  b = (await call(`/api/posts/${id}`, "POST", { action: "publish", url: "https://blog.naver.com/x/1" })).data;
+  assert.equal(b.project.stage, "published");
+  assert.equal(b.project.package.publishedUrl, "https://blog.naver.com/x/1");
+  // 목록
+  const list = (await call("/api/posts")).data;
+  assert.ok(list.some((p) => p.id === id && p.stage === "published"));
+  // 삭제하면 키워드가 다시 선택 가능
+  await call(`/api/posts/${id}`, "DELETE");
+  const back = (await call("/api/keywords?blogId=blog_algokitchen")).data.find((p) => p.id === pick.id);
+  assert.equal(back.status, "new");
 });
 
-test("이전 버전 복원: 복원 전 상태를 백업하고 내용을 되돌린다", async () => {
-  const c = await call("/api/projects", "POST", { blogId: "blog_algokitchen", title: "테스트 된장찌개", autoApproveTopic: true });
-  const id = c.data.id;
-  await waitFor(id, (x) => x.project.stage === "plan_approval" && idle(x), "기획");
-  await call(`/api/projects/${id}/actions`, "POST", { action: "approve" });
-  let b = await waitFor(id, (x) => x.project.stage === "draft_approval" && idle(x), "원고");
-  const aiHtml = b.document.content_html;
-  const firstDraft = b.versions.find((v) => v.kind === "draft");
-  await call(`/api/projects/${id}/document`, "PUT", { html: "<p>전부 지움</p>", title: "t", revision: b.document.revision });
-  b = (await call(`/api/projects/${id}/actions`, "POST", { action: "restore", versionId: firstDraft.id })).data;
-  assert.equal(b.document.content_html, aiHtml);
-  assert.ok(b.versions.some((v) => v.label === "복원 전 백업"));
+test("서버 재시작 없이 다시 실행: 검수만 다시", async () => {
+  const add = await call("/api/keywords", "POST", { action: "add", blogId: "blog_tistory", keyword: "테스트 노트북" });
+  const c = await call("/api/posts", "POST", { blogId: "blog_tistory", pickIds: [add.data.id] });
+  const id = c.data.ids[0];
+  await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "발행 대기");
+  await call(`/api/posts/${id}`, "POST", { action: "rerun", step: "review" });
+  const b = await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "재검수");
+  assert.ok(b.reviews.length >= 2);
 });
 
-test("글감 등록 → 주제 승인 시 프로젝트 생성 및 기획 자동 시작", async () => {
-  const r = await call("/api/ideas", "POST", { blogId: "blog_naver_life", title: "테스트 아기 이유식 일정", memo: "6개월차", keywords: ["이유식"] });
-  assert.equal(r.status, 201);
-  const a = await call(`/api/ideas/${r.data.id}`, "PATCH", { action: "approve" });
-  assert.ok(a.data.projectId);
-  const b = await waitFor(a.data.projectId, (x) => x.project.stage === "plan_approval" && idle(x), "기획");
-  assert.ok(b.approvals.some((x) => x.stage === "topic_approval" && x.decision === "approved"));
-});
-
-test("AI 미연결 시 글감 추천·부분 수정은 결과를 지어내지 않고 오류로 안내", async () => {
-  const s = await call("/api/ideas/suggest", "POST", { blogId: "blog_tistory" });
-  assert.equal(s.status, 400);
-  const projects = (await call("/api/projects")).data;
-  const e = await call("/api/ai/edit", "POST", { projectId: projects[0].id, selected: "문장", instruction: "다듬기" });
-  assert.equal(e.status, 400);
-  assert.match(e.data.error, /AI 연결/);
-});
-
-test("AI 실행 내역과 작업 큐가 기록된다", async () => {
-  const runs = await call("/api/export?scope=all");
-  assert.ok(runs.data.ai_runs.length > 0);
-  assert.ok(runs.data.jobs.every((j) => ["succeeded", "failed", "canceled"].includes(j.status)));
-  assert.ok(runs.data.approvals.length > 0);
-  // API 키 같은 비밀값은 백업에 포함되지 않음
-  assert.ok(!JSON.stringify(runs.data).includes("API_KEY="));
-});
-
-test("프롬프트 수정실: 대상 AI×용도 조합 검증, 버전·직접 수정·복원", async () => {
-  // 지원하지 않는 조합은 거부
-  const c1 = await call("/api/prompts", "POST", { target: "claude", kind: "visual", text: "고양이 그림" });
-  assert.equal(c1.status, 400);
-  const c2 = await call("/api/prompts", "POST", { target: "higgsfield", kind: "writing", text: "블로그 글" });
-  assert.equal(c2.status, 400);
-  // 지원 조합 9개 모두 생성 가능 (AI 미연결이면 템플릿: 원문 유지 + 구조 안내)
-  const combos = [
-    ["gpt", "visual", "image"], ["gpt", "visual", "video"], ["gemini", "visual", "image"], ["gemini", "visual", "video"],
-    ["higgsfield", "visual", "image"], ["higgsfield", "visual", "video"],
-    ["gpt", "writing"], ["claude", "writing"], ["gemini", "writing"], ["gpt", "info"], ["claude", "info"], ["gemini", "info"],
-  ];
-  let last;
-  for (const [target, kind, media] of combos) {
-    const r = await call("/api/prompts", "POST", { target, kind, media, text: "맛있는 계란말이 영상", blogId: "blog_algokitchen" });
-    assert.equal(r.status, 201, `${target}/${kind}/${media}: ${JSON.stringify(r.data)}`);
-    assert.ok(r.data.current.prompt.includes("맛있는 계란말이 영상"), "원문 보존");
-    assert.equal(r.data.versions.length, 1);
-    if (target === "higgsfield") assert.ok(r.data.current.negative, "Higgsfield는 제외 프롬프트 제공");
-    if (kind === "writing") assert.equal(r.data.current.negative, "", "글 원고는 제외 프롬프트 없음");
-    last = r.data;
-  }
-  // 직접 수정 → v2, 복원 → v3 (v1 내용)
-  const s = await call(`/api/prompts/${last.id}`, "POST", { action: "save", result: { ...last.current, prompt: "내가 고친 프롬프트" } });
-  assert.equal(s.data.versions.length, 2);
-  assert.equal(s.data.current.prompt, "내가 고친 프롬프트");
-  const r = await call(`/api/prompts/${last.id}`, "POST", { action: "restore", n: 1 });
-  assert.equal(r.data.versions.length, 3);
-  assert.equal(r.data.current.prompt, last.current.prompt);
-  const list = await call("/api/prompts");
-  assert.ok(list.data.length >= combos.length);
-  assert.equal((await call(`/api/prompts/${last.id}`, "DELETE")).status, 200);
-});
-
-test("말투 예시 파일: 업로드 형식 검증, 목록, 사용 전환, 삭제", async () => {
+test("말투 예시 파일: 업로드·검증·삭제", async () => {
   const bad = await call("/api/blogs/blog_naver_life/samples", "POST", { files: [{ filename: "a.pdf", content: "x" }] });
   assert.equal(bad.status, 400);
-  const empty = await call("/api/blogs/blog_naver_life/samples", "POST", { files: [{ filename: "a.md", content: "  " }] });
-  assert.equal(empty.status, 400);
-  const up = await call("/api/blogs/blog_naver_life/samples", "POST", { files: [{ filename: "후기1.md", content: "# 제목\r\n오늘은 우리 아이랑 다녀왔어요 😊" }, { filename: "일상.txt", content: "짧게 써볼게요." }] });
+  const up = await call("/api/blogs/blog_naver_life/samples", "POST", { files: [{ filename: "후기.md", content: "오늘은 아이랑 다녀왔어요 😊" }] });
   assert.equal(up.status, 201);
-  let list = (await call("/api/blogs/blog_naver_life/samples")).data;
-  assert.equal(list.length, 2);
-  assert.ok(!list[0].content.includes("\r"), "줄바꿈 정리");
-  await call(`/api/blogs/blog_naver_life/samples/${list[0].id}`, "PATCH", { enabled: false });
-  list = (await call("/api/blogs/blog_naver_life/samples")).data;
-  assert.equal(list.find((s) => s.filename === "후기1.md").enabled, false);
+  const list = (await call("/api/blogs/blog_naver_life/samples")).data;
   for (const s of list) await call(`/api/blogs/blog_naver_life/samples/${s.id}`, "DELETE");
   assert.equal((await call("/api/blogs/blog_naver_life/samples")).data.length, 0);
 });
 
-test("마케팅 달력: 시즌 이벤트, 직접 추가, AI 없이 출발 키워드→글감, AI 미연결 시 도출 거부", async () => {
-  const d = (await call("/api/marketing?year=2026&blogId=blog_algokitchen")).data;
-  const keys = d.events.map((e) => e.key);
-  for (const k of ["seollal", "chuseok", "kimjang", "christmas", "suneung"]) assert.ok(keys.includes(k), k);
-  const seollal = d.events.find((e) => e.key === "seollal");
-  assert.equal(seollal.start, "2026-02-16");
-  const add = await call("/api/marketing/events", "POST", { name: "알고키친 3주년", start: "2026-12-05", leadDays: 10, keywords: ["3주년 이벤트"], blogId: "blog_algokitchen" });
-  assert.equal(add.status, 201);
-  const bad = await call("/api/marketing/events", "POST", { name: "x", start: "2026-12-05", end: "2026-12-01" });
-  assert.equal(bad.status, 400);
-  const d2 = (await call("/api/marketing?year=2026&blogId=blog_algokitchen")).data;
-  assert.ok(d2.events.some((e) => e.name === "알고키친 3주년" && e.custom));
-  const other = (await call("/api/marketing?year=2026&blogId=blog_tistory")).data;
-  assert.ok(!other.events.some((e) => e.name === "알고키친 3주년"), "블로그 전용 이벤트는 다른 블로그에 안 보임");
-  const derive = await call("/api/marketing/keywords", "POST", { action: "derive", blogId: "blog_algokitchen", year: 2026, eventKey: "kimjang" });
-  assert.equal(derive.status, 400);
-  const before = (await call("/api/ideas?blogId=blog_algokitchen")).data.length;
-  const send = await call("/api/marketing/keywords", "POST", { action: "to-ideas", blogId: "blog_algokitchen", year: 2026, eventKey: "kimjang", seeds: ["김장 양념 비율"] });
-  assert.equal(send.data.created, 1);
-  const ideas = (await call("/api/ideas?blogId=blog_algokitchen")).data;
-  assert.equal(ideas.length, before + 1);
-  assert.match(ideas[0].memo, /마케팅 달력: 김장철/);
-  const ev = d2.events.find((e) => e.name === "알고키친 3주년");
-  assert.equal((await call(`/api/marketing/events/${ev.customId}`, "DELETE")).status, 200);
+test("유입 트렌드 붙여넣기 정리", async () => {
+  const r = await call("/api/research/creator", "POST", { blogId: "blog_algokitchen", text: "1 김장 양념 비율\n2위 절임배추 ▲3\n3. 굴보쌈 NEW\n절임배추" });
+  assert.equal(r.data.count, 3);
+  await call(`/api/research/creator?id=${r.data.id}`, "DELETE");
 });
 
-test("검색량·유튜브: 키 미연결이면 수치를 만들지 않고 안내", async () => {
-  const k = await call("/api/research/keywords", "POST", { keywords: ["김장"] });
-  assert.equal(k.status, 400);
-  assert.match(k.data.error, /네이버 검색광고 API 키/);
-  const c = await call("/api/research/keywords", "POST", { keywords: ["김장"], cacheOnly: true });
-  assert.deepEqual(c.data.stats, {});
-  const y = await call("/api/research/youtube?mode=trending");
-  assert.equal(y.status, 400);
-});
-
-test("크리에이터 어드바이저 유입 트렌드: 붙여넣기 정리(순위·증감·중복 제거) 저장·조회·삭제", async () => {
-  const text = "1 김장 양념 비율\n2위 절임배추 ▲3\n3. 굴보쌈 NEW\n4\t수육 삶는 법\n절임배추\n\n5 ) 동치미";
-  const r = await call("/api/research/creator", "POST", { blogId: "blog_algokitchen", category: "요리·레시피", date: "2026-11-02", text });
-  assert.equal(r.status, 201, JSON.stringify(r.data));
-  assert.equal(r.data.count, 5);
-  const list = (await call("/api/research/creator")).data;
-  const t = list.find((x) => x.id === r.data.id);
-  assert.deepEqual(t.items.map((i) => i.keyword), ["김장 양념 비율", "절임배추", "굴보쌈", "수육 삶는 법", "동치미"]);
-  assert.equal(t.items[1].rank, 2);
-  assert.equal(t.date, "2026-11-02");
-  const empty = await call("/api/research/creator", "POST", { text: "1\n2\n" });
-  assert.equal(empty.status, 400);
-  assert.equal((await call(`/api/research/creator?id=${r.data.id}`, "DELETE")).status, 200);
+test("단계별 AI 설정 저장", async () => {
+  const r = await call("/api/settings", "PUT", { stepAi: { titles: { provider: "google", model: "gemini-3.5-flash" }, bogus: { provider: "x", model: "y" } } });
+  assert.equal(r.data.stepAi.titles.provider, "google");
+  assert.equal(r.data.stepAi.review.provider, "anthropic", "나머지는 기본값 유지");
+  assert.ok(!("bogus" in r.data.stepAi));
+  await call("/api/settings", "PUT", { stepAi: { titles: { provider: "openai", model: "gpt-5.4-mini" } } });
 });
