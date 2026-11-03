@@ -85,7 +85,8 @@ export function frequentTerms(videos: YtVideo[], limit = 30) {
     const words = new Set(
       [...v.title.split(/[\s\[\]\(\)【】|/·,.!?~"'“”‘’#:;<>{}+=_\-…]+/), ...v.tags]
         .map((w) => w.trim().toLowerCase())
-        .filter((w) => w.length >= 2 && !STOP.has(w) && !/^\d+$/.test(w)),
+        // 2자 이상, 숫자만·자음/모음만(ㅋㅋ, ㅠㅠ)·이모지/기호만인 단어 제외
+        .filter((w) => w.length >= 2 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[ㄱ-ㅎㅏ-ㅣ]+$/.test(w) && /[가-힣a-z]/.test(w)),
     );
     for (const w of words) count.set(w, (count.get(w) ?? 0) + 1);
   }

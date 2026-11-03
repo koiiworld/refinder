@@ -44,8 +44,8 @@ export default async function Dashboard() {
           <p className="sub">블로그 {blogs.length}개 · 진행 중 프로젝트 {active.length}개</p>
         </div>
         <div className="row">
-          <Link href="/research" className="btn">글감 찾기</Link>
-          <Link href="/projects/new" className="btn btn-primary">+ 새 콘텐츠</Link>
+          <Link href="/research" className="btn">① 글감·키워드 찾기</Link>
+          <Link href="/projects/new" className="btn btn-primary">② 새 콘텐츠</Link>
         </div>
       </div>
 

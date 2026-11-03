@@ -29,15 +29,18 @@ function Icon({ d }: { d: string }) {
   );
 }
 
+// 제작 흐름 순서: 조사(연구소·마케팅 달력) → 제작(프로젝트) → 승인 → 일정
 const MAIN = [
   { href: "/", label: "대시보드", icon: P.home },
-  { href: "/approvals", label: "승인 대기함", icon: P.inbox, badge: true },
-  { href: "/projects", label: "프로젝트", icon: P.folder },
   { href: "/research", label: "트렌드·키워드 연구소", short: "연구소", icon: P.bulb },
-  { href: "/calendar", label: "콘텐츠 캘린더", icon: P.cal },
   { href: "/marketing", label: "마케팅 달력", icon: P.flag },
+  { href: "/projects", label: "프로젝트", icon: P.folder },
+  { href: "/approvals", label: "승인 대기함", icon: P.inbox, badge: true },
+  { href: "/calendar", label: "콘텐츠 캘린더", icon: P.cal },
   { href: "/prompts", label: "프롬프트 수정실", icon: P.wand },
 ];
+// 모바일 하단 탭: 자주 쓰는 4개 (나머지는 '더보기')
+const BOTTOM = ["/", "/research", "/projects", "/approvals"];
 const MANAGE = [
   { href: "/blogs", label: "블로그 관리", icon: P.blog },
   { href: "/runs", label: "AI 실행·비용", icon: P.bolt },
@@ -89,7 +92,7 @@ export default function Nav({ pending }: { pending: number }) {
       </header>
 
       <nav className="bottomnav" aria-label="주요 메뉴">
-        {MAIN.slice(0, 4).map((it) => (
+        {MAIN.filter((it) => BOTTOM.includes(it.href)).map((it) => (
           <Link key={it.href} href={it.href} className={isOn(path, it.href) ? "on" : ""}>
             <Icon d={it.icon} />
             {it.short ?? it.label.replace(" 대기함", "함")}
@@ -106,7 +109,7 @@ export default function Nav({ pending }: { pending: number }) {
         <>
           <div className="sheet-backdrop" onClick={() => setOpen(false)} />
           <div className="sheet" role="dialog" aria-label="전체 메뉴">
-            {[...MAIN.slice(4), ...MANAGE].map(link)}
+            {[...MAIN.filter((it) => !BOTTOM.includes(it.href)), ...MANAGE].map(link)}
             <div className="nav-group">2차 개발 예정</div>
             {LATER.map(link)}
           </div>
