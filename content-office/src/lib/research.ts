@@ -71,22 +71,29 @@ export async function naverTrend(input: {
     .slice(0, 5)
     .map((k) => ({ groupName: k, keywords: [k] }));
   if (!groups.length) throw new Error("키워드를 입력하세요.");
-  const res = await fetch("https://openapi.naver.com/v1/datalab/search", {
-    method: "POST",
-    headers: {
-      "X-Naver-Client-Id": process.env.NAVER_CLIENT_ID!.trim(),
-      "X-Naver-Client-Secret": process.env.NAVER_CLIENT_SECRET!.trim(),
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      startDate: input.startDate,
-      endDate: input.endDate,
-      timeUnit: input.timeUnit,
-      keywordGroups: groups,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`네이버 API 오류 ${res.status}: ${data?.errorMessage ?? ""}`);
+  const id_ = process.env.NAVER_CLIENT_ID!.trim();
+  const secret = process.env.NAVER_CLIENT_SECRET!.trim();
+  const payload = JSON.stringify({ startDate: input.startDate, endDate: input.endDate, timeUnit: input.timeUnit, keywordGroups: groups });
+  // 2026-07-31 이후 신규 키: NAVER API HUB (NCP API Gateway 헤더). 기존 개발자센터 키: openapi.naver.com
+  const attempts: [string, Record<string, string>][] = [
+    [
+      process.env.NAVER_DATALAB_URL?.trim() || "https://naverapihub.apigw.ntruss.com/search-trend/v1/search",
+      { "X-NCP-APIGW-API-KEY-ID": id_, "X-NCP-APIGW-API-KEY": secret },
+    ],
+    ["https://openapi.naver.com/v1/datalab/search", { "X-Naver-Client-Id": id_, "X-Naver-Client-Secret": secret }],
+  ];
+  let data: { results?: unknown; errorMessage?: string; error?: { message?: string; details?: string } } = {};
+  let lastErr = "";
+  for (const [url, headers] of attempts) {
+    const res = await fetch(url, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: payload, signal: AbortSignal.timeout(20_000) });
+    data = await res.json().catch(() => ({}));
+    if (res.ok) break;
+    lastErr = `HTTP ${res.status}: ${data?.errorMessage ?? data?.error?.message ?? ""} ${data?.error?.details ?? ""}`.trim();
+    // 인증 실패(401/403/404)면 다른 방식으로 한 번 더 시도
+    if (![401, 403, 404].includes(res.status)) break;
+    data = {};
+  }
+  if (!data.results) throw new Error(`네이버 데이터랩 API 오류 ${lastErr}`);
   const id = newId("snap_");
   await q("INSERT INTO research_snapshots (id, blog_id, source, query, data) VALUES ($1,$2,'naver_datalab',$3,$4)", [
     id,

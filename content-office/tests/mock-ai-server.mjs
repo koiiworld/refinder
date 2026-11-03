@@ -50,6 +50,13 @@ http
       return send(res, 200, { ok: true });
     }
 
+    // 네이버 데이터랩 (NAVER API HUB 방식)
+    if (url.pathname === "/search-trend/v1/search") {
+      if (req.headers["x-ncp-apigw-api-key-id"] !== "test-dl-id" || req.headers["x-ncp-apigw-api-key"] !== "test-dl-key")
+        return send(res, 401, { error: { errorCode: "200", message: "Authentication Failed" } });
+      const results = body.keywordGroups.map((g, i) => ({ title: g.groupName, keywords: g.keywords, data: [{ period: body.startDate, ratio: 10 + i }, { period: body.endDate, ratio: 100 - i }] }));
+      return send(res, 200, { startDate: body.startDate, endDate: body.endDate, timeUnit: body.timeUnit, results });
+    }
     // 네이버 검색광고 키워드 도구 (서명 검증)
     if (url.pathname === "/keywordstool") {
       const ts = req.headers["x-timestamp"];

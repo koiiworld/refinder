@@ -238,3 +238,15 @@ test("크리에이터 어드바이저 트렌드가 시즌 키워드 도출 프�
   assert.ok(p.includes("트렌드마커굴보쌈"), "유입 트렌드가 프롬프트에 포함");
   assert.ok(p.includes("크리에이터 어드바이저"));
 });
+
+test("네이버 데이터랩: NAVER API HUB 방식(NCP 헤더)으로 검색어 추세 조회·저장", async () => {
+  const r = await call("/api/research/trend", "POST", { keywords: ["김장", "절임배추"], startDate: "2026-08-01", endDate: "2026-10-31", timeUnit: "month" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.data.results.length, 2);
+  assert.equal(r.data.data.results[0].data[1].ratio, 100);
+  const log = (await call("/__log", "GET", undefined, MOCK)).data.find((l) => l.path === "/search-trend/v1/search");
+  assert.equal(log.headers["x-ncp-apigw-api-key-id"], "test-dl-id");
+  const snaps = (await call("/api/research/trend")).data;
+  assert.equal(snaps.naverConnected, true);
+  assert.ok(snaps.snapshots.some((s) => s.source === "naver_datalab"));
+});
