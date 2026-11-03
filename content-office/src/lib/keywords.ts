@@ -59,19 +59,25 @@ async function youtubeContext(category: string) {
 }
 void frequentTerms;
 
+/** 데이터랩 주별 추세: 끝난 주만 사용 → 최근 2주 평균 vs 그 전 4주 평균 */
 async function trends(keywords: string[]) {
   const out: Record<string, KeywordPick["trend"]> = {};
   if (!naverConnected() || !keywords.length) return out;
-  const end = kst();
-  const start = addDays(end, -95);
+  const today = kst();
+  const dow = (new Date(today + "T00:00:00Z").getUTCDay() + 6) % 7; // 월=0
+  const end = addDays(today, -dow - 1); // 지난주 일요일
+  const start = addDays(end, -7 * 6 + 1); // 6주 전 월요일
   for (let i = 0; i < keywords.length; i += 5) {
     try {
-      const r = await naverTrend({ blogId: null, keywords: keywords.slice(i, i + 5), startDate: start, endDate: end, timeUnit: "month" });
+      const r = await naverTrend({ blogId: null, keywords: keywords.slice(i, i + 5), startDate: start, endDate: end, timeUnit: "week" });
       for (const res of (r.data as { results?: { title: string; data: { ratio: number }[] }[] }).results ?? []) {
         const d = res.data.map((x) => x.ratio);
-        if (d.length < 2) continue;
-        const recent = d[d.length - 1];
-        const prev = d.slice(0, -1).reduce((a, b) => a + b, 0) / (d.length - 1);
+        if (d.length < 3) continue;
+        const k = Math.min(2, d.length - 1);
+        const recentArr = d.slice(-k);
+        const prevArr = d.slice(0, -k);
+        const recent = recentArr.reduce((a, b) => a + b, 0) / recentArr.length;
+        const prev = prevArr.reduce((a, b) => a + b, 0) / prevArr.length;
         out[res.title] = { recent, prev, dir: recent > prev * 1.2 ? "up" : recent < prev * 0.8 ? "down" : "flat" };
       }
     } catch {
@@ -106,7 +112,17 @@ export async function recommendKeywords(blogId: string, hint = "") {
       const r = await keywordStats(ai.map((k) => k.keyword), { withRelated: true });
       stats = r.stats;
       const have = new Set(ai.map((k) => k.keyword.replace(/\s+/g, "")));
-      related = r.related.filter((x) => !have.has(x.keyword) && x.total >= 100).slice(0, 10);
+      // 블로그와 무관한 연관어 제외: AI 키워드의 단어(2자 이상)가 들어간 연관 키워드만
+      const words = Array.from(new Set(ai.flatMap((k) => k.keyword.split(/\s+/)).filter((w) => w.length >= 2)));
+      const seenRel = new Set<string>();
+      related = r.related
+        .filter((x) => {
+          if (have.has(x.keyword) || seenRel.has(x.keyword) || x.total < 100) return false;
+          if (!words.some((w) => x.keyword.includes(w))) return false;
+          seenRel.add(x.keyword);
+          return true;
+        })
+        .slice(0, 10);
     } catch {
       /* 검색량은 선택 데이터 */
     }
