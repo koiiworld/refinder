@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 export const PROVIDERS = [
   { id: "openai", label: "ChatGPT (OpenAI)", defaultModel: "gpt-5" },
   { id: "anthropic", label: "Claude (Anthropic)", defaultModel: "claude-sonnet-5-5" },
-  { id: "google", label: "Gemini (Google)", defaultModel: "gemini-2.5-pro" },
+  { id: "google", label: "Gemini (Google)", defaultModel: "gemini-3.5-flash" },
   { id: "template", label: "템플릿 (오프라인·AI 아님)", defaultModel: "offline-template" },
 ] as const;
 

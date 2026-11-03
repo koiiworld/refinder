@@ -5,7 +5,7 @@ type QueryFn = (sql: string, params?: unknown[]) => Promise<Record<string, unkno
 export const DEFAULT_MODELS = {
   openai: "gpt-5",
   anthropic: "claude-sonnet-5-5",
-  google: "gemini-2.5-pro",
+  google: "gemini-3.5-flash",
   template: "offline-template",
 } as const;
 

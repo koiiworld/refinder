@@ -14,11 +14,11 @@ const ROLES: [RoleKey, string, string][] = [
 ];
 
 const DEFAULT_ROLES: AiRoles = {
-  planner: { provider: "google", model: "gemini-2.5-pro" },
+  planner: { provider: "google", model: "gemini-3.5-flash" },
   writer: { provider: "anthropic", model: "claude-sonnet-5-5" },
   reviewer: { provider: "openai", model: "gpt-5" },
   editor: { provider: "anthropic", model: "claude-sonnet-5-5" },
-  ideas: { provider: "google", model: "gemini-2.5-pro" },
+  ideas: { provider: "google", model: "gemini-3.5-flash" },
 };
 
 export default function BlogForm({ blog, connections }: { blog?: Blog; connections: { provider: string; connected: boolean }[] }) {
