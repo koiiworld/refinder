@@ -2,6 +2,8 @@ import { connectionStatus } from "@/lib/ai/providers";
 import { dbKind } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { naverConnected } from "@/lib/research";
+import { naverAdConnected } from "@/lib/searchad";
+import { youtubeConnected } from "@/lib/youtube";
 import { listBlogs } from "@/lib/repo";
 import SettingsClient from "./SettingsClient";
 
@@ -20,6 +22,8 @@ const FEATURES: [string, "ok" | "partial" | "todo", string][] = [
   ["글감 직접 등록 · 경쟁 콘텐츠 URL 수집 · AI 글감 추천", "ok", "AI 추천은 AI 연결 필요"],
   ["프롬프트 수정실 (GPT·Claude·Gemini·Higgsfield × 이미지/영상·글·정보)", "ok", "다듬기는 AI 연결 필요, 지침은 항상 표시"],
   ["검색어 트렌드 (네이버 데이터랩 공식 API)", "partial", "코드 구현, API 키 필요"],
+  ["키워드 월간 검색량·연관 키워드 (네이버 검색광고 API)", "partial", "NAVER_AD_API_KEY / SECRET / CUSTOMER_ID 필요"],
+  ["유튜브 인기 급상승·키워드별 인기 영상 (YouTube Data API)", "partial", "YOUTUBE_API_KEY 필요"],
   ["Higgsfield 이미지(SOUL)·영상(Wan 2.6) 생성", "ok", "프롬프트 수정실에서 생성 · 크레딧 차감"],
   ["이미지 스튜디오 (원고 연동 이미지 기획·승인·본문 배치)", "todo", "2차 · 현재는 에디터에서 직접 이미지 삽입"],
   ["인스타그램 캐러셀 제작실 · 발행", "todo", "2차"],
@@ -50,6 +54,8 @@ export default async function SettingsPage() {
         usedModels={Array.from(models)}
         db={kind}
         naver={naverConnected()}
+        naverAd={naverAdConnected()}
+        youtube={youtubeConnected()}
       />
       <section className="card" style={{ marginTop: 16 }}>
         <div className="card-head"><h2>기능 구현 현황</h2></div>

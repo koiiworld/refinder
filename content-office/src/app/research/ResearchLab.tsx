@@ -11,7 +11,7 @@ type BlogLite = { id: string; name: string; color: string; category: string };
 type Snapshot = { id: string; source: string; query: { keywords: string[]; startDate: string; endDate: string; timeUnit: string }; data: { results?: { title: string; data: { period: string; ratio: number }[] }[] }; collected_at: string };
 type JobRow = { id: string; blog_id: string; status: string; error: string | null; created_at: string };
 
-export default function ResearchLab({ blogs, ideas, snapshots, jobs, naver, aiConnected }: { blogs: BlogLite[]; ideas: Idea[]; snapshots: Snapshot[]; jobs: JobRow[]; naver: boolean; aiConnected: boolean }) {
+export default function ResearchLab({ blogs, ideas, snapshots, jobs, naver, aiConnected, naverAd, youtube }: { blogs: BlogLite[]; ideas: Idea[]; snapshots: Snapshot[]; jobs: JobRow[]; naver: boolean; aiConnected: boolean; naverAd: boolean; youtube: boolean }) {
   const router = useRouter();
   const [blogId, setBlogId] = useState<string>("all");
   const [status, setStatus] = useState<"new" | "approved" | "rejected">("new");
@@ -61,6 +61,11 @@ export default function ResearchLab({ blogs, ideas, snapshots, jobs, naver, aiCo
           {!filtered.length && <div className="empty">글감이 없습니다.</div>}
         </div>
       </section>
+
+      <div className="grid grid-2">
+        <KeywordVolumeBox connected={naverAd} blogs={blogs} onDone={() => { setToast("글감 보관함에 추가했습니다."); router.refresh(); }} />
+        <YoutubeBox connected={youtube} />
+      </div>
 
       <div className="grid grid-2">
         <CompetitorCheck />
@@ -331,6 +336,167 @@ function TrendBox({ naver, blogs, snapshots, onDone }: { naver: boolean; blogs: 
           </div>
         </div>
       ))}
+    </section>
+  );
+}
+
+// ───────────────────────── 키워드 검색량 (네이버 검색광고) ─────────────────────────
+
+type Stat = { keyword: string; pc: number; mobile: number; total: number; lt10: boolean; compIdx: string; collected_at: string };
+
+export function fmtCount(s: Stat | null | undefined) {
+  if (!s) return "-";
+  if (s.total === 0 && s.lt10) return "10 미만";
+  return s.total.toLocaleString() + (s.lt10 ? "+" : "");
+}
+
+function KeywordVolumeBox({ connected, blogs, onDone }: { connected: boolean; blogs: BlogLite[]; onDone: () => void }) {
+  const [kw, setKw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [res, setRes] = useState<{ stats: Record<string, Stat | null>; related: Stat[] } | null>(null);
+  const [blogId, setBlogId] = useState(blogs[0]?.id ?? "");
+  const [sent, setSent] = useState<string[]>([]);
+  const toIdea = async (k: string) => {
+    await api("/api/ideas", "POST", { blogId, title: k, keywords: [k], memo: `네이버 검색광고 키워드 도구에서 발견` });
+    setSent((x) => [...x, k]);
+    onDone();
+  };
+  const row = (s: Stat, mine: boolean) => (
+    <tr key={s.keyword + mine}>
+      <td>{s.keyword}{mine && <span className="badge" style={{ marginLeft: 4 }}>입력</span>}</td>
+      <td style={{ textAlign: "right" }}>{fmtCount(s)}</td>
+      <td style={{ textAlign: "right" }} className="muted">{s.pc === 0 && s.lt10 ? "<10" : s.pc.toLocaleString()}</td>
+      <td style={{ textAlign: "right" }} className="muted">{s.mobile === 0 && s.lt10 ? "<10" : s.mobile.toLocaleString()}</td>
+      <td>{s.compIdx}</td>
+      <td>{sent.includes(s.keyword) ? <span className="badge badge-ok">보냄</span> : <button className="btn btn-sm" onClick={() => toIdea(s.keyword)}>글감</button>}</td>
+    </tr>
+  );
+  return (
+    <section className="card card-pad stack" style={{ gridColumn: "1 / -1" }}>
+      <div className="row between">
+        <h2 style={{ fontSize: 15 }}>키워드 검색량 · 연관 키워드</h2>
+        <span className={`badge ${connected ? "badge-ok" : "badge-warn"}`}>네이버 검색광고 {connected ? "연결됨" : "미연결"}</span>
+      </div>
+      {!connected ? (
+        <div className="notice small">네이버 검색광고 API 키(NAVER_AD_API_KEY, NAVER_AD_SECRET_KEY, NAVER_AD_CUSTOMER_ID)를 넣으면 키워드별 <b>실제 월간 검색량(PC·모바일)</b>과 경쟁 정도, 연관 키워드를 보여줍니다. 연결 전에는 어떤 검색량도 표시하지 않습니다.</div>
+      ) : (
+        <>
+          <div className="row" style={{ flexWrap: "nowrap" }}>
+            <input className="input" placeholder="키워드 (쉼표 구분, 최대 50개) 예: 김장 양념 비율, 절임배추" value={kw} onChange={(e) => setKw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.currentTarget.nextElementSibling as HTMLButtonElement)?.click()} />
+            <button
+              className="btn btn-primary"
+              disabled={busy || !kw.trim()}
+              onClick={async () => {
+                setBusy(true);
+                setErr("");
+                try {
+                  setRes(await api("/api/research/keywords", "POST", { keywords: kw.split(","), withRelated: true }));
+                } catch (e) {
+                  setErr((e as Error).message);
+                }
+                setBusy(false);
+              }}
+            >
+              {busy ? <span className="spinner" /> : "조회"}
+            </button>
+          </div>
+          {err && <div className="notice notice-bad small">{err}</div>}
+          {res && (
+            <>
+              <div className="row small">
+                <span className="muted">글감 보낼 블로그</span>
+                <select className="select" style={{ width: "auto" }} value={blogId} onChange={(e) => setBlogId(e.target.value)}>
+                  {blogs.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+              <div className="table-wrap">
+                <table className="tbl">
+                  <thead><tr><th>키워드</th><th style={{ textAlign: "right" }}>월간 검색수</th><th style={{ textAlign: "right" }}>PC</th><th style={{ textAlign: "right" }}>모바일</th><th>경쟁</th><th></th></tr></thead>
+                  <tbody>
+                    {Object.entries(res.stats).map(([k, s]) => (s ? row(s, true) : <tr key={k}><td>{k}</td><td colSpan={5} className="muted">검색 데이터 없음</td></tr>))}
+                    {res.related.map((s) => row(s, false))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="tiny muted">출처: 네이버 검색광고 키워드 도구 · 최근 30일 기준 월간 검색수 · 조회 {new Date().toLocaleString("ko-KR")} · 같은 키워드는 7일간 저장된 값을 사용</p>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+// ───────────────────────── 유튜브 인기 급상승 ─────────────────────────
+
+type YtVideo = { id: string; title: string; channel: string; publishedAt: string; views: number; thumbnail: string; url: string };
+const YT_CATS: [string, string][] = [["", "전체"], ["26", "노하우·스타일"], ["28", "과학·기술"], ["22", "브이로그"], ["19", "여행"], ["24", "엔터"]];
+
+function YoutubeBox({ connected }: { connected: boolean }) {
+  const [cat, setCat] = useState("");
+  const [qy, setQy] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [res, setRes] = useState<{ videos: YtVideo[]; terms: { term: string; videos: number }[]; collected_at: string; label: string } | null>(null);
+  async function load(params: string, label: string) {
+    setBusy(true);
+    setErr("");
+    try {
+      const d = await api<{ videos: YtVideo[]; terms: { term: string; videos: number }[]; collected_at: string }>(`/api/research/youtube?${params}`);
+      setRes({ ...d, label });
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setBusy(false);
+  }
+  return (
+    <section className="card card-pad stack" style={{ gridColumn: "1 / -1" }}>
+      <div className="row between">
+        <h2 style={{ fontSize: 15 }}>유튜브 트렌드</h2>
+        <span className={`badge ${connected ? "badge-ok" : "badge-warn"}`}>YouTube {connected ? "연결됨" : "미연결"}</span>
+      </div>
+      {!connected ? (
+        <div className="notice small">YouTube Data API 키(YOUTUBE_API_KEY)를 넣으면 한국 인기 급상승 영상과 키워드별 인기 영상을 실제로 조회합니다.</div>
+      ) : (
+        <>
+          <div className="row">
+            <span className="small muted">인기 급상승 (한국)</span>
+            {YT_CATS.map(([id, label]) => (
+              <button key={id} className={`btn btn-sm ${cat === id && res?.label.startsWith("급상승") ? "btn-primary" : ""}`} disabled={busy} onClick={() => { setCat(id); void load(`mode=trending&category=${id}`, `급상승 · ${label}`); }}>{label}</button>
+            ))}
+          </div>
+          <div className="row" style={{ flexWrap: "nowrap" }}>
+            <input className="input" placeholder="키워드로 최근 90일 인기 영상 찾기 (하루 약 100회까지)" value={qy} onChange={(e) => setQy(e.target.value)} />
+            <button className="btn" disabled={busy || !qy.trim()} onClick={() => load(`q=${encodeURIComponent(qy.trim())}`, `검색 · ${qy.trim()}`)}>{busy ? <span className="spinner" /> : "검색"}</button>
+          </div>
+          {err && <div className="notice notice-bad small">{err}</div>}
+          {res && (
+            <>
+              {!!res.terms.length && (
+                <div>
+                  <div className="label">자주 나온 단어 ({res.label}) — 숫자는 해당 단어가 나온 영상 수</div>
+                  <div className="row">{res.terms.map((t) => <span key={t.term} className="badge badge-accent">{t.term} · {t.videos}</span>)}</div>
+                </div>
+              )}
+              <div className="list card" style={{ maxHeight: 420, overflowY: "auto" }}>
+                {res.videos.map((v, i) => (
+                  <a key={v.id} href={v.url} target="_blank" rel="noreferrer" className="list-item">
+                    <span className="tiny muted" style={{ width: 20 }}>{i + 1}</span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {v.thumbnail && <img src={v.thumbnail} alt="" style={{ width: 96, height: 54, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="small strong ellipsis">{v.title}</div>
+                      <div className="tiny muted">{v.channel} · 조회 {v.views.toLocaleString()} · {v.publishedAt.slice(0, 10)}</div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+              <p className="tiny muted">출처: YouTube Data API · 조회 {new Date(res.collected_at).toLocaleString("ko-KR")}</p>
+            </>
+          )}
+        </>
+      )}
     </section>
   );
 }

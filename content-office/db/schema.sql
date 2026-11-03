@@ -245,3 +245,12 @@ CREATE TABLE IF NOT EXISTS season_keywords (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS season_keywords_idx ON season_keywords(blog_id, year, event_key);
+
+-- 실제 조회한 키워드 검색량 캐시 (출처·조회일 보존, 7일 재사용)
+CREATE TABLE IF NOT EXISTS keyword_stats (
+  keyword      TEXT NOT NULL,       -- 띄어쓰기 제거한 키워드
+  source       TEXT NOT NULL,       -- naver_ad
+  data         JSONB NOT NULL,
+  collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (keyword, source)
+);

@@ -6,7 +6,7 @@ import { api } from "@/components/client-utils";
 
 type Conn = { provider: string; label: string; envKey: string; connected: boolean; media?: boolean };
 
-export default function SettingsClient({ connections, settings, usedModels, db, naver }: { connections: Conn[]; settings: AppSettings; usedModels: string[]; db: string; naver: boolean }) {
+export default function SettingsClient({ connections, settings, usedModels, db, naver, naverAd, youtube }: { connections: Conn[]; settings: AppSettings; usedModels: string[]; db: string; naver: boolean; naverAd: boolean; youtube: boolean }) {
   const [fallback, setFallback] = useState(settings.fallbackToTemplate);
   const keys = Array.from(new Set([...usedModels, ...Object.keys(settings.pricing)]));
   const [pricing, setPricing] = useState<Record<string, { input: string; output: string }>>(
@@ -123,6 +123,7 @@ export default function SettingsClient({ connections, settings, usedModels, db, 
           </p>
           <p className="small muted">모든 작업 상태·버전·기록은 DB에 저장되어 앱을 종료해도 유지됩니다. Supabase를 쓰려면 DATABASE_URL에 연결 문자열을 넣으세요.</p>
           <p className="small">네이버 데이터랩: <span className={`badge ${naver ? "badge-ok" : "badge-warn"}`}>{naver ? "연결됨" : "미연결"}</span></p>
+          <p className="small">네이버 검색광고: <span className={`badge ${naverAd ? "badge-ok" : "badge-warn"}`}>{naverAd ? "연결됨" : "미연결"}</span> · YouTube: <span className={`badge ${youtube ? "badge-ok" : "badge-warn"}`}>{youtube ? "연결됨" : "미연결"}</span></p>
         </section>
         <section className="card card-pad stack">
           <h2 style={{ fontSize: 15 }}>내보내기 · 백업</h2>

@@ -8,6 +8,8 @@ import { AiPicker, api, useToast } from "@/components/client-utils";
 
 type BlogLite = { id: string; name: string; color: string; category: string };
 type Conn = { provider: string; connected: boolean };
+type Stat = { keyword: string; pc: number; mobile: number; total: number; lt10: boolean; compIdx: string; collected_at: string };
+const fmtCount = (s?: Stat | null) => (!s ? "-" : s.total === 0 && s.lt10 ? "10 미만" : s.total.toLocaleString() + (s.lt10 ? "+" : ""));
 
 const dayDiff = (a: string, b: string) => Math.round((new Date(a + "T00:00:00Z").getTime() - new Date(b + "T00:00:00Z").getTime()) / 86400000);
 const md = (d: string) => `${Number(d.slice(5, 7))}.${Number(d.slice(8, 10))}`;
@@ -21,7 +23,7 @@ function phase(e: SeasonEvent, today: string): { label: string; cls: string; ord
   return { label: `준비 시작까지 ${dayDiff(prep, today)}일`, cls: "", order: 2 };
 }
 
-export default function MarketingCalendar({ blogs, today, connections }: { blogs: BlogLite[]; today: string; connections: Conn[] }) {
+export default function MarketingCalendar({ blogs, today, connections, naverAd }: { blogs: BlogLite[]; today: string; connections: Conn[]; naverAd: boolean }) {
   const [year, setYear] = useState(Number(today.slice(0, 4)));
   const [blogId, setBlogId] = useState(blogs[0]?.id ?? "");
   const [events, setEvents] = useState<SeasonEvent[]>([]);
@@ -119,7 +121,7 @@ export default function MarketingCalendar({ blogs, today, connections }: { blogs
         {/* 선택한 이벤트 */}
         <div className="stack" style={{ gap: 16 }}>
           {sel && blog ? (
-            <EventPanel key={sel.key + blogId + year} ev={sel} blog={blog} year={year} today={today} keywords={keywords.filter((k) => k.event_key === sel.key)} connections={connections} reload={load} toast={setToast} />
+            <EventPanel key={sel.key + blogId + year} naverAd={naverAd} ev={sel} blog={blog} year={year} today={today} keywords={keywords.filter((k) => k.event_key === sel.key)} connections={connections} reload={load} toast={setToast} />
           ) : (
             <div className="card empty">달력에서 이벤트를 선택하세요.</div>
           )}
@@ -131,7 +133,7 @@ export default function MarketingCalendar({ blogs, today, connections }: { blogs
   );
 }
 
-function EventPanel({ ev, blog, year, today, keywords, connections, reload, toast }: { ev: SeasonEvent; blog: BlogLite; year: number; today: string; keywords: SeasonKeyword[]; connections: Conn[]; reload: () => Promise<void>; toast: (s: string) => void }) {
+function EventPanel({ ev, blog, year, today, keywords, connections, reload, toast, naverAd }: { naverAd: boolean; ev: SeasonEvent; blog: BlogLite; year: number; today: string; keywords: SeasonKeyword[]; connections: Conn[]; reload: () => Promise<void>; toast: (s: string) => void }) {
   const seeds = seedsFor(ev, blog.category);
   const [pickSeeds, setPickSeeds] = useState<string[]>([]);
   const [pick, setPick] = useState<string[]>([]);
@@ -142,6 +144,27 @@ function EventPanel({ ev, blog, year, today, keywords, connections, reload, toas
   const p = phase(ev, today);
   const anyAi = connections.some((c) => c.connected);
   const prep = addDays(ev.start, -ev.leadDays);
+  const [stats, setStats] = useState<Record<string, Stat | null>>({});
+  const [statBusy, setStatBusy] = useState(false);
+  const allKw = Array.from(new Set([...seeds, ...keywords.map((k) => k.keyword)]));
+  // 저장된 검색량(최근 조회값)만 먼저 불러오기 — API 호출 없음
+  useEffect(() => {
+    if (!allKw.length) return;
+    api<{ stats: Record<string, Stat> }>("/api/research/keywords", "POST", { keywords: allKw, cacheOnly: true }).then((r) => setStats((s) => ({ ...s, ...r.stats }))).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allKw.join("|")]);
+  async function fetchStats() {
+    setStatBusy(true);
+    setErr("");
+    try {
+      const r = await api<{ stats: Record<string, Stat | null> }>("/api/research/keywords", "POST", { keywords: allKw });
+      setStats((s) => ({ ...s, ...r.stats }));
+      toast("네이버 검색광고 검색량을 불러왔습니다.");
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setStatBusy(false);
+  }
 
   async function post(payload: Record<string, unknown>, msg: (r: Record<string, number>) => string) {
     setBusy(true);
@@ -173,10 +196,19 @@ function EventPanel({ ev, blog, year, today, keywords, connections, reload, toas
         {ev.note && <p className="small">{ev.note}</p>}
 
         <div>
-          <div className="label">출발 키워드 · {blog.name} 분야 기준 (검색량 아님)</div>
+          <div className="row between">
+            <div className="label" style={{ margin: 0 }}>출발 키워드 · {blog.name} 분야 기준</div>
+            {naverAd ? (
+              <button className="btn btn-sm" disabled={statBusy || !allKw.length} onClick={fetchStats}>{statBusy ? <span className="spinner" /> : "월간 검색량 조회"}</button>
+            ) : (
+              <span className="tiny muted">검색량: 네이버 검색광고 연결 시 표시</span>
+            )}
+          </div>
           <div className="row">
             {seeds.map((s) => (
-              <button key={s} className={`btn btn-sm ${pickSeeds.includes(s) ? "btn-primary" : ""}`} onClick={() => toggle(pickSeeds, s, setPickSeeds)}>{s}</button>
+              <button key={s} className={`btn btn-sm ${pickSeeds.includes(s) ? "btn-primary" : ""}`} onClick={() => toggle(pickSeeds, s, setPickSeeds)}>
+                {s}{s in stats && <span className="tiny" style={{ marginLeft: 4, opacity: 0.75 }}>{fmtCount(stats[s])}</span>}
+              </button>
             ))}
             {!seeds.length && <span className="small muted">이 분야용 출발 키워드가 없습니다. AI 도출을 이용하세요.</span>}
           </div>
@@ -197,7 +229,7 @@ function EventPanel({ ev, blog, year, today, keywords, connections, reload, toas
               {busy ? <span className="spinner" /> : keywords.some((k) => k.source === "ai") ? "더 도출하기" : "키워드 도출"}
             </button>
           </div>
-          <span className="tiny muted">블로그 분야·문체와 출발 키워드를 바탕으로 롱테일 키워드, 검색 의도, 글 방향, 발행 시점을 제안합니다. 실제 검색량은 데이터 연결 후 붙일 예정입니다.</span>
+          <span className="tiny muted">블로그 분야·문체와 출발 키워드를 바탕으로 롱테일 키워드, 검색 의도, 글 방향, 발행 시점을 제안합니다. 검색량은 '월간 검색량 조회'로 네이버 실제 데이터를 붙입니다.</span>
         </div>
         {err && <div className="notice notice-bad small">{err}</div>}
 
@@ -219,6 +251,7 @@ function EventPanel({ ev, blog, year, today, keywords, connections, reload, toas
                     <div className="row">
                       <span className="strong small">{k.keyword}</span>
                       {k.intent && <span className="badge">{k.intent}</span>}
+                      {k.keyword in stats && <span className="badge badge-accent" title={stats[k.keyword] ? `PC ${stats[k.keyword]!.pc} · 모바일 ${stats[k.keyword]!.mobile} · 경쟁 ${stats[k.keyword]!.compIdx} · 조회 ${stats[k.keyword]!.collected_at.slice(0, 10)}` : "네이버에 검색 데이터 없음"}>월 {fmtCount(stats[k.keyword])}</span>}
                       {k.source === "seed" && <span className="badge">출발 키워드</span>}
                       {k.idea_id && <span className="badge badge-ok">글감 보관함에 있음</span>}
                     </div>

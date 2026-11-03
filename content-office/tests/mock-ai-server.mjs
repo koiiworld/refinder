@@ -2,6 +2,7 @@
 // 실제 API 키 없이 앱의 'AI 연결됨' 경로(요청 형식, 응답 파싱, 재시도, 토큰·비용 기록)를 검증합니다.
 // 사용법: node tests/mock-ai-server.mjs  (기본 포트 4010)
 import http from "node:http";
+import crypto from "node:crypto";
 
 const PORT = Number(process.env.MOCK_PORT ?? 4010);
 const log = [];
@@ -47,6 +48,29 @@ http
       log.length = 0;
       googleFailOnce = true;
       return send(res, 200, { ok: true });
+    }
+
+    // 네이버 검색광고 키워드 도구 (서명 검증)
+    if (url.pathname === "/keywordstool") {
+      const ts = req.headers["x-timestamp"];
+      const expect = crypto.createHmac("sha256", "test-ad-secret").update(`${ts}.GET./keywordstool`).digest("base64");
+      if (req.headers["x-api-key"] !== "test-ad-key" || req.headers["x-customer"] !== "12345" || req.headers["x-signature"] !== expect)
+        return send(res, 403, { title: "Invalid signature", code: 1018 });
+      const hints = (url.searchParams.get("hintKeywords") ?? "").split(",");
+      if (hints.some((h) => /\s/.test(h))) return send(res, 400, { title: "invalid keyword", code: 7003 });
+      const list = hints.map((h, i) => ({ relKeyword: h, monthlyPcQcCnt: 1200 + i, monthlyMobileQcCnt: 8800, compIdx: "높음" }));
+      list.push({ relKeyword: "김장양념레시피", monthlyPcQcCnt: "< 10", monthlyMobileQcCnt: 320, compIdx: "낮음" });
+      list.push({ relKeyword: "김장날짜", monthlyPcQcCnt: "< 10", monthlyMobileQcCnt: "< 10", compIdx: "낮음" });
+      return send(res, 200, { keywordList: list });
+    }
+    // YouTube Data API
+    if (url.pathname.startsWith("/youtube/v3/")) {
+      if (url.searchParams.get("key") !== "test-yt-key") return send(res, 400, { error: { code: 400, message: "API key not valid", errors: [{ reason: "keyInvalid" }] } });
+      const vid = (id, title, views, tags = []) => ({ id, snippet: { title, channelTitle: "채널" + id, publishedAt: "2026-11-01T00:00:00Z", tags, thumbnails: { medium: { url: "https://i.ytimg.com/" + id + ".jpg" } } }, statistics: { viewCount: String(views) } });
+      if (url.pathname === "/youtube/v3/search") return send(res, 200, { items: [{ id: { videoId: "s1" } }, { id: { videoId: "s2" } }] });
+      if (url.searchParams.get("chart") === "mostPopular")
+        return send(res, 200, { items: [vid("v1", "김장 김치 황금레시피 공개", 900000, ["김장", "김치"]), vid("v2", "김장 절임배추 고르는 법", 500000, ["김장"]), vid("v3", "겨울 캠핑 브이로그", 100000)] });
+      return send(res, 200, { items: [vid("s2", "김장 양념 비율 정리", 300000, ["김장"]), vid("s1", "김장 하는 날 브이로그", 700000, ["김장"])] });
     }
 
     // Higgsfield (이미지·영상)

@@ -1,6 +1,8 @@
 import { listBlogs, listIdeas } from "@/lib/repo";
 import { q } from "@/lib/db";
 import { naverConnected } from "@/lib/research";
+import { naverAdConnected } from "@/lib/searchad";
+import { youtubeConnected } from "@/lib/youtube";
 import { connectionStatus } from "@/lib/ai/providers";
 import ResearchLab from "./ResearchLab";
 
@@ -28,6 +30,8 @@ export default async function Research() {
         jobs={JSON.parse(JSON.stringify(jobs))}
         naver={naverConnected()}
         aiConnected={connectionStatus().some((c) => c.connected && !c.media)}
+        naverAd={naverAdConnected()}
+        youtube={youtubeConnected()}
       />
     </div>
   );

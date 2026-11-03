@@ -1,6 +1,7 @@
 import { listBlogs } from "@/lib/repo";
 import { connectionStatus } from "@/lib/ai/providers";
 import MarketingCalendar from "./MarketingCalendar";
+import { naverAdConnected } from "@/lib/searchad";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function MarketingPage() {
         blogs={blogs.map((b) => ({ id: b.id, name: b.name, color: b.color, category: b.category }))}
         today={today}
         connections={connectionStatus().filter((c) => !c.media)}
+        naverAd={naverAdConnected()}
       />
     </div>
   );

@@ -187,3 +187,42 @@ test("마케팅 달력: AI 시즌 키워드 도출 → 중복 없이 저장 → 
   const g = log.filter((l) => l.path.endsWith(":generateContent")).map((l) => l.body.contents[0].parts[0].text).find((t) => t.includes("시즌 키워드"));
   assert.ok(g.includes("김장 김치 담그는 법"));
 });
+
+test("네이버 검색광고: HMAC 서명, 5개씩 나눠 조회, 띄어쓰기 제거, '< 10' 처리, 연관 키워드, 7일 캐시", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  const kws = ["김장 양념 비율", "절임배추", "김치냉장고", "수육", "굴겉절이", "액젓"];
+  const r = await call("/api/research/keywords", "POST", { keywords: kws, withRelated: true });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const s = r.data.stats["김장 양념 비율"];
+  assert.equal(s.keyword, "김장양념비율");
+  assert.equal(s.pc, 1200);
+  assert.equal(s.total, 10000);
+  assert.equal(s.compIdx, "높음");
+  const rel = r.data.related.find((x) => x.keyword === "김장양념레시피");
+  assert.equal(rel.pc, 0);
+  assert.equal(rel.lt10, true);
+  assert.equal(rel.total, 320);
+  let log = (await call("/__log", "GET", undefined, MOCK)).data.filter((l) => l.path === "/keywordstool");
+  assert.equal(log.length, 2, "6개 키워드 → 5개 + 1개 두 번 호출");
+  // 캐시: 다시 조회하면 API 호출 없음
+  await call("/__reset", "POST", undefined, MOCK);
+  const again = await call("/api/research/keywords", "POST", { keywords: ["절임배추"] });
+  assert.equal(again.data.stats["절임배추"].total, 10001);
+  log = (await call("/__log", "GET", undefined, MOCK)).data.filter((l) => l.path === "/keywordstool");
+  assert.equal(log.length, 0, "7일 이내 값은 저장값 사용");
+  const cache = await call("/api/research/keywords", "POST", { keywords: ["김장 양념 비율", "없는키워드"], cacheOnly: true });
+  assert.ok(cache.data.stats["김장 양념 비율"]);
+  assert.ok(!cache.data.stats["없는키워드"]);
+});
+
+test("YouTube: 인기 급상승·키워드 검색, 자주 나온 단어 집계", async () => {
+  const t = await call("/api/research/youtube?mode=trending&category=26");
+  assert.equal(t.status, 200, JSON.stringify(t.data));
+  assert.equal(t.data.videos.length, 3);
+  assert.equal(t.data.videos[0].views, 900000);
+  assert.deepEqual(t.data.terms[0], { term: "김장", videos: 2 });
+  const log = (await call("/__log", "GET", undefined, MOCK)).data.find((l) => l.path === "/youtube/v3/videos");
+  assert.ok(log);
+  const s = await call(`/api/research/youtube?q=${encodeURIComponent("김장")}`);
+  assert.equal(s.data.videos[0].id, "s1", "조회수 순 정렬");
+});

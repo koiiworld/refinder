@@ -268,3 +268,13 @@ test("마케팅 달력: 시즌 이벤트, 직접 추가, AI 없이 출발 키워
   const ev = d2.events.find((e) => e.name === "알고키친 3주년");
   assert.equal((await call(`/api/marketing/events/${ev.customId}`, "DELETE")).status, 200);
 });
+
+test("검색량·유튜브: 키 미연결이면 수치를 만들지 않고 안내", async () => {
+  const k = await call("/api/research/keywords", "POST", { keywords: ["김장"] });
+  assert.equal(k.status, 400);
+  assert.match(k.data.error, /네이버 검색광고 API 키/);
+  const c = await call("/api/research/keywords", "POST", { keywords: ["김장"], cacheOnly: true });
+  assert.deepEqual(c.data.stats, {});
+  const y = await call("/api/research/youtube?mode=trending");
+  assert.equal(y.status, 400);
+});
