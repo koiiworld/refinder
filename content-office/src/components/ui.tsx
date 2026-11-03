@@ -13,8 +13,16 @@ export function fmtDate(iso?: string | null, withTime = true) {
   });
 }
 
+/** 원화 환산 기준 환율 (1달러 = 1,400원) */
+export const KRW_PER_USD = 1400;
+
+/** 달러 표시 + 괄호 안 원화 환산. 예: $0.15 (₩210) */
 export function fmtUsd(n: number) {
-  return "$" + (Number(n) || 0).toFixed(n && n < 0.01 ? 4 : 2);
+  const usd = Number(n) || 0;
+  const usdText = "$" + usd.toFixed(usd && usd < 0.01 ? 4 : 2);
+  const krw = usd * KRW_PER_USD;
+  const krwText = krw > 0 && krw < 1 ? krw.toFixed(1) : Math.round(krw).toLocaleString("ko-KR");
+  return `${usdText} (₩${krwText})`;
 }
 
 export function StageBadge({ stage, status }: { stage: string; status?: string }) {

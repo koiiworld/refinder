@@ -87,7 +87,7 @@ export default function SettingsClient({ connections, settings, usedModels, db, 
       <section className="card">
         <div className="card-head"><h2>AI 단가 (USD / 100만 토큰)</h2>{msg && <span className="badge badge-ok">{msg}</span>}</div>
         <div className="card-pad stack">
-          <p className="small muted">각 사 공식 가격표를 확인해 입력하세요. 입력하지 않은 모델은 비용 0으로 표시되고 토큰 수만 기록됩니다. (앱이 임의로 가격을 추정하지 않습니다)</p>
+          <p className="small muted">각 사 공식 가격표를 확인해 입력하세요. 입력하지 않은 모델은 비용 0으로 표시되고 토큰 수만 기록됩니다. (앱이 임의로 가격을 추정하지 않습니다) 화면의 비용은 1달러 = 1,400원 기준 원화를 괄호로 함께 표시합니다.</p>
           <div className="table-wrap">
             <table className="tbl">
               <thead><tr><th>제공자:모델</th><th>입력 단가</th><th>출력 단가</th></tr></thead>
