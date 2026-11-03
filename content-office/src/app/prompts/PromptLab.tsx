@@ -5,6 +5,7 @@ import { getGuide, KINDS, supports, TARGETS, TARGET_LABEL, KIND_LABEL, type Prom
 import type { PromptRow } from "@/lib/promptlab";
 import { AiPicker, api, Diff, Modal, useToast } from "@/components/client-utils";
 import { fmtDate } from "@/components/ui";
+import HiggsfieldPanel from "./HiggsfieldPanel";
 
 type BlogLite = { id: string; name: string; color: string };
 type Conn = { provider: string; connected: boolean };
@@ -256,6 +257,16 @@ function ResultPanel({ row, connections, onChange, toast, onDelete }: { row: Pro
             <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => act({ action: "save", result: { ...cur, prompt, negative } }, "직접 수정한 내용을 새 버전으로 저장했습니다.")}>직접 수정 저장</button>
             <button className="btn btn-sm" onClick={() => { setPrompt(cur.prompt); setNegative(cur.negative); }}>되돌리기</button>
           </div>
+        )}
+
+        {row.target === "higgsfield" && (
+          <HiggsfieldPanel
+            promptId={row.id}
+            prompt={cur.prompt}
+            negative={cur.negative}
+            defaultMedia={row.media}
+            connected={!!connections.find((c) => c.provider === "higgsfield")?.connected}
+          />
         )}
 
         <div className="grid grid-3">

@@ -114,3 +114,35 @@ test("프롬프트 수정실: Gemini로 Higgsfield 영상 프롬프트를 다듬
   assert.equal(w.data.current.negative, "");
   assert.equal(w.data.current.promptKo, "", "한국어 프롬프트는 해석 불필요");
 });
+
+test("Higgsfield: 연결 확인, 이미지 생성→완료, 그 이미지로 영상 생성, 요청 형식", async () => {
+  const conn = await call("/api/ai/models?provider=higgsfield");
+  assert.equal(conn.status, 200, JSON.stringify(conn.data));
+  assert.match(conn.data.note, /인증 성공/);
+  const p = await call("/api/prompts", "POST", { target: "higgsfield", kind: "visual", media: "video", text: "계란말이 영상" });
+  const pid = p.data.id;
+  // 영상은 시작 이미지 없으면 거부
+  const bad = await call("/api/media", "POST", { model: "wan-2.6-i2v", promptId: pid, prompt: "x" });
+  assert.equal(bad.status, 400);
+  const img = await call("/api/media", "POST", { model: "soul-standard", promptId: pid, prompt: "omelette", aspect_ratio: "9:16", resolution: "1080p" });
+  assert.equal(img.status, 201, JSON.stringify(img.data));
+  assert.equal(img.data.status, "queued");
+  let j = img.data;
+  for (let i = 0; i < 5 && j.status !== "completed"; i++) j = (await call(`/api/media/${j.id}`)).data;
+  assert.equal(j.status, "completed");
+  assert.deepEqual(j.urls, ["https://cdn.example.com/out.png"]);
+  const vid = await call("/api/media", "POST", { model: "wan-2.6-i2v", promptId: pid, prompt: "steam rising", image_url: j.urls[0], duration: 10, negative_prompt: "hands" });
+  let v = vid.data;
+  for (let i = 0; i < 5 && v.status !== "completed"; i++) v = (await call(`/api/media/${v.id}`)).data;
+  assert.deepEqual(v.urls, ["https://cdn.example.com/out.mp4"]);
+  assert.equal(v.media, "video");
+  const list = await call(`/api/media?promptId=${pid}`);
+  assert.equal(list.data.length, 2);
+  // 요청 형식: 공식 문서 스키마대로 전송, 인증 헤더·Idempotency-Key 포함
+  const log = (await call("/__log", "GET", undefined, MOCK)).data;
+  const soul = log.find((l) => l.path === "/higgsfield-ai/soul/standard");
+  assert.deepEqual(soul.body, { prompt: "omelette", aspect_ratio: "9:16", resolution: "1080p", batch_size: 1, enhance_prompt: false });
+  assert.ok(soul.headers["idempotency-key"]);
+  const wan = log.find((l) => l.path === "/wan/v2.6/image-to-video");
+  assert.deepEqual(wan.body, { prompt: "steam rising", image_url: "https://cdn.example.com/out.png", duration: 10, resolution: "720p", negative_prompt: "hands" });
+});

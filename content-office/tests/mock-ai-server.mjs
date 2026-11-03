@@ -6,6 +6,7 @@ import http from "node:http";
 const PORT = Number(process.env.MOCK_PORT ?? 4010);
 const log = [];
 let googleFailOnce = true;
+const hfJobs = new Map();
 
 const plan = {
   titleCandidates: ["모의 제목 A", "모의 제목 B"],
@@ -46,6 +47,28 @@ http
       log.length = 0;
       googleFailOnce = true;
       return send(res, 200, { ok: true });
+    }
+
+    // Higgsfield (이미지·영상)
+    if (url.pathname.startsWith("/v1/text2image") || url.pathname.startsWith("/higgsfield-ai/") || url.pathname.startsWith("/wan/") || url.pathname.startsWith("/requests/")) {
+      if (req.headers.authorization !== "Key test-id:test-secret") return send(res, 401, { detail: "Invalid credentials" });
+      if (url.pathname === "/v1/text2image/soul-styles") return send(res, 200, [{ id: "s1", name: "Mock style" }]);
+      if (req.method === "POST" && (url.pathname === "/higgsfield-ai/soul/standard" || url.pathname === "/wan/v2.6/image-to-video")) {
+        const id = "req" + (hfJobs.size + 1);
+        hfJobs.set(id, { polls: 0, video: url.pathname.startsWith("/wan/"), body, idem: req.headers["idempotency-key"] });
+        return send(res, 200, { status: "queued", request_id: id, status_url: `http://localhost:${PORT}/requests/${id}/status`, cancel_url: `http://localhost:${PORT}/requests/${id}/cancel` });
+      }
+      const m2 = url.pathname.match(/^\/requests\/(\w+)\/(status|cancel)$/);
+      if (m2 && hfJobs.has(m2[1])) {
+        const jb = hfJobs.get(m2[1]);
+        if (m2[2] === "cancel") { res.writeHead(202); return res.end(); }
+        jb.polls++;
+        if (jb.polls < 2) return send(res, 200, { status: "in_progress", request_id: m2[1] });
+        return send(res, 200, jb.video
+          ? { status: "completed", request_id: m2[1], video: { url: "https://cdn.example.com/out.mp4" }, expires_at: "2026-11-10T00:00:00Z" }
+          : { status: "completed", request_id: m2[1], images: [{ url: "https://cdn.example.com/out.png" }], expires_at: "2026-11-10T00:00:00Z" });
+      }
+      return send(res, 404, { detail: "not found" });
     }
 
     // OpenAI Chat Completions

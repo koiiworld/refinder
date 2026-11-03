@@ -27,7 +27,7 @@ export default async function Research() {
         snapshots={JSON.parse(JSON.stringify(snapshots))}
         jobs={JSON.parse(JSON.stringify(jobs))}
         naver={naverConnected()}
-        aiConnected={connectionStatus().some((c) => c.connected)}
+        aiConnected={connectionStatus().some((c) => c.connected && !c.media)}
       />
     </div>
   );

@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { AppSettings } from "@/lib/settings";
 import { api } from "@/components/client-utils";
 
-type Conn = { provider: string; label: string; envKey: string; connected: boolean };
+type Conn = { provider: string; label: string; envKey: string; connected: boolean; media?: boolean };
 
 export default function SettingsClient({ connections, settings, usedModels, db, naver }: { connections: Conn[]; settings: AppSettings; usedModels: string[]; db: string; naver: boolean }) {
   const [fallback, setFallback] = useState(settings.fallbackToTemplate);
@@ -40,14 +40,14 @@ export default function SettingsClient({ connections, settings, usedModels, db, 
                 onClick={async () => {
                   setModels((m) => ({ ...m, [c.provider]: "불러오는 중…" }));
                   try {
-                    const r = await api<{ models: string[] }>(`/api/ai/models?provider=${c.provider}`);
-                    setModels((m) => ({ ...m, [c.provider]: r.models }));
+                    const r = await api<{ models: string[]; note?: string }>(`/api/ai/models?provider=${c.provider}`);
+                    setModels((m) => ({ ...m, [c.provider]: r.note ? [r.note, ...r.models] : r.models }));
                   } catch (e) {
                     setModels((m) => ({ ...m, [c.provider]: (e as Error).message }));
                   }
                 }}
               >
-                모델 목록 불러오기
+                {c.media ? "연결 확인" : "모델 목록 불러오기"}
               </button>
               {models[c.provider] && (
                 <div className="tiny mono wrap-any" style={{ flexBasis: "100%", maxHeight: 120, overflowY: "auto", background: "var(--panel-2)", padding: 8, borderRadius: 8 }}>
@@ -61,7 +61,7 @@ export default function SettingsClient({ connections, settings, usedModels, db, 
           <b>연결 방법</b>
           <ol style={{ margin: 0, paddingLeft: 18 }}>
             <li><span className="mono">content-office/.env.example</span>을 <span className="mono">.env.local</span>로 복사</li>
-            <li>사용할 서비스의 API 키 입력 (OpenAI·Anthropic·Google AI Studio 콘솔에서 발급)</li>
+            <li>사용할 서비스의 API 키 입력 (OpenAI·Anthropic·Google AI Studio 콘솔에서 발급, Higgsfield는 console.higgsfield.ai의 키ID:시크릿)</li>
             <li>서버 재시작 (<span className="mono">npm run dev</span> 또는 <span className="mono">npm start</span>)</li>
           </ol>
           <span className="muted">키는 서버 프로세스에서만 읽힙니다. 화면·DB·내보내기 파일에 노출되지 않습니다.</span>

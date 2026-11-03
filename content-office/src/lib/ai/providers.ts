@@ -1,5 +1,6 @@
 import "server-only";
 import type { ProviderId } from "../types";
+import { hfConnected, HF_ENV } from "../higgsfield";
 
 /**
  * 공식 HTTP API 직접 호출 (SDK 미사용, 서버에서만 실행)
@@ -58,12 +59,15 @@ export function isConnected(p: ProviderId): boolean {
 }
 
 export function connectionStatus() {
-  return (["openai", "anthropic", "google"] as const).map((p) => ({
-    provider: p,
+  const text = (["openai", "anthropic", "google"] as const).map((p) => ({
+    provider: p as string,
     label: PROVIDER_LABELS[p],
     envKey: ENV_KEYS[p],
     connected: !!providerKey(p),
+    media: false,
   }));
+  // Higgsfield: 이미지·영상 생성 전용 (글 작성 역할에는 배정되지 않음)
+  return [...text, { provider: "higgsfield", label: "Higgsfield (이미지·영상)", envKey: `${HF_ENV} (키ID:시크릿)`, connected: hfConnected(), media: true }];
 }
 
 const TIMEOUT_MS = 180_000;

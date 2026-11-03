@@ -182,3 +182,23 @@ CREATE TABLE IF NOT EXISTS prompts (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 이미지·영상 생성 작업 (Higgsfield 등 외부 생성 API)
+CREATE TABLE IF NOT EXISTS media_jobs (
+  id           TEXT PRIMARY KEY,
+  prompt_id    TEXT REFERENCES prompts(id) ON DELETE SET NULL,
+  provider     TEXT NOT NULL,           -- higgsfield
+  model        TEXT NOT NULL,           -- 앱 내부 모델 ID (soul-standard 등)
+  media        TEXT NOT NULL,           -- image | video
+  request_id   TEXT,
+  status       TEXT NOT NULL,           -- queued | in_progress | completed | failed | nsfw | canceled | error
+  status_url   TEXT,
+  cancel_url   TEXT,
+  input        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  urls         JSONB NOT NULL DEFAULT '[]'::jsonb,
+  error        TEXT,
+  expires_at   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS media_jobs_prompt_idx ON media_jobs(prompt_id, created_at);

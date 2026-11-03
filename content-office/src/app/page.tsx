@@ -49,7 +49,7 @@ export default async function Dashboard() {
         </div>
       </div>
 
-      {conns.every((c) => !c.connected) && (
+      {conns.filter((c) => !c.media).every((c) => !c.connected) && (
         <div className="notice notice-warn" style={{ marginBottom: 16 }}>
           AI API가 아직 연결되지 않았습니다. 지금은 <b>템플릿(오프라인) 모드</b>로 흐름만 확인할 수 있습니다.{" "}
           <Link href="/settings" style={{ textDecoration: "underline" }}>AI 연결 방법 보기</Link>
