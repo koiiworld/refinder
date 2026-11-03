@@ -1,0 +1,37 @@
+# Render 블루프린트: AI 콘텐츠 오피스 상시 배포
+# Render 대시보드 > New > Blueprint > 이 저장소 선택 시 자동 인식됩니다.
+# sync: false 항목은 배포 생성 화면에서 값을 직접 입력합니다 (저장소에는 저장되지 않음).
+services:
+  - type: web
+    name: ai-content-office
+    runtime: node
+    plan: free
+    branch: feature/ai-content-office
+    rootDir: content-office
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # 비밀번호 없이 공개되는 것을 막음 (APP_PASSWORD 미설정 시 앱 차단)
+      - key: REQUIRE_PASSWORD
+        value: "1"
+      - key: APP_PASSWORD
+        sync: false
+      # Supabase > Connect > Session pooler 연결 문자열 (IPv4 지원)
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_AI_API_KEY
+        sync: false
+      - key: NAVER_CLIENT_ID
+        sync: false
+      - key: NAVER_CLIENT_SECRET
+        sync: false

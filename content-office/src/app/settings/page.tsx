@@ -36,6 +36,11 @@ export default async function SettingsPage() {
           <p className="sub">API 키는 서버 환경 변수로만 관리되며 DB·브라우저·내보내기 파일에 저장되지 않습니다.</p>
         </div>
       </div>
+      {kind === "pglite" && process.env.RENDER && (
+        <div className="notice notice-bad" style={{ marginBottom: 16 }}>
+          배포 서버에서 내장 DB를 쓰고 있습니다. 무료 서버 디스크는 재시작 시 지워지므로 데이터가 사라집니다. DATABASE_URL(Supabase)을 설정하세요.
+        </div>
+      )}
       <SettingsClient
         connections={connectionStatus()}
         settings={settings}

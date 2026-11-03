@@ -6,6 +6,14 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 export async function proxy(req: NextRequest) {
   const pw = process.env.APP_PASSWORD?.trim();
+  if (req.nextUrl.pathname === "/api/health") return NextResponse.next(); // 배포 플랫폼 상태 확인용
+  // 외부 배포(REQUIRE_PASSWORD=1)에서는 비밀번호 없이 앱을 열지 않음
+  if (!pw && process.env.REQUIRE_PASSWORD === "1") {
+    return new NextResponse("APP_PASSWORD 환경 변수를 설정해야 앱을 사용할 수 있습니다. (외부 공개 보호)", {
+      status: 503,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
   if (!pw) return NextResponse.next();
   const { pathname } = req.nextUrl;
   if (pathname === "/login" || pathname === "/api/login") return NextResponse.next();
@@ -26,5 +34,5 @@ export async function hash(s: string) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest).*)"],
 };

@@ -141,12 +141,37 @@ BASE_URL=http://localhost:3000 node --test tests/ai-providers.test.mjs
 
 ---
 
-## 6. 배포 (사용자 승인 필요)
+## 6. 외부(모바일) 접속용 배포 — Render + Supabase (무료로 시작 가능)
 
-외부 배포·계정 연결은 진행하지 않았습니다. 진행하려면 다음 중 하나를 선택하세요.
+노트북을 꺼도 휴대폰에서 접속할 수 있도록 클라우드에 상시 배포합니다. 설정 파일(저장소 루트의 `render.yaml`)은 준비되어 있고,
+계정 가입·로그인만 직접 해주시면 됩니다. (모두 휴대폰 브라우저로도 진행 가능)
 
-- **Vercel + Supabase**: Supabase 프로젝트의 연결 문자열을 `DATABASE_URL`로, AI 키와 `APP_PASSWORD`를 환경 변수로 등록.
-  서버리스 환경에서는 백그라운드 워커가 요청 사이에 멈출 수 있어, 상시 실행 서버(아래) 쪽이 더 안정적입니다.
-- **상시 실행 서버 (Railway, Render, Fly.io, VPS 등)**: `npm run build && npm start`. PGlite를 쓰면 `data/` 폴더를 영구 디스크에 두세요.
+### ① Supabase — 데이터 저장소 (약 3분)
+1. https://supabase.com 가입 → **New project**
+2. Region: **Northeast Asia (Seoul)**, Database Password 설정(따로 메모)
+3. 프로젝트 생성 후 상단 **Connect** → **Session pooler** 연결 문자열 복사
+   `postgresql://postgres.xxxx:[YOUR-PASSWORD]@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres`
+4. `[YOUR-PASSWORD]`를 2번의 비밀번호로 바꿔 둡니다. (Direct connection은 IPv6 전용이라 Render에서 접속되지 않으니 꼭 *Session pooler* 사용)
+   - 테이블은 앱이 처음 실행될 때 자동 생성됩니다.
 
-외부에 공개할 때는 반드시 `APP_PASSWORD`를 설정하세요.
+### ② Render — 앱 서버 (약 5분 + 빌드 3~5분)
+1. https://render.com 에 **GitHub 계정으로 가입**하고 `koiiworld/refinder` 저장소 접근 허용
+2. **New + → Blueprint** → `refinder` 저장소 선택, 브랜치 **feature/ai-content-office**
+3. 입력 칸에 값 입력:
+   - `APP_PASSWORD`: 앱 접속 비밀번호 (**필수** — 비우면 앱이 차단됩니다)
+   - `DATABASE_URL`: ①에서 만든 연결 문자열 (**필수**)
+   - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_AI_API_KEY`: 가진 것만 (나중에 Environment 메뉴에서 추가 가능)
+4. **Apply/Deploy** → 완료되면 `https://ai-content-office-xxxx.onrender.com` 주소가 생깁니다.
+
+### ③ 휴대폰에서
+- 위 주소 접속 → 비밀번호 입력 → Safari "공유 → 홈 화면에 추가" / Chrome "⋮ → 홈 화면에 추가"하면 앱처럼 실행됩니다.
+- 이 브랜치에 커밋을 푸시하면 Render가 자동으로 다시 배포합니다.
+
+### 무료 요금제의 한계
+- Render 무료 서버는 **15분간 접속이 없으면 잠들고**, 다음 접속 때 깨어나는 데 30~60초 걸립니다. 진행 중이던 작업은 DB에 저장되어 있어 깨어나면 이어서 처리됩니다. 항상 켜두려면 Render Starter(월 7달러)로 변경하세요.
+- Supabase 무료 프로젝트는 **1주일 동안 사용이 없으면 일시정지**됩니다(대시보드에서 Restore로 재개, 데이터는 유지).
+- 무료 서버의 디스크는 재시작 시 지워지므로 반드시 `DATABASE_URL`을 설정하세요. (설정하지 않으면 설정 화면에 경고가 표시됩니다)
+
+### 다른 플랫폼
+Railway, Fly.io, VPS 등 Node.js 상시 실행 서버라면 `npm ci && npm run build && npm start`로 동일하게 동작합니다(`PORT` 환경 변수 사용).
+Vercel 같은 서버리스 환경은 백그라운드 작업 큐가 요청 사이에 멈출 수 있어 권장하지 않습니다.
