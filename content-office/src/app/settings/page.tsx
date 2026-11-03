@@ -24,6 +24,7 @@ const FEATURES: [string, "ok" | "partial" | "todo", string][] = [
   ["검색어 트렌드 (네이버 데이터랩 공식 API)", "partial", "코드 구현, API 키 필요"],
   ["키워드 월간 검색량·연관 키워드 (네이버 검색광고 API)", "partial", "NAVER_AD_API_KEY / SECRET / CUSTOMER_ID 필요"],
   ["유튜브 인기 급상승·키워드별 인기 영상 (YouTube Data API)", "partial", "YOUTUBE_API_KEY 필요"],
+  ["네이버 크리에이터 어드바이저 유입 트렌드", "partial", "공식 API 없음 → 화면에서 복사·붙여넣기로 저장, AI 글감·시즌 키워드에 반영"],
   ["Higgsfield 이미지(SOUL)·영상(Wan 2.6) 생성", "ok", "프롬프트 수정실에서 생성 · 크레딧 차감"],
   ["이미지 스튜디오 (원고 연동 이미지 기획·승인·본문 배치)", "todo", "2차 · 현재는 에디터에서 직접 이미지 삽입"],
   ["인스타그램 캐러셀 제작실 · 발행", "todo", "2차"],

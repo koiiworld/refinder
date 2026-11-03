@@ -269,7 +269,8 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const blog = await getBlog(job.blog_id!);
     if (!blog) throw new Error("블로그를 찾을 수 없습니다.");
     const existing = await q<{ title: string }>("SELECT title FROM ideas WHERE blog_id=$1", [blog.id]);
-    const { system, prompt } = ideasPrompt(blog, existing.map((e) => e.title), String(job.payload.hint ?? ""));
+    const { creatorTrendContext } = await import("./creator");
+    const { system, prompt } = ideasPrompt(blog, existing.map((e) => e.title), String(job.payload.hint ?? ""), await creatorTrendContext(blog.id));
     const res = await runAI({
       purpose: "ideas",
       role: "ideas",

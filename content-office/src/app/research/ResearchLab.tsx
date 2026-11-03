@@ -65,6 +65,7 @@ export default function ResearchLab({ blogs, ideas, snapshots, jobs, naver, aiCo
       <div className="grid grid-2">
         <KeywordVolumeBox connected={naverAd} blogs={blogs} onDone={() => { setToast("글감 보관함에 추가했습니다."); router.refresh(); }} />
         <YoutubeBox connected={youtube} />
+        <CreatorTrendBox blogs={blogs} naverAd={naverAd} onIdea={(m) => { setToast(m); router.refresh(); }} />
       </div>
 
       <div className="grid grid-2">
@@ -497,6 +498,111 @@ function YoutubeBox({ connected }: { connected: boolean }) {
           )}
         </>
       )}
+    </section>
+  );
+}
+
+// ───────────────────────── 네이버 크리에이터 어드바이저 유입 트렌드 (붙여넣기) ─────────────────────────
+
+type CreatorTrend = { id: string; blog_id: string | null; category: string; date: string; items: { rank: number; keyword: string }[]; collected_at: string };
+
+function CreatorTrendBox({ blogs, naverAd, onIdea }: { blogs: BlogLite[]; naverAd: boolean; onIdea: (m: string) => void }) {
+  const [list, setList] = useState<CreatorTrend[]>([]);
+  const [blogId, setBlogId] = useState(blogs.find((b) => /naver|네이버|알고/.test(b.name))?.id ?? blogs[0]?.id ?? "");
+  const [category, setCategory] = useState("");
+  const [date, setDate] = useState(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [stats, setStats] = useState<Record<string, Stat | null>>({});
+  const [sent, setSent] = useState<string[]>([]);
+  const blogName = (id: string | null) => blogs.find((b) => b.id === id)?.name ?? "모든 블로그";
+
+  const load = async () => setList(await api<CreatorTrend[]>("/api/research/creator"));
+  useEffect(() => void load(), []);
+  useEffect(() => {
+    const kws = list.flatMap((t) => t.items.map((i) => i.keyword));
+    if (kws.length) api<{ stats: Record<string, Stat> }>("/api/research/keywords", "POST", { keywords: kws.slice(0, 200), cacheOnly: true }).then((r) => setStats((s) => ({ ...s, ...r.stats }))).catch(() => {});
+  }, [list]);
+
+  return (
+    <section className="card card-pad stack" style={{ gridColumn: "1 / -1" }}>
+      <div className="row between">
+        <h2 style={{ fontSize: 15 }}>네이버 유입 트렌드 (크리에이터 어드바이저)</h2>
+        <a className="btn btn-sm" href="https://creator-advisor.naver.com" target="_blank" rel="noreferrer">크리에이터 어드바이저 열기 ↗</a>
+      </div>
+      <p className="small muted">
+        공식 API가 없어 자동으로 가져올 수 없습니다. 크리에이터 어드바이저의 <b>트렌드</b> 화면(주제별 인기 유입 검색어 등)에서 목록을 드래그해 복사한 뒤 아래에 붙여 넣으세요.
+        순위 번호·증감 표시(▲, NEW)는 자동으로 정리됩니다. 저장한 트렌드는 <b>AI 글감 추천과 마케팅 달력 키워드 도출</b>에 14일간 참고 자료로 쓰입니다.
+      </p>
+      <div className="row">
+        <select className="select" style={{ width: "auto" }} value={blogId} onChange={(e) => setBlogId(e.target.value)} aria-label="블로그">
+          {blogs.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          <option value="">모든 블로그 공통</option>
+        </select>
+        <input className="input" style={{ width: 200 }} placeholder="주제·분야 (예: 요리·레시피)" value={category} onChange={(e) => setCategory(e.target.value)} />
+        <label className="small">기준일 <input type="date" className="input" style={{ width: 160 }} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+      </div>
+      <textarea className="textarea" style={{ minHeight: 120 }} placeholder={"예)\n1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW"} value={text} onChange={(e) => setText(e.target.value)} />
+      {err && <div className="notice notice-bad small">{err}</div>}
+      <button
+        className="btn btn-primary"
+        style={{ alignSelf: "flex-start" }}
+        disabled={busy || !text.trim()}
+        onClick={async () => {
+          setBusy(true);
+          setErr("");
+          try {
+            const r = await api<{ count: number }>("/api/research/creator", "POST", { blogId, category, date, text });
+            setText("");
+            onIdea(`유입 트렌드 ${r.count}개를 저장했습니다.`);
+            await load();
+          } catch (e) {
+            setErr((e as Error).message);
+          }
+          setBusy(false);
+        }}
+      >
+        {busy ? <span className="spinner" /> : "정리해서 저장"}
+      </button>
+
+      {list.map((t) => (
+        <div key={t.id} className="card card-pad stack" style={{ background: "var(--panel-2)", gap: 8 }}>
+          <div className="row between">
+            <span className="small"><b>{t.category || "분야 미지정"}</b> · {blogName(t.blog_id)} · 기준일 {t.date} · {t.items.length}개</span>
+            <div className="row" style={{ gap: 4 }}>
+              {naverAd && (
+                <button className="btn btn-sm" onClick={async () => {
+                  try {
+                    const r = await api<{ stats: Record<string, Stat | null> }>("/api/research/keywords", "POST", { keywords: t.items.map((i) => i.keyword).slice(0, 50) });
+                    setStats((s) => ({ ...s, ...r.stats }));
+                  } catch (e) { setErr((e as Error).message); }
+                }}>검색량 조회</button>
+              )}
+              <button className="btn btn-sm btn-ghost btn-danger" onClick={async () => { if (confirm("이 트렌드 기록을 삭제할까요?")) { await api(`/api/research/creator?id=${t.id}`, "DELETE"); await load(); } }}>삭제</button>
+            </div>
+          </div>
+          <div className="row">
+            {t.items.map((i) => (
+              <button
+                key={i.keyword}
+                className={`btn btn-sm ${sent.includes(i.keyword) ? "btn-ok" : ""}`}
+                title="눌러서 글감 보관함에 추가"
+                disabled={sent.includes(i.keyword)}
+                onClick={async () => {
+                  await api("/api/ideas", "POST", { blogId: t.blog_id ?? blogId, title: i.keyword, keywords: [i.keyword], memo: `네이버 크리에이터 어드바이저 유입 트렌드 ${i.rank}위 (${t.category || "분야 미지정"}, 기준일 ${t.date})` });
+                  setSent((x) => [...x, i.keyword]);
+                  onIdea(`'${i.keyword}'를 글감 보관함에 추가했습니다.`);
+                }}
+              >
+                <span className="tiny muted">{i.rank}</span> {i.keyword}
+                {i.keyword in stats && <span className="tiny" style={{ opacity: 0.75 }}> · 월 {fmtCount(stats[i.keyword])}</span>}
+              </button>
+            ))}
+          </div>
+          <span className="tiny muted">출처: 네이버 크리에이터 어드바이저 (사용자 붙여넣기) · 저장 {new Date(t.collected_at).toLocaleString("ko-KR")} · 키워드를 누르면 글감으로 추가</span>
+        </div>
+      ))}
     </section>
   );
 }

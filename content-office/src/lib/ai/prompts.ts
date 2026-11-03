@@ -232,12 +232,13 @@ ${instruction}
 
 // ───────────────────────── 글감 추천 ─────────────────────────
 
-export function ideasPrompt(blog: Blog, existingTitles: string[], hint: string) {
+export function ideasPrompt(blog: Blog, existingTitles: string[], hint: string, trendContext = "") {
   const system = `당신은 블로그 콘텐츠 전략가입니다. JSON 객체 하나만 출력합니다.
 - 검색량, 경쟁도, 트렌드 수치 등 실제로 조회하지 않은 지표는 절대 쓰지 마세요.
 - 추천 이유는 블로그 주제 적합성과 독자 관점으로만 설명하세요.`;
   const prompt = `${blogContext(blog)}
 
+${trendContext}
 [이미 등록된 글감 - 중복 금지]
 ${existingTitles.slice(0, 50).join("\n") || "(없음)"}
 
@@ -327,6 +328,7 @@ export function seasonKeywordsPrompt(input: {
   seeds: string[];
   existing: string[];
   hint: string;
+  trendContext?: string;
 }) {
   const system = `당신은 한국 블로그 시즌 마케팅 전문가입니다. 반드시 JSON 객체 하나만 출력합니다.
 - 검색량, 경쟁도, 순위 같은 수치는 절대 쓰지 마세요. 실제로 조회한 데이터가 아니기 때문입니다.
@@ -341,6 +343,7 @@ ${input.eventName} (${input.start}${input.end !== input.start ? ` ~ ${input.end}
 [출발 키워드 (참고용)]
 ${input.seeds.join(", ") || "(없음)"}
 
+${input.trendContext ?? ""}
 [이미 뽑은 키워드 - 중복 금지]
 ${input.existing.join(", ") || "(없음)"}
 

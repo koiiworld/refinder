@@ -278,3 +278,18 @@ test("검색량·유튜브: 키 미연결이면 수치를 만들지 않고 안�
   const y = await call("/api/research/youtube?mode=trending");
   assert.equal(y.status, 400);
 });
+
+test("크리에이터 어드바이저 유입 트렌드: 붙여넣기 정리(순위·증감·중복 제거) 저장·조회·삭제", async () => {
+  const text = "1 김장 양념 비율\n2위 절임배추 ▲3\n3. 굴보쌈 NEW\n4\t수육 삶는 법\n절임배추\n\n5 ) 동치미";
+  const r = await call("/api/research/creator", "POST", { blogId: "blog_algokitchen", category: "요리·레시피", date: "2026-11-02", text });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  assert.equal(r.data.count, 5);
+  const list = (await call("/api/research/creator")).data;
+  const t = list.find((x) => x.id === r.data.id);
+  assert.deepEqual(t.items.map((i) => i.keyword), ["김장 양념 비율", "절임배추", "굴보쌈", "수육 삶는 법", "동치미"]);
+  assert.equal(t.items[1].rank, 2);
+  assert.equal(t.date, "2026-11-02");
+  const empty = await call("/api/research/creator", "POST", { text: "1\n2\n" });
+  assert.equal(empty.status, 400);
+  assert.equal((await call(`/api/research/creator?id=${r.data.id}`, "DELETE")).status, 200);
+});

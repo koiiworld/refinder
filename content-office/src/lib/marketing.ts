@@ -6,6 +6,7 @@ import { seasonKeywordsPrompt } from "./ai/prompts";
 import { seasonEvents, seedsFor, type SeasonEvent } from "./seasons";
 import type { RoleAssignment } from "./types";
 import { WorkflowError } from "./workflow";
+import { creatorTrendContext } from "./creator";
 
 type CustomRow = { id: string; blog_id: string | null; name: string; start_date: string; end_date: string; lead_days: number; keywords: string[]; note: string };
 
@@ -90,6 +91,7 @@ export async function deriveSeasonKeywords(input: { blogId: string; year: number
     seeds: seedsFor(ev, blog.category),
     existing: existing.map((e) => e.keyword),
     hint: input.hint ?? "",
+    trendContext: await creatorTrendContext(blog.id),
   });
   const res = await runAI({ purpose: "season-keywords", role: "ideas", blog, system, prompt, json: true, retries: 2, maxTokens: 4000, override: input.override ?? null });
   const data = extractJson<{ keywords?: { keyword?: string; intent?: string; angle?: string; timing?: string }[] }>(res.text);

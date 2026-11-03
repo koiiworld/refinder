@@ -68,6 +68,7 @@ HIGGSFIELD_API_KEY=키ID:시크릿   # 이미지·영상 생성 (선택)
 | 검색어 트렌드 (네이버 데이터랩 공식 API) | ⚠️ 코드 구현·미검증 | `NAVER_CLIENT_ID/SECRET` 필요 |
 | 키워드 월간 검색량·경쟁도·연관 키워드 (네이버 검색광고 API, 7일 캐시) | ⚠️ 키 입력 후 실검증 | `NAVER_AD_API_KEY/SECRET_KEY/CUSTOMER_ID` |
 | 유튜브 인기 급상승·키워드별 인기 영상·자주 나온 단어 (YouTube Data API) | ✅ 작동 | `YOUTUBE_API_KEY` |
+| 네이버 크리에이터 어드바이저 유입 트렌드 (붙여넣기 저장 → 글감·AI 키워드 도출에 반영) | ✅ 작동 | 공식 API 없음, 화면에서 복사해 붙여넣기 |
 | 접속 비밀번호 | ✅ 작동 | `APP_PASSWORD` 설정 시 |
 | 블로그별 말투 예시 파일(.md/.txt) 업로드 → 원고·수정·부분수정·검수에 말투 반영 | ✅ 작동 | 요청당 최대 8,000자 전달 |
 | 프롬프트 수정실 (ChatGPT·Claude·Gemini·Higgsfield × 이미지·영상/글 원고/정보 전달, 버전 기록) | ✅ 작동 | 다듬기는 텍스트 AI 연결 필요 |

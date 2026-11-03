@@ -226,3 +226,15 @@ test("YouTube: 인기 급상승·키워드 검색, 자주 나온 단어 집계",
   const s = await call(`/api/research/youtube?q=${encodeURIComponent("김장")}`);
   assert.equal(s.data.videos[0].id, "s1", "조회수 순 정렬");
 });
+
+test("크리에이터 어드바이저 트렌드가 시즌 키워드 도출 프롬프트에 반영된다", async () => {
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  await call("/api/research/creator", "POST", { blogId: "blog_algokitchen", category: "요리", date: today, text: "1 트렌드마커굴보쌈\n2 방어회" });
+  await call("/__reset", "POST", undefined, MOCK);
+  const r = await call("/api/marketing/keywords", "POST", { action: "derive", blogId: "blog_algokitchen", year: 2026, eventKey: "christmas" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const log = (await call("/__log", "GET", undefined, MOCK)).data;
+  const p = log.filter((l) => l.path.endsWith(":generateContent")).map((l) => l.body.contents[0].parts[0].text).find((t) => t.includes("시즌 키워드"));
+  assert.ok(p.includes("트렌드마커굴보쌈"), "유입 트렌드가 프롬프트에 포함");
+  assert.ok(p.includes("크리에이터 어드바이저"));
+});
