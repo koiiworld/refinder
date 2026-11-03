@@ -166,3 +166,24 @@ test("말투 예시 파일이 AI 요청에 포함되고, '사용' 해제 시 빠
   msg = log.find((l) => l.path === "/v1/messages");
   assert.ok(!msg.body.messages[0].content.includes("말투마커XYZ"), "사용 해제 시 제외");
 });
+
+test("마케팅 달력: AI 시즌 키워드 도출 → 중복 없이 저장 → 글감으로 보내기", async () => {
+  const r = await call("/api/marketing/keywords", "POST", { action: "derive", blogId: "blog_algokitchen", year: 2026, eventKey: "kimjang", hint: "초보" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.added, 2);
+  const again = await call("/api/marketing/keywords", "POST", { action: "derive", blogId: "blog_algokitchen", year: 2026, eventKey: "kimjang" });
+  assert.equal(again.data.added, 0, "같은 키워드는 다시 저장하지 않음");
+  const d = (await call("/api/marketing?year=2026&blogId=blog_algokitchen")).data;
+  const kws = d.keywords.filter((k) => k.event_key === "kimjang");
+  assert.equal(kws.length, 2);
+  assert.equal(kws[0].source, "ai");
+  const s = await call("/api/marketing/keywords", "POST", { action: "to-ideas", blogId: "blog_algokitchen", year: 2026, eventKey: "kimjang", ids: kws.map((k) => k.id) });
+  assert.equal(s.data.created, 2);
+  const ideas = (await call("/api/ideas?blogId=blog_algokitchen")).data.filter((i) => i.origin === "ai" && /마케팅 달력/.test(i.origin_detail));
+  assert.ok(ideas.length >= 2);
+  assert.match(ideas[0].origin_detail, /검색량 데이터 없음/);
+  // 프롬프트에 블로그 분야 출발 키워드가 들어감
+  const log = (await call("/__log", "GET", undefined, MOCK)).data;
+  const g = log.filter((l) => l.path.endsWith(":generateContent")).map((l) => l.body.contents[0].parts[0].text).find((t) => t.includes("시즌 키워드"));
+  assert.ok(g.includes("김장 김치 담그는 법"));
+});

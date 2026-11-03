@@ -315,3 +315,39 @@ export function promptRefineTemplate(guide: Guide, original: string): RefineResu
     settings: [],
   };
 }
+
+// ───────────────────────── 마케팅 달력: 시즌 키워드 ─────────────────────────
+
+export function seasonKeywordsPrompt(input: {
+  blog: Blog;
+  eventName: string;
+  start: string;
+  end: string;
+  leadDays: number;
+  seeds: string[];
+  existing: string[];
+  hint: string;
+}) {
+  const system = `당신은 한국 블로그 시즌 마케팅 전문가입니다. 반드시 JSON 객체 하나만 출력합니다.
+- 검색량, 경쟁도, 순위 같은 수치는 절대 쓰지 마세요. 실제로 조회한 데이터가 아니기 때문입니다.
+- 블로그 독자가 실제로 검색창에 입력할 법한 구체적인 롱테일 키워드(2~5어절)를 제안하세요.
+- 한국어로 작성하세요.`;
+  const prompt = `${blogContext(input.blog)}
+
+[시즌 이벤트]
+${input.eventName} (${input.start}${input.end !== input.start ? ` ~ ${input.end}` : ""})
+권장 준비 시작: 이벤트 ${input.leadDays}일 전부터
+
+[출발 키워드 (참고용)]
+${input.seeds.join(", ") || "(없음)"}
+
+[이미 뽑은 키워드 - 중복 금지]
+${input.existing.join(", ") || "(없음)"}
+
+[추가 요청]
+${input.hint || "(없음)"}
+
+이 블로그 분야에 맞는 시즌 키워드 8~12개를 다음 형식으로 제안하세요:
+{"keywords": [{"keyword": "검색 키워드", "intent": "정보형|비교형|구매형|후기형|방법형 중 하나", "angle": "이 키워드로 쓸 글의 방향 한 줄", "timing": "발행 시점 제안 (예: 이벤트 D-21~D-14)"}]}`;
+  return { system, prompt };
+}

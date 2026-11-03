@@ -98,6 +98,10 @@ http
         const refined = { prompt: "Close-up of a golden Korean rolled omelette, gentle steam rising, slow dolly-in, soft window light.", promptKo: "황금빛 계란말이 클로즈업, 김이 피어오름", negative: "hands, morphing, text", changes: ["영어로 변환", "카메라 지정"], questions: ["영상 길이는?"], settings: ["9:16, 8초"] };
         return send(res, 200, { candidates: [{ content: { parts: [{ text: JSON.stringify(refined) }] } }], usageMetadata: { promptTokenCount: 700, candidatesTokenCount: 250 } });
       }
+      if (prompt.includes("시즌 키워드 8~12개")) {
+        const text = JSON.stringify({ keywords: [{ keyword: "김장 양념 황금비율", intent: "방법형", angle: "10포기 기준 양념 계량", timing: "D-21~D-7" }, { keyword: "절임배추 고르는 법", intent: "정보형", angle: "주문 시 체크리스트", timing: "D-14" }] });
+        return send(res, 200, { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 300 } });
+      }
       if (prompt.includes("글감 6개")) {
         const text = JSON.stringify({ ideas: [{ title: "모의 글감 1", keywords: ["k1"], reason: "주제 적합" }, { title: "모의 글감 2", keywords: [], reason: "독자 관심" }] });
         return send(res, 200, { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 200 } });

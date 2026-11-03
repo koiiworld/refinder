@@ -17,6 +17,7 @@ const P = {
   slides: "M3 6h12v12H3zM18 8v8M21 10v4",
   pulse: "M3 12h4l3-8 4 16 3-8h4",
   more: "M5 12h.01M12 12h.01M19 12h.01",
+  flag: "M5 21V4M5 4h11l-2 4 2 4H5",
   wand: "M15 4V2M15 10V8M11 6h2M17 6h2M4 20 14 10M17.5 13.5l-1 1M19 9l1-1",
 };
 
@@ -34,6 +35,7 @@ const MAIN = [
   { href: "/projects", label: "프로젝트", icon: P.folder },
   { href: "/research", label: "트렌드·키워드 연구소", short: "연구소", icon: P.bulb },
   { href: "/calendar", label: "콘텐츠 캘린더", icon: P.cal },
+  { href: "/marketing", label: "마케팅 달력", icon: P.flag },
   { href: "/prompts", label: "프롬프트 수정실", icon: P.wand },
 ];
 const MANAGE = [

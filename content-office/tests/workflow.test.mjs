@@ -242,3 +242,29 @@ test("말투 예시 파일: 업로드 형식 검증, 목록, 사용 전환, 삭�
   for (const s of list) await call(`/api/blogs/blog_naver_life/samples/${s.id}`, "DELETE");
   assert.equal((await call("/api/blogs/blog_naver_life/samples")).data.length, 0);
 });
+
+test("마케팅 달력: 시즌 이벤트, 직접 추가, AI 없이 출발 키워드→글감, AI 미연결 시 도출 거부", async () => {
+  const d = (await call("/api/marketing?year=2026&blogId=blog_algokitchen")).data;
+  const keys = d.events.map((e) => e.key);
+  for (const k of ["seollal", "chuseok", "kimjang", "christmas", "suneung"]) assert.ok(keys.includes(k), k);
+  const seollal = d.events.find((e) => e.key === "seollal");
+  assert.equal(seollal.start, "2026-02-16");
+  const add = await call("/api/marketing/events", "POST", { name: "알고키친 3주년", start: "2026-12-05", leadDays: 10, keywords: ["3주년 이벤트"], blogId: "blog_algokitchen" });
+  assert.equal(add.status, 201);
+  const bad = await call("/api/marketing/events", "POST", { name: "x", start: "2026-12-05", end: "2026-12-01" });
+  assert.equal(bad.status, 400);
+  const d2 = (await call("/api/marketing?year=2026&blogId=blog_algokitchen")).data;
+  assert.ok(d2.events.some((e) => e.name === "알고키친 3주년" && e.custom));
+  const other = (await call("/api/marketing?year=2026&blogId=blog_tistory")).data;
+  assert.ok(!other.events.some((e) => e.name === "알고키친 3주년"), "블로그 전용 이벤트는 다른 블로그에 안 보임");
+  const derive = await call("/api/marketing/keywords", "POST", { action: "derive", blogId: "blog_algokitchen", year: 2026, eventKey: "kimjang" });
+  assert.equal(derive.status, 400);
+  const before = (await call("/api/ideas?blogId=blog_algokitchen")).data.length;
+  const send = await call("/api/marketing/keywords", "POST", { action: "to-ideas", blogId: "blog_algokitchen", year: 2026, eventKey: "kimjang", seeds: ["김장 양념 비율"] });
+  assert.equal(send.data.created, 1);
+  const ideas = (await call("/api/ideas?blogId=blog_algokitchen")).data;
+  assert.equal(ideas.length, before + 1);
+  assert.match(ideas[0].memo, /마케팅 달력: 김장철/);
+  const ev = d2.events.find((e) => e.name === "알고키친 3주년");
+  assert.equal((await call(`/api/marketing/events/${ev.customId}`, "DELETE")).status, 200);
+});

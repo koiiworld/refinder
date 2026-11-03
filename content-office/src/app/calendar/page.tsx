@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { q } from "@/lib/db";
 import { stageDef } from "@/lib/stages";
+import { seasonEvents } from "@/lib/seasons";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     return d.toISOString().slice(0, 7);
   };
   const today = now.toISOString().slice(0, 10);
+  const seasons = [...seasonEvents(y - 1), ...seasonEvents(y), ...seasonEvents(y + 1)];
   const monthStr = `${y}-${String(m).padStart(2, "0")}`;
 
   return (
@@ -35,7 +37,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       <div className="page-head">
         <div>
           <h1>콘텐츠 캘린더</h1>
-          <p className="sub">프로젝트의 발행 예정일 기준 · 날짜는 각 프로젝트의 '진행·승인' 탭에서 지정</p>
+          <p className="sub">프로젝트의 발행 예정일 기준 · 🗓 표시는 마케팅 달력의 시즌 이벤트</p>
         </div>
         <div className="row">
           <Link className="btn btn-sm" href={`/calendar?m=${ym(y, m - 1)}`}>◀</Link>
@@ -50,6 +52,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           {days.map((d) => (
             <div key={d} className={`cal-d ${d.slice(0, 7) !== monthStr ? "out" : ""} ${d === today ? "today" : ""}`}>
               <span className="cal-n">{Number(d.slice(8))}</span>
+              {seasons.filter((s) => s.start === d).map((s) => (
+                <Link key={s.key + s.start} href="/marketing" className="cal-ev" style={{ borderLeftColor: "var(--warn)", background: "transparent", color: "var(--muted)" }} title={`마케팅 달력: ${s.name}`}>
+                  🗓 {s.name}
+                </Link>
+              ))}
               {rows.filter((r) => r.scheduled_date === d).map((r) => (
                 <Link key={r.id} href={`/projects/${r.id}`} className="cal-ev" style={{ borderLeftColor: r.blog_color }} title={`${r.blog_name} · ${r.title} (${stageDef(r.stage).label})`}>
                   {r.stage === "done" ? "✓ " : ""}{r.title}

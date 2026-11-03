@@ -213,3 +213,35 @@ CREATE TABLE IF NOT EXISTS blog_samples (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS blog_samples_blog_idx ON blog_samples(blog_id, created_at);
+
+-- 마케팅 달력: 직접 추가한 이벤트
+CREATE TABLE IF NOT EXISTS marketing_events (
+  id          TEXT PRIMARY KEY,
+  blog_id     TEXT REFERENCES blogs(id) ON DELETE CASCADE,   -- NULL 이면 모든 블로그
+  name        TEXT NOT NULL,
+  start_date  TEXT NOT NULL,
+  end_date    TEXT NOT NULL,
+  lead_days   INTEGER NOT NULL DEFAULT 21,
+  keywords    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  note        TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 시즌 키워드 (AI 제안 또는 출발 키워드) — 검색량 수치는 저장하지 않음
+CREATE TABLE IF NOT EXISTS season_keywords (
+  id          TEXT PRIMARY KEY,
+  blog_id     TEXT NOT NULL REFERENCES blogs(id) ON DELETE CASCADE,
+  event_key   TEXT NOT NULL,
+  event_name  TEXT NOT NULL,
+  year        INTEGER NOT NULL,
+  keyword     TEXT NOT NULL,
+  angle       TEXT NOT NULL DEFAULT '',    -- 글 방향
+  timing      TEXT NOT NULL DEFAULT '',    -- 발행 시점 제안
+  intent      TEXT NOT NULL DEFAULT '',    -- 검색 의도
+  source      TEXT NOT NULL,               -- ai | seed
+  provider    TEXT,
+  model       TEXT,
+  idea_id     TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS season_keywords_idx ON season_keywords(blog_id, year, event_key);
