@@ -38,7 +38,7 @@ export async function enqueue(
   const id = newId("job_");
   await q(
     `INSERT INTO jobs (id, project_id, blog_id, type, payload, max_attempts) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [id, opts.projectId ?? null, opts.blogId ?? null, type, j(opts.payload ?? {}), opts.maxAttempts ?? 3],
+    [id, opts.projectId ?? null, opts.blogId ?? null, type, j(opts.payload ?? {}), opts.maxAttempts ?? 6],
   );
   ensureWorker();
   setTimeout(() => void tick(), 10);
@@ -87,13 +87,19 @@ async function runJob(job: Job) {
     const msg = e instanceof Error ? e.message : String(e);
     const retryable = e instanceof AiError ? e.retryable : false;
     if (retryable && job.attempts < job.max_attempts) {
-      const delay = 5 * 2 ** (job.attempts - 1);
+      // AI 서버 혼잡(503)·요청 한도(429)는 길게 기다렸다 재시도: 15초 → 30초 → 1분 → 2분 → 4분 (총 약 8분)
+      const busy = e instanceof AiError && (e.status === 503 || e.status === 429);
+      const delay = busy ? 15 * 2 ** (job.attempts - 1) : 5 * 2 ** (job.attempts - 1);
       await q(
         `UPDATE jobs SET status='queued', error=$2, run_after=NOW() + ($3 || ' seconds')::interval WHERE id=$1`,
         [job.id, msg, String(delay)],
       );
       if (job.project_id) {
-        await updateProject(job.project_id, { status_message: `오류로 ${delay}초 후 재시도 (${job.attempts}/${job.max_attempts}): ${msg}` });
+        await updateProject(job.project_id, {
+          status_message: busy
+            ? `AI 서버가 혼잡해 ${delay >= 60 ? `${Math.round(delay / 60)}분` : `${delay}초`} 후 자동으로 다시 시도합니다 (${job.attempts}/${job.max_attempts}). 기다리시거나 '대기 작업 취소' 후 다른 AI로 재실행할 수 있습니다.`
+            : `오류로 ${delay}초 후 재시도 (${job.attempts}/${job.max_attempts}): ${msg}`,
+        });
       }
     } else {
       await q("UPDATE jobs SET status='failed', error=$2, finished_at=NOW() WHERE id=$1", [job.id, msg]);
