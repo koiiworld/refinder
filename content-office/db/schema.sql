@@ -166,3 +166,19 @@ CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
   value  JSONB NOT NULL
 );
+
+-- 프롬프트 수정실 (대상 AI × 용도별 프롬프트와 수정 이력)
+CREATE TABLE IF NOT EXISTS prompts (
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL DEFAULT '',
+  target      TEXT NOT NULL,              -- gpt | claude | gemini | higgsfield
+  kind        TEXT NOT NULL,              -- visual | writing | info
+  media       TEXT NOT NULL DEFAULT 'image', -- visual 일 때 image | video
+  blog_id     TEXT REFERENCES blogs(id) ON DELETE SET NULL,
+  input       TEXT NOT NULL,              -- 사용자가 처음 쓴 프롬프트
+  goal        TEXT NOT NULL DEFAULT '',   -- 원하는 결과 설명
+  versions    JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{n, result, source, provider, model, feedback, created_at}]
+  current     JSONB,                      -- 현재 최종본 (RefineResult)
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

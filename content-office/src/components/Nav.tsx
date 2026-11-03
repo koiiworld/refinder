@@ -17,6 +17,7 @@ const P = {
   slides: "M3 6h12v12H3zM18 8v8M21 10v4",
   pulse: "M3 12h4l3-8 4 16 3-8h4",
   more: "M5 12h.01M12 12h.01M19 12h.01",
+  wand: "M15 4V2M15 10V8M11 6h2M17 6h2M4 20 14 10M17.5 13.5l-1 1M19 9l1-1",
 };
 
 function Icon({ d }: { d: string }) {
@@ -33,6 +34,7 @@ const MAIN = [
   { href: "/projects", label: "프로젝트", icon: P.folder },
   { href: "/research", label: "트렌드·키워드 연구소", short: "연구소", icon: P.bulb },
   { href: "/calendar", label: "콘텐츠 캘린더", icon: P.cal },
+  { href: "/prompts", label: "프롬프트 수정실", icon: P.wand },
 ];
 const MANAGE = [
   { href: "/blogs", label: "블로그 관리", icon: P.blog },
@@ -102,7 +104,7 @@ export default function Nav({ pending }: { pending: number }) {
         <>
           <div className="sheet-backdrop" onClick={() => setOpen(false)} />
           <div className="sheet" role="dialog" aria-label="전체 메뉴">
-            {[MAIN[4], ...MANAGE].map(link)}
+            {[...MAIN.slice(4), ...MANAGE].map(link)}
             <div className="nav-group">2차 개발 예정</div>
             {LATER.map(link)}
           </div>

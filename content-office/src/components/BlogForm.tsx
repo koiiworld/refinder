@@ -11,6 +11,7 @@ const ROLES: [RoleKey, string, string][] = [
   ["reviewer", "교차 검수", "사실관계·출처·규칙 점검 (작성 AI와 다르게 권장)"],
   ["editor", "부분 수정", "에디터에서 선택한 문단 수정"],
   ["ideas", "글감 추천", "연구소의 AI 글감 추천"],
+  ["prompter", "프롬프트 수정", "프롬프트 수정실에서 프롬프트 다듬기"],
 ];
 
 const DEFAULT_ROLES: AiRoles = {
@@ -19,6 +20,7 @@ const DEFAULT_ROLES: AiRoles = {
   reviewer: { provider: "openai", model: "gpt-5" },
   editor: { provider: "anthropic", model: "claude-sonnet-5-5" },
   ideas: { provider: "google", model: "gemini-3.5-flash" },
+  prompter: { provider: "google", model: "gemini-3.5-flash" },
 };
 
 export default function BlogForm({ blog, connections }: { blog?: Blog; connections: { provider: string; connected: boolean }[] }) {

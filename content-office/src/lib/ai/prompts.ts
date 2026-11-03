@@ -231,3 +231,62 @@ function esc(s: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+// ───────────────────────── 프롬프트 수정실 ─────────────────────────
+
+import type { Guide, PromptKind, PromptMedia, PromptTarget, RefineResult } from "../prompt-guides";
+import { KIND_LABEL, TARGET_LABEL } from "../prompt-guides";
+
+export function promptRefinePrompt(input: {
+  target: PromptTarget;
+  kind: PromptKind;
+  media: PromptMedia;
+  guide: Guide;
+  original: string;
+  goal: string;
+  blog: Blog | null;
+  previous?: RefineResult | null;
+  feedback?: string;
+}) {
+  const g = input.guide;
+  const kindText = input.kind === "visual" ? (input.media === "video" ? "영상 생성" : "이미지 생성") : KIND_LABEL[input.kind];
+  const system = `당신은 ${TARGET_LABEL[input.target]}용 프롬프트 엔지니어입니다. 사용자의 거친 요청을 ${TARGET_LABEL[input.target]}의 ${kindText}에 가장 잘 통하는 프롬프트로 다시 씁니다. 반드시 JSON 객체 하나만 출력합니다.
+- 사용자의 의도를 바꾸거나 없는 사실(수치, 제품 스펙, 출처)을 추가하지 마세요. 모르는 정보는 questions 에 질문으로 남깁니다.
+- 최종 프롬프트 언어: ${g.language === "en" ? "영어 (promptKo 에 한국어 해석 제공)" : "한국어 (promptKo 는 빈 문자열)"}.
+- 대상 AI에 그대로 붙여 넣을 수 있게 prompt 에는 설명 없이 프롬프트 본문만 넣습니다.`;
+  const prompt = `[대상] ${TARGET_LABEL[input.target]} · ${kindText}
+[권장 구조] ${g.structure}
+[적용할 요령]
+${g.tips.map((t) => `- ${t}`).join("\n")}
+[피할 것]
+${g.avoid.map((t) => `- ${t}`).join("\n")}
+${input.blog ? `\n[블로그 맥락: ${input.blog.name}]\n분야: ${input.blog.category}\n${input.kind === "visual" ? `이미지 스타일: ${input.blog.image_style}` : `문체: ${input.blog.style_guide}`}\n` : ""}
+[사용자 원래 프롬프트]
+${input.original}
+
+[원하는 결과]
+${input.goal || "(따로 없음)"}
+${input.previous ? `\n[직전 수정본]\n${JSON.stringify(input.previous, null, 2)}\n` : ""}${input.feedback ? `\n[사용자 추가 수정 요청 - 반드시 반영]\n${input.feedback}\n` : ""}
+다음 JSON 형식으로 답하세요:
+{
+  "prompt": "최종 프롬프트",
+  "promptKo": "${g.language === "en" ? "최종 프롬프트의 한국어 해석" : ""}",
+  "negative": "${g.negative ? "제외할 요소 (쉼표 구분, 영어)" : ""}",
+  "changes": ["무엇을 왜 바꿨는지 (한국어, 3~6개)"],
+  "questions": ["더 정확해지려면 사용자가 정해야 할 것 (한국어, 없으면 빈 배열)"],
+  "settings": ["생성 화면에서 고를 설정 추천 (비율, 길이, 카메라 프리셋, 모델 등. 한국어)"]
+}`;
+  return { system, prompt };
+}
+
+/** AI 미연결 시: 지침 구조에 맞춘 빈칸 양식 (원문을 고쳐 쓰지 않음) */
+export function promptRefineTemplate(guide: Guide, original: string): RefineResult {
+  return {
+    prompt: `${original}\n\n---\n[아래 구조에 맞춰 직접 채워 보세요]\n${guide.structure}`,
+    promptKo: "",
+    negative: guide.negative ? "morphing, distorted hands, extra fingers, text, watermark, flicker, blurry" : "",
+    changes: ["⚠ AI가 연결되지 않아 원문을 고쳐 쓰지 않았습니다. 권장 구조만 덧붙였습니다."],
+    questions: [],
+    settings: [],
+  };
+}

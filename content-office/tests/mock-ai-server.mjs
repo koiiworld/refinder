@@ -70,6 +70,11 @@ http
     if (m) {
       if (req.headers["x-goog-api-key"] !== "test-google") return send(res, 403, { error: { message: "bad key" } });
       const prompt = body.contents?.[0]?.parts?.[0]?.text ?? "";
+      const sys = body.systemInstruction?.parts?.[0]?.text ?? "";
+      if (sys.includes("프롬프트 엔지니어")) {
+        const refined = { prompt: "Close-up of a golden Korean rolled omelette, gentle steam rising, slow dolly-in, soft window light.", promptKo: "황금빛 계란말이 클로즈업, 김이 피어오름", negative: "hands, morphing, text", changes: ["영어로 변환", "카메라 지정"], questions: ["영상 길이는?"], settings: ["9:16, 8초"] };
+        return send(res, 200, { candidates: [{ content: { parts: [{ text: JSON.stringify(refined) }] } }], usageMetadata: { promptTokenCount: 700, candidatesTokenCount: 250 } });
+      }
       if (prompt.includes("글감 6개")) {
         const text = JSON.stringify({ ideas: [{ title: "모의 글감 1", keywords: ["k1"], reason: "주제 적합" }, { title: "모의 글감 2", keywords: [], reason: "독자 관심" }] });
         return send(res, 200, { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 200 } });

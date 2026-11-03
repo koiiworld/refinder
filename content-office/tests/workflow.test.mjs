@@ -191,3 +191,37 @@ test("AI 실행 내역과 작업 큐가 기록된다", async () => {
   // API 키 같은 비밀값은 백업에 포함되지 않음
   assert.ok(!JSON.stringify(runs.data).includes("API_KEY="));
 });
+
+test("프롬프트 수정실: 대상 AI×용도 조합 검증, 버전·직접 수정·복원", async () => {
+  // 지원하지 않는 조합은 거부
+  const c1 = await call("/api/prompts", "POST", { target: "claude", kind: "visual", text: "고양이 그림" });
+  assert.equal(c1.status, 400);
+  const c2 = await call("/api/prompts", "POST", { target: "higgsfield", kind: "writing", text: "블로그 글" });
+  assert.equal(c2.status, 400);
+  // 지원 조합 9개 모두 생성 가능 (AI 미연결이면 템플릿: 원문 유지 + 구조 안내)
+  const combos = [
+    ["gpt", "visual", "image"], ["gpt", "visual", "video"], ["gemini", "visual", "image"], ["gemini", "visual", "video"],
+    ["higgsfield", "visual", "image"], ["higgsfield", "visual", "video"],
+    ["gpt", "writing"], ["claude", "writing"], ["gemini", "writing"], ["gpt", "info"], ["claude", "info"], ["gemini", "info"],
+  ];
+  let last;
+  for (const [target, kind, media] of combos) {
+    const r = await call("/api/prompts", "POST", { target, kind, media, text: "맛있는 계란말이 영상", blogId: "blog_algokitchen" });
+    assert.equal(r.status, 201, `${target}/${kind}/${media}: ${JSON.stringify(r.data)}`);
+    assert.ok(r.data.current.prompt.includes("맛있는 계란말이 영상"), "원문 보존");
+    assert.equal(r.data.versions.length, 1);
+    if (target === "higgsfield") assert.ok(r.data.current.negative, "Higgsfield는 제외 프롬프트 제공");
+    if (kind === "writing") assert.equal(r.data.current.negative, "", "글 원고는 제외 프롬프트 없음");
+    last = r.data;
+  }
+  // 직접 수정 → v2, 복원 → v3 (v1 내용)
+  const s = await call(`/api/prompts/${last.id}`, "POST", { action: "save", result: { ...last.current, prompt: "내가 고친 프롬프트" } });
+  assert.equal(s.data.versions.length, 2);
+  assert.equal(s.data.current.prompt, "내가 고친 프롬프트");
+  const r = await call(`/api/prompts/${last.id}`, "POST", { action: "restore", n: 1 });
+  assert.equal(r.data.versions.length, 3);
+  assert.equal(r.data.current.prompt, last.current.prompt);
+  const list = await call("/api/prompts");
+  assert.ok(list.data.length >= combos.length);
+  assert.equal((await call(`/api/prompts/${last.id}`, "DELETE")).status, 200);
+});

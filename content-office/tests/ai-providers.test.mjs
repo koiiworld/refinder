@@ -98,3 +98,19 @@ test("모델 목록 API", async () => {
   const r = await call("/api/ai/models?provider=openai");
   assert.deepEqual(r.data.models, ["gpt-mock-1", "gpt-mock-2"]);
 });
+
+test("프롬프트 수정실: Gemini로 Higgsfield 영상 프롬프트를 다듬고 추가 수정 요청을 반영", async () => {
+  const r = await call("/api/prompts", "POST", { target: "higgsfield", kind: "visual", media: "video", text: "맛있는 계란말이 영상", goal: "릴스" });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  assert.match(r.data.current.prompt, /rolled omelette/);
+  assert.equal(r.data.current.negative, "hands, morphing, text");
+  assert.equal(r.data.versions[0].source, "ai");
+  assert.equal(r.data.versions[0].provider, "google");
+  const again = await call(`/api/prompts/${r.data.id}`, "POST", { action: "refine", feedback: "세로 9:16" });
+  assert.equal(again.data.versions.length, 2);
+  assert.equal(again.data.versions[1].feedback, "세로 9:16");
+  // 글 원고(Claude 대상)는 negative 를 비움
+  const w = await call("/api/prompts", "POST", { target: "claude", kind: "writing", text: "레시피 글 써줘" });
+  assert.equal(w.data.current.negative, "");
+  assert.equal(w.data.current.promptKo, "", "한국어 프롬프트는 해석 불필요");
+});

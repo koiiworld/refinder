@@ -8,7 +8,7 @@ import { AiError, callProvider, isConnected, PROVIDER_LABELS } from "./providers
 export interface RunOptions {
   purpose: string; // 예: plan, draft, review, edit, ideas
   role: RoleKey;
-  blog: Blog;
+  blog: Blog | null; // 블로그와 무관한 작업(프롬프트 수정 등)은 null
   projectId?: string | null;
   jobId?: string | null;
   system: string;
@@ -28,11 +28,11 @@ export interface RunResult {
 }
 
 export async function resolveAssignment(
-  blog: Blog,
+  blog: Blog | null,
   role: RoleKey,
   override?: RoleAssignment | null,
 ): Promise<{ assignment: RoleAssignment; fallback: boolean; reason?: string }> {
-  const wanted = override ?? blog.ai_roles?.[role] ?? DEFAULT_ROLES[role]!;
+  const wanted = override ?? blog?.ai_roles?.[role] ?? DEFAULT_ROLES[role]!;
   if (isConnected(wanted.provider)) return { assignment: wanted, fallback: false };
   const settings = await getSettings();
   if (settings.fallbackToTemplate) {
@@ -102,7 +102,7 @@ async function logRun(
       newId("run_"),
       o.jobId ?? null,
       o.projectId ?? null,
-      o.blog.id,
+      o.blog?.id ?? null,
       o.purpose,
       a.provider,
       a.model,

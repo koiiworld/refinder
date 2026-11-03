@@ -17,6 +17,7 @@ export const DEFAULT_ROLES: AiRoles = {
   reviewer: { provider: "openai", model: DEFAULT_MODELS.openai },
   editor: { provider: "anthropic", model: DEFAULT_MODELS.anthropic },
   ideas: { provider: "google", model: DEFAULT_MODELS.google },
+  prompter: { provider: "google", model: DEFAULT_MODELS.google },
 };
 
 const COMMON_RULES = [

@@ -2,7 +2,7 @@
 
 export type ProviderId = "openai" | "anthropic" | "google" | "template";
 
-export type RoleKey = "planner" | "writer" | "reviewer" | "editor" | "ideas";
+export type RoleKey = "planner" | "writer" | "reviewer" | "editor" | "ideas" | "prompter";
 
 export interface RoleAssignment {
   provider: ProviderId;
