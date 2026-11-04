@@ -8,7 +8,7 @@ export async function GET() {
       await q(
         `SELECT p.id, p.blog_id, p.title, p.topic, p.stage, p.status, p.status_message, p.updated_at, p.created_at,
                 b.name AS blog_name, b.color AS blog_color
-         FROM projects p JOIN blogs b ON b.id=p.blog_id ORDER BY p.updated_at DESC LIMIT 300`,
+         FROM projects p JOIN blogs b ON b.id=p.blog_id WHERE p.deleted_at IS NULL ORDER BY p.updated_at DESC LIMIT 300`,
       ),
     ),
   );

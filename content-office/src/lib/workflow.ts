@@ -6,24 +6,32 @@ import type { PostExtras, PostPlan } from "./posts-types";
 
 export class WorkflowError extends Error {}
 
-/** ② 선택한 키워드마다 글을 만들고 ③→④→⑥ 을 자동으로 시작 */
+/** ② 고른 키워드(1개 또는 여러 개)로 글 1개를 만들고 ③ 제목 후보만 뽑음 — 글쓰기는 사용자가 버튼으로 시작 */
 export async function createPosts(blogId: string, pickIds: string[]) {
   if (!pickIds.length) throw new WorkflowError("키워드를 하나 이상 선택하세요.");
-  const picks = await q<{ id: string; keyword: string; status: string }>("SELECT id, keyword, status FROM keyword_picks WHERE blog_id=$1 AND id = ANY($2)", [blogId, pickIds]);
-  const ids: string[] = [];
-  for (const p of picks) {
-    if (p.status === "used") continue;
-    const id = newId("prj_");
-    await q(
-      `INSERT INTO projects (id, blog_id, title, topic, stage, status) VALUES ($1,$2,$3,$3,'titles','running')`,
-      [id, blogId, p.keyword],
-    );
-    await q("UPDATE keyword_picks SET status='used', project_id=$2 WHERE id=$1", [p.id, id]);
-    await addEvent(id, "create", `② 키워드 선택: ${p.keyword}`);
-    await enqueue("titles", { projectId: id });
-    ids.push(id);
-  }
-  return ids;
+  const rows = await q<{ id: string; keyword: string; status: string }>("SELECT id, keyword, status FROM keyword_picks WHERE blog_id=$1 AND id = ANY($2)", [blogId, pickIds]);
+  // 고른 순서대로 (첫 번째가 메인 키워드)
+  const picks = pickIds.map((pid) => rows.find((r) => r.id === pid)).filter((p): p is (typeof rows)[number] => !!p && p.status !== "used");
+  if (!picks.length) return [];
+  const keywords = Array.from(new Set(picks.map((p) => p.keyword)));
+  const id = newId("prj_");
+  await q(`INSERT INTO projects (id, blog_id, title, topic, stage, status) VALUES ($1,$2,$3,$4,'titles','running')`, [id, blogId, keywords[0], keywords.join(", ")]);
+  await q("UPDATE keyword_picks SET status='used', project_id=$2 WHERE id = ANY($1)", [picks.map((p) => p.id), id]);
+  await addEvent(id, "create", `② 키워드 선택: ${keywords.join(", ")}`);
+  await enqueue("titles", { projectId: id });
+  return [id];
+}
+
+/** ③ 고른 제목으로 ④ 글 작성 시작 (사용자가 버튼을 눌러야 시작) → 끝나면 ⑥ 검수까지 자동 */
+export async function startWriting(projectId: string, input: { index?: number; title?: string } = {}) {
+  const p = await getProject(projectId);
+  if (!p?.plan) throw new WorkflowError("제목 후보가 아직 없습니다.");
+  await noRunningJob(projectId);
+  if (input.index !== undefined || input.title) await selectTitle(projectId, input);
+  await updateProject(projectId, { stage: "writing", status: "running", status_message: "" });
+  await enqueue("write", { projectId });
+  const fresh = await getProject(projectId);
+  await addEvent(projectId, "approve", `③ 제목 확정 → ④ 글 작성 시작: ${fresh?.title ?? ""}`);
 }
 
 async function noRunningJob(projectId: string) {
@@ -81,7 +89,8 @@ export async function insertImage(projectId: string, index: number) {
   if (!p || !im?.url) throw new WorkflowError("먼저 이미지를 생성하세요.");
   const doc = await getDocument(projectId);
   const html = doc?.content_html ?? "";
-  const tag = `<img src="${im.url}" alt="${im.alt.replace(/"/g, "&quot;")}">`;
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  const tag = `<img src="${esc(im.url)}" alt="${esc(im.alt)}">${im.credit ? `<p>${esc(im.credit)}</p>` : ""}`;
   const marker = new RegExp(`<p>\\s*\\[이미지\\s*${index + 1}(?:[^\\]]*)\\]\\s*</p>`);
   const next = marker.test(html) ? html.replace(marker, tag) : `${html}\n${tag}`;
   await q("UPDATE documents SET content_html=$2, last_editor='user', user_edited_at=NOW(), revision=revision+1, updated_at=NOW() WHERE project_id=$1", [projectId, next]);
@@ -98,6 +107,31 @@ export async function markPublished(projectId: string, url: string | null, publi
   extras.publishedAt = published ? new Date().toISOString() : null;
   await updateProject(projectId, { package: extras, stage: published ? "published" : "ready", status: published ? "done" : "waiting" });
   await addEvent(projectId, "publish", published ? `⑦ 발행 완료${url ? `: ${url}` : ""}` : "발행 완료 취소");
+}
+
+/** ⑥ 검수 지적 사항을 AI로 고치기 */
+export async function requestFix(projectId: string, indexes: number[]) {
+  const p = await getProject(projectId);
+  const issues = (p?.review as unknown as { issues?: unknown[] } | null)?.issues ?? [];
+  const valid = Array.from(new Set(indexes.map(Number))).filter((i) => Number.isInteger(i) && i >= 0 && i < issues.length);
+  if (!p || !valid.length) throw new WorkflowError("고칠 지적 사항을 고르세요.");
+  await noRunningJob(projectId);
+  await updateProject(projectId, { status: "running", status_message: "" });
+  await enqueue("fix", { projectId, payload: { indexes: valid } });
+  await addEvent(projectId, "rerun", `⑥ 지적 ${valid.length}건 AI 수정 요청`);
+}
+
+/** ④ 사용자가 직접 적은 수정 요청사항을 AI가 해당 부분만 반영 */
+export async function requestEdit(projectId: string, note: string) {
+  const p = await getProject(projectId);
+  const text = note.trim().slice(0, 3000);
+  if (!p) throw new WorkflowError("글을 찾을 수 없습니다.");
+  if (!text) throw new WorkflowError("수정 요청사항을 적어 주세요.");
+  if (!(await getDocument(projectId))?.content_html) throw new WorkflowError("먼저 글이 있어야 합니다.");
+  await noRunningJob(projectId);
+  await updateProject(projectId, { status: "running", status_message: "" });
+  await enqueue("fix", { projectId, payload: { note: text } });
+  await addEvent(projectId, "rerun", `수정 요청사항: ${text}`);
 }
 
 export async function cancelJobs(projectId: string) {

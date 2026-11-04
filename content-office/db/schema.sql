@@ -274,3 +274,7 @@ CREATE TABLE IF NOT EXISTS keyword_picks (
 );
 CREATE INDEX IF NOT EXISTS keyword_picks_blog_idx ON keyword_picks(blog_id, created_at);
 ALTER TABLE media_jobs ADD COLUMN IF NOT EXISTS project_id TEXT;
+-- 휴지통: 삭제한 글은 deleted_at 이 채워지고, 휴지통에서 다시 삭제해야 완전히 지워짐
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+-- 블로그별 이미지 방식: ai(Higgsfield 생성) | official(제조사 공식 홈페이지 이미지)
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image_source TEXT NOT NULL DEFAULT 'ai';

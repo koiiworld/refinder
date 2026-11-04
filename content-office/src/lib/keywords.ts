@@ -1,4 +1,5 @@
 import "server-only";
+import { writtenTitles } from "./blog-posts";
 import { q, newId, j } from "./db";
 import { getBlogForAi } from "./repo";
 import { extractJson, runStep } from "./ai/run";
@@ -97,6 +98,7 @@ export async function recommendKeywords(blogId: string, hint = "") {
     creator: await creatorTrendContext(blogId),
     youtube: await youtubeContext(blog.category),
     existing: existing.map((e) => e.keyword).slice(0, 80),
+    written: await writtenTitles(blog),
     hint,
   });
   const res = await runStep({ step: "keywords", role: "ideas", purpose: "keywords", blog, system, prompt, json: true, retries: 1, maxTokens: 6000 });

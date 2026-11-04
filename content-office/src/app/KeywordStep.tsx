@@ -54,8 +54,8 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
     setBusy("create");
     setErr("");
     try {
-      await api("/api/posts", "POST", { blogId, pickIds: sel });
-      router.push("/posts");
+      const r = await api<{ ids: string[] }>("/api/posts", "POST", { blogId, pickIds: sel });
+      router.push(r.ids[0] ? `/posts/${r.ids[0]}` : "/posts");
       router.refresh();
     } catch (e) {
       setErr((e as Error).message);
@@ -179,7 +179,7 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
             선택 항목 목록에서 빼기
           </button>
           <button className="btn btn-primary" disabled={!sel.length || !!busy} onClick={create}>
-            {busy === "create" ? <span className="spinner" /> : `선택한 ${sel.length}개로 글 만들기 →`}
+            {busy === "create" ? <span className="spinner" /> : `선택한 ${sel.length}개 키워드로 제목 뽑기 →`}
           </button>
         </div>
       </section>

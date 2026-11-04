@@ -104,7 +104,7 @@ export async function createVersion(v: {
 export async function writeAiDraft(
   projectId: string,
   html: string,
-  meta: { provider: string; model: string; label: string },
+  meta: { provider: string; model: string; label: string; force?: boolean },
 ): Promise<{ version: Version; applied: boolean }> {
   const project = await getProject(projectId);
   const doc = await getDocument(projectId);
@@ -125,7 +125,7 @@ export async function writeAiDraft(
     doc.content_html.trim() !== "" &&
     (!doc.ai_written_at || (doc.user_edited_at ?? "") > doc.ai_written_at);
 
-  if (userEdited) {
+  if (userEdited && !meta.force) {
     await q("UPDATE documents SET pending_proposal_id=$2, updated_at=NOW() WHERE project_id=$1", [projectId, version.id]);
     await addEvent(projectId, "protect", `사용자 수정 내용 보호: AI 원고 v${version.number}을(를) 제안으로 보관했습니다.`);
     return { version, applied: false };

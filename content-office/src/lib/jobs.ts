@@ -5,9 +5,12 @@ import { addEvent, getBlogForAi, getDocument, getProject, updateProject, writeAi
 import { extractJson, runStep, sanitizeHtml } from "./ai/run";
 import { AiError } from "./ai/providers";
 import { reviewTemplate } from "./ai/prompts";
-import { postReviewPrompt, titlesPrompt, writePrompt } from "./ai/step-prompts";
+import { fixPrompt, postReviewPrompt, titlesPrompt, writePrompt } from "./ai/step-prompts";
 import { keywordStats, naverAdConnected } from "./searchad";
 import type { PostExtras, PostPlan } from "./posts-types";
+import { recentPosts, writtenTitles } from "./blog-posts";
+
+const postKeywords = (topic: string) => topic.split(/\s*,\s*/).map((k) => k.trim()).filter(Boolean);
 
 /**
  * 서버 측 작업 큐
@@ -72,6 +75,14 @@ async function tick() {
 }
 
 async function runJob(job: Job) {
+  // 휴지통에 있는 글의 작업은 실행하지 않음 (크레딧 낭비 방지)
+  if (job.project_id) {
+    const p = await q1<{ deleted_at: string | null }>("SELECT deleted_at FROM projects WHERE id=$1", [job.project_id]);
+    if (!p || p.deleted_at) {
+      await q("UPDATE jobs SET status='canceled', finished_at=NOW() WHERE id=$1", [job.id]);
+      return;
+    }
+  }
   try {
     await HANDLERS[job.type]?.(job);
     await q("UPDATE jobs SET status='succeeded', finished_at=NOW(), error=NULL WHERE id=$1", [job.id]);
@@ -104,7 +115,7 @@ async function runJob(job: Job) {
 }
 
 export function jobLabel(type: string) {
-  return ({ titles: "③ SEO 제목 추천", write: "④ 글 작성", review: "⑥ 검수" } as Record<string, string>)[type] ?? type;
+  return ({ titles: "③ SEO 제목 추천", write: "④ 글 작성", review: "⑥ 검수", fix: "⑥ 지적 사항 AI 수정" } as Record<string, string>)[type] ?? type;
 }
 
 async function load(job: Job): Promise<{ project: Project; blog: Blog }> {
@@ -119,21 +130,52 @@ const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, 
 const arr = (v: unknown) => (Array.isArray(v) ? v : []);
 
 const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
-  // ③ SEO 제목 추천·선택 (AI가 고르고 다음 단계로)
+  // ⑥ 검수에서 고른 지적 사항을 AI가 반영 (본문 일부만 수정) → '다시 검수' 권장
+  async fix(job) {
+    const { project, blog } = await load(job);
+    const review = project.review as unknown as (ReviewResult & { issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; fixed?: boolean }[] }) | null;
+    const doc = await getDocument(project.id);
+    const indexes = arr(job.payload.indexes).map(Number);
+    const note = String(job.payload.note ?? "").trim();
+    // 검수 지적 수정 또는 사용자가 직접 적은 '수정 요청사항'
+    const issues = note
+      ? [{ type: "user", severity: "high", quote: "", comment: `사용자 수정 요청: ${note}`, suggestion: "" }]
+      : (review?.issues ?? []).filter((_, i) => indexes.includes(i));
+    if (!doc?.content_html || !issues.length) throw new Error("고칠 지적 사항이나 본문이 없습니다.");
+    const { system, prompt } = fixPrompt(blog, { title: doc.title || project.title, html: doc.content_html, issues });
+    const res = await runStep({ step: "writing", role: "writer", purpose: "fix", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000, template: () => JSON.stringify({ html: doc.content_html, changes: [] }) });
+    const raw = extractJson<{ html?: string; changes?: string[] }>(res.text);
+    const html = sanitizeHtml(String(raw.html ?? ""));
+    if (!html) throw new AiError("AI가 고친 본문을 돌려주지 않았습니다.", true);
+    // 사용자가 직접 요청한 수정이므로 바로 적용 (이전 글은 버전 기록에 남음)
+    await writeAiDraft(project.id, html, { provider: res.provider, model: res.model, label: note ? "수정 요청사항 반영" : `⑥ 지적 ${issues.length}건 AI 수정`, force: true });
+    const changes = arr(raw.changes).map(String).slice(0, 20);
+    if (note) {
+      await updateProject(project.id, { status: project.stage === "published" ? "done" : "waiting", status_message: "", needs_rereview: !!review, package: { ...((project.package as unknown as PostExtras) ?? { hashtags: [], images: [] }), lastEdit: { at: new Date().toISOString(), note, changes } } });
+      await addEvent(project.id, "ai", `수정 요청사항 반영 (${res.provider}/${res.model}): ${note}${changes.length ? ` · ${changes.join(" / ")}` : ""}`);
+      return;
+    }
+    const next = { ...review!, issues: review!.issues.map((it, i) => (indexes.includes(i) ? { ...it, fixed: true } : it)), lastFix: { at: new Date().toISOString(), changes, provider: res.provider, model: res.model } };
+    await updateProject(project.id, { review: next, status: project.stage === "published" ? "done" : "waiting", status_message: "", needs_rereview: true });
+    await addEvent(project.id, "ai", `⑥ 지적 ${issues.length}건 AI 수정 (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""})${changes.length ? ` · ${changes.join(" / ")}` : ""}`);
+  },
+
+  // ③ SEO 제목 후보 추천 → 사용자가 고르고 '글 쓰기'를 누를 때까지 대기
   async titles(job) {
     const { project, blog } = await load(job);
-    const keyword = project.topic || project.title;
+    const keywords = postKeywords(project.topic || project.title);
+    const keyword = keywords[0] ?? project.title;
     let related: { keyword: string; total: number }[] = [];
     if (naverAdConnected()) {
       try {
-        const r = await keywordStats([keyword], { withRelated: true });
-        const main = r.stats[keyword];
-        related = [...(main ? [{ keyword: main.keyword, total: main.total }] : []), ...r.related.slice(0, 12).map((x) => ({ keyword: x.keyword, total: x.total }))];
+        const r = await keywordStats(keywords.slice(0, 5), { withRelated: true });
+        const mains = keywords.map((k) => r.stats[k]).filter((s): s is NonNullable<typeof s> => !!s).map((s) => ({ keyword: s.keyword, total: s.total }));
+        related = [...mains, ...r.related.slice(0, 12).map((x) => ({ keyword: x.keyword, total: x.total }))];
       } catch {
         /* 검색량은 선택 데이터 */
       }
     }
-    const { system, prompt } = titlesPrompt(blog, keyword, related);
+    const { system, prompt } = titlesPrompt(blog, keywords, related, await writtenTitles(blog, project.id));
     const res = await runStep({
       step: "titles", role: "planner", purpose: "titles", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 6000,
       template: () => JSON.stringify({ candidates: [{ title: `${keyword} 총정리`, reason: "템플릿" }, { title: `${keyword} 알아보기`, reason: "템플릿" }], best: 0, bestReason: "⚠ AI 미연결: 템플릿 제목", subKeywords: [] }),
@@ -148,13 +190,12 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
       best,
       selectedTitle: candidates[best].title,
       bestReason: String(raw.bestReason ?? ""),
-      subKeywords: arr(raw.subKeywords).map(String).slice(0, 8),
+      subKeywords: Array.from(new Set([...keywords.slice(1), ...arr(raw.subKeywords).map(String)])).slice(0, 8),
       related,
       ai: { provider: res.provider, model: res.model, substitutedFor: res.substitutedFor ?? null },
     };
-    await updateProject(project.id, { plan, title: plan.selectedTitle, stage: "writing", status: "running", status_message: "" });
-    await addEvent(project.id, "ai", `③ 제목 선택: ${plan.selectedTitle} (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""})`);
-    await enqueue("write", { projectId: project.id });
+    await updateProject(project.id, { plan, title: plan.selectedTitle, stage: "titles", status: "waiting", status_message: "" });
+    await addEvent(project.id, "ai", `③ 제목 후보 ${candidates.length}개 (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""}) · 제목을 고르고 '글 쓰기'를 눌러 주세요`);
   },
 
   // ④ 글 작성 (해시태그·이미지 프롬프트 포함)
@@ -164,18 +205,29 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     if (!plan) throw new Error("제목이 아직 없습니다.");
     const feedback = job.payload.feedback as string | undefined;
     const doc = await getDocument(project.id);
-    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined });
+    const myPosts = await recentPosts(blog);
+    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined, myPosts });
     const res = await runStep({
       step: "writing", role: "writer", purpose: "write", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
       template: () => JSON.stringify({ html: `<p><strong>⚠ AI 미연결: 템플릿 원고입니다.</strong></p><h2>${esc(plan.keyword)}</h2><p>[작성 필요]</p><p>[이미지 1]</p><h2>정리</h2><p>[작성 필요]</p>`, hashtags: [plan.keyword.replace(/\s+/g, "")], images: [{ prompt: plan.keyword, alt: plan.keyword, aspect: "4:3" }] }),
     });
-    const raw = extractJson<{ html?: string; hashtags?: string[]; images?: { prompt?: string; alt?: string; aspect?: string }[] }>(res.text);
+    type RawImage = { prompt?: string; alt?: string; aspect?: string; product?: string; pageUrl?: string; credit?: string };
+    const raw = extractJson<{ html?: string; hashtags?: string[]; images?: RawImage[] }>(res.text);
+    const official = blog.image_source === "official";
     const html = sanitizeHtml(String(raw.html ?? ""));
     if (!html) throw new AiError("AI가 본문을 돌려주지 않았습니다.", true);
     const prevExtras = (project.package as unknown as PostExtras | null) ?? null;
     const extras: PostExtras = {
       hashtags: Array.from(new Set(arr(raw.hashtags).map((h) => String(h).replace(/^#/, "").replace(/\s+/g, "")).filter(Boolean))).slice(0, 20),
-      images: arr(raw.images).map((im: { prompt?: string; alt?: string; aspect?: string }) => ({ prompt: String(im?.prompt ?? ""), alt: String(im?.alt ?? ""), aspect: ["1:1", "4:3", "3:4", "16:9", "9:16"].includes(String(im?.aspect)) ? String(im?.aspect) : "4:3" })).filter((i) => i.prompt).slice(0, 4),
+      images: arr(raw.images)
+        .map((im: RawImage) => {
+          const base = { prompt: String(im?.prompt ?? ""), alt: String(im?.alt ?? ""), aspect: ["1:1", "4:3", "3:4", "2:3", "3:2", "16:9", "9:16"].includes(String(im?.aspect)) ? String(im?.aspect) : "4:3" };
+          if (!official) return base;
+          const pageUrl = /^https?:\/\//.test(String(im?.pageUrl ?? "")) ? String(im.pageUrl) : "";
+          return { ...base, kind: "official" as const, product: String(im?.product ?? ""), pageUrl, credit: String(im?.credit ?? "") };
+        })
+        .filter((i) => (official ? i.alt || ("product" in i && i.product) : i.prompt))
+        .slice(0, 4),
       writer: { provider: res.provider, model: res.model, substitutedFor: res.substitutedFor ?? null },
       publishedUrl: prevExtras?.publishedUrl ?? null,
       publishedAt: prevExtras?.publishedAt ?? null,
@@ -194,10 +246,11 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const doc = await getDocument(project.id);
     const html = doc?.content_html ?? "";
     if (!html.trim()) throw new Error("검수할 글이 없습니다.");
+    const startRevision = doc?.revision ?? 0;
     const images = extras.images ?? [];
     const { system, prompt } = postReviewPrompt(blog, { title: doc?.title || plan?.selectedTitle || project.title, keyword: plan?.keyword ?? project.topic, html, hashtags: extras.hashtags ?? [], images });
     const res = await runStep({
-      step: "review", role: "reviewer", purpose: "review", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 6000,
+      step: "review", role: "reviewer", purpose: "review", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
       images: images.map((i) => i.url).filter((u): u is string => !!u),
       template: () => JSON.stringify(reviewTemplate(blog, html)),
     });
@@ -216,7 +269,9 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
       imagesSeen: images.filter((i) => i.url).length,
     };
     await q("INSERT INTO reviews (id, project_id, version_id, provider, model, result) VALUES ($1,$2,NULL,$3,$4,$5)", [newId("rev_"), project.id, res.provider, res.model, j(result)]);
-    await updateProject(project.id, { review: result, stage: project.stage === "published" ? "published" : "ready", status: project.stage === "published" ? "done" : "waiting", status_message: "", needs_rereview: false });
+    // 검수하는 동안 사용자가 글을 고쳤으면 '다시 검수 권장' 유지
+    const editedDuring = ((await getDocument(project.id))?.revision ?? 0) !== startRevision;
+    await updateProject(project.id, { review: result, stage: project.stage === "published" ? "published" : "ready", status: project.stage === "published" ? "done" : "waiting", status_message: "", needs_rereview: editedDuring });
     await addEvent(project.id, "review", `⑥ 검수 완료 (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""}) · 지적 ${result.issues.length}건`);
   },
 };

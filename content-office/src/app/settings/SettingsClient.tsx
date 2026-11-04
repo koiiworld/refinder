@@ -5,6 +5,49 @@ import type { AppSettings } from "@/lib/settings";
 import { STEP_AI_LABEL, type StepKey } from "@/lib/steps";
 import { api } from "@/components/client-utils";
 import { fmtUsd } from "@/components/ui";
+import { MODEL_CATALOG } from "@/lib/model-catalog";
+
+const CUSTOM = "__custom__";
+
+/** 세부 모델 선택: 추천 목록(가격 표시) + 불러온 모델 + 직접 입력 */
+function ModelPicker({ provider, value, extra, onChange, label }: { provider: string; value: string; extra: string[]; onChange: (m: string) => void; label: string }) {
+  const catalog = MODEL_CATALOG[provider as keyof typeof MODEL_CATALOG] ?? [];
+  const known = new Set(catalog.map((m) => m.id));
+  // 글쓰기에 못 쓰는 모델(임베딩·음성·이미지 등)은 빼고 보여줌
+  const textOnly = (id: string) => !/embed|tts|audio|image|realtime|transcribe|moderation|dall-e|whisper|veo|imagen|search|computer|codex/i.test(id);
+  const others = Array.from(new Set(extra.map((id) => id.replace(/^models\//, "")).filter((id) => !known.has(id) && textOnly(id)))).sort();
+  const listed = known.has(value) || others.includes(value);
+  const [custom, setCustom] = useState(!listed && !!value);
+  return (
+    <div className="stack" style={{ gap: 6, width: 300, maxWidth: "100%" }}>
+      <select
+        className="select"
+        value={custom ? CUSTOM : value}
+        aria-label={label}
+        onChange={(e) => {
+          if (e.target.value === CUSTOM) return setCustom(true);
+          setCustom(false);
+          onChange(e.target.value);
+        }}
+      >
+        <optgroup label="추천 모델">
+          {catalog.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name} — {m.note} (${m.input} / ${m.output})
+            </option>
+          ))}
+        </optgroup>
+        {others.length > 0 && (
+          <optgroup label="불러온 다른 모델 (가격은 설정의 단가 표에서 입력)">
+            {others.map((id) => <option key={id} value={id}>{id}</option>)}
+          </optgroup>
+        )}
+        <option value={CUSTOM}>직접 입력…</option>
+      </select>
+      {custom && <input className="input" placeholder="모델 ID 입력 (예: gpt-5.4)" value={value} onChange={(e) => onChange(e.target.value.trim())} aria-label={`${label} ID`} />}
+    </div>
+  );
+}
 
 type Conn = { provider: string; label: string; envKey: string; connected: boolean; media?: boolean };
 
@@ -18,6 +61,8 @@ export default function SettingsClient({ connections, settings, db, data, month 
   });
   const [msg, setMsg] = useState("");
   const [models, setModels] = useState<Record<string, string>>({});
+  const [apiModels, setApiModels] = useState<Record<string, string[]>>({});
+  const [loadingModels, setLoadingModels] = useState(false);
   const conn = (p: string) => connections.find((c) => c.provider === p)?.connected;
 
   async function save(patch: Partial<AppSettings>) {
@@ -42,7 +87,7 @@ export default function SettingsClient({ connections, settings, db, data, month 
                 <select className="select" style={{ width: 190 }} value={a.provider} onChange={(e) => setStepAi({ ...stepAi, [k]: { provider: e.target.value as typeof a.provider, model: { openai: "gpt-5.4-mini", anthropic: "claude-sonnet-5-5", google: "gemini-3.5-flash" }[e.target.value] ?? "" } })} aria-label={`${STEP_AI_LABEL[k]} AI`}>
                   {Object.entries(PROVIDER_NAMES).map(([id, name]) => <option key={id} value={id}>{name}{conn(id) ? "" : " - 미연결"}</option>)}
                 </select>
-                <input className="input" style={{ width: 190 }} value={a.model} onChange={(e) => setStepAi({ ...stepAi, [k]: { ...a, model: e.target.value } })} aria-label="모델 ID" />
+                <ModelPicker key={a.provider} provider={a.provider} value={a.model} extra={apiModels[a.provider] ?? []} onChange={(model) => setStepAi({ ...stepAi, [k]: { ...a, model } })} label={`${STEP_AI_LABEL[k]} 모델`} />
               </div>
             );
           })}
@@ -50,6 +95,29 @@ export default function SettingsClient({ connections, settings, db, data, month 
         </div>
         <div className="card-pad row" style={{ paddingTop: 0 }}>
           <button className="btn btn-primary btn-sm" onClick={() => save({ stepAi })}>단계별 AI 저장</button>
+          <button
+            className="btn btn-sm"
+            disabled={loadingModels}
+            onClick={async () => {
+              setLoadingModels(true);
+              const next: Record<string, string[]> = {};
+              for (const p of Object.keys(PROVIDER_NAMES)) {
+                if (!conn(p)) continue;
+                try {
+                  next[p] = (await api<{ models: string[] }>(`/api/ai/models?provider=${p}`)).models ?? [];
+                } catch {
+                  /* 목록을 못 불러와도 기본 목록은 사용 가능 */
+                }
+              }
+              setApiModels(next);
+              setLoadingModels(false);
+              setMsg("각 AI의 사용 가능한 모델을 목록에 추가했습니다.");
+              setTimeout(() => setMsg(""), 2500);
+            }}
+          >
+            {loadingModels ? <span className="spinner" /> : "다른 모델도 불러오기"}
+          </button>
+          <span className="tiny muted">가격은 100만 토큰당 입력/출력 기준입니다.</span>
         </div>
       </section>
 

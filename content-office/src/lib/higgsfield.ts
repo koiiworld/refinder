@@ -31,22 +31,8 @@ export class HiggsfieldError extends Error {
   }
 }
 
-/** 공식 문서에서 요청 형식(스키마)을 확인한 모델 */
-export const HF_MODELS = {
-  "soul-standard": {
-    label: "SOUL (이미지)",
-    media: "image" as const,
-    path: "higgsfield-ai/soul/standard",
-    note: "텍스트 → 이미지. 비율·해상도 지정 가능",
-  },
-  "wan-2.6-i2v": {
-    label: "Wan 2.6 (이미지 → 영상)",
-    media: "video" as const,
-    path: "wan/v2.6/image-to-video",
-    note: "시작 이미지 URL 필요. 5·10·15초, 제외 프롬프트 지원",
-  },
-} as const;
-export type HfModelId = keyof typeof HF_MODELS;
+export { HF_MODELS, type HfModelId } from "./hf-models";
+import { HF_MODELS } from "./hf-models";
 
 const ERROR_TEXT: Record<number, string> = {
   400: "요청 값이 올바르지 않습니다",
@@ -99,6 +85,12 @@ export interface HfSubmitResult {
   status: string;
   status_url: string;
   cancel_url: string;
+}
+
+/** 생성 전 예상 비용 (Higgsfield 견적 API, 생성·차감 없음) */
+export async function hfEstimate(path: string, body: Record<string, unknown>): Promise<{ usd: number; credits: number }> {
+  const d = await call("POST", `${base()}/estimate/${path.replace(/^\//, "")}`, body);
+  return { usd: Number(d.usd ?? 0), credits: Number(d.credits ?? 0) };
 }
 
 export async function hfSubmit(path: string, body: Record<string, unknown>, idempotencyKey: string): Promise<HfSubmitResult> {

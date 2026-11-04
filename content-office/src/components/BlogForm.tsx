@@ -35,6 +35,7 @@ export default function BlogForm({ blog, connections }: { blog?: Blog; connectio
     style_guide: blog?.style_guide ?? "",
     review_rules: (blog?.review_rules ?? ["확인되지 않은 수치·통계를 단정적으로 쓰지 않는다", "출처가 필요한 주장에는 출처를 표기하거나 '확인 필요'로 남긴다"]).join("\n"),
     image_style: blog?.image_style ?? "",
+    image_source: (blog?.image_source ?? "ai") as "ai" | "official",
     ai_roles: { ...DEFAULT_ROLES, ...(blog?.ai_roles ?? {}) } as AiRoles,
     archived: blog?.archived ?? false,
   });
@@ -89,7 +90,12 @@ export default function BlogForm({ blog, connections }: { blog?: Blog; connectio
         <textarea className="textarea" style={{ minHeight: 110 }} value={f.style_guide} onChange={(e) => set("style_guide", e.target.value)} placeholder="말투, 문단 길이, 금지 표현, 자주 쓰는 구성 등" />
         <h3 style={{ fontSize: 15 }}>검수 규칙 (한 줄에 하나)</h3>
         <textarea className="textarea" style={{ minHeight: 110 }} value={f.review_rules} onChange={(e) => set("review_rules", e.target.value)} />
-        <h3 style={{ fontSize: 15 }}>이미지 스타일</h3>
+        <h3 style={{ fontSize: 15 }}>이미지 방식</h3>
+        <select className="select" value={f.image_source} onChange={(e) => set("image_source", e.target.value)} aria-label="이미지 방식">
+          <option value="ai">AI로 생성 (Higgsfield) — 요리·일상처럼 연출 사진이 필요한 글</option>
+          <option value="official">공식 홈페이지 이미지 — 실제 제품을 다루는 글 (출처 표기)</option>
+        </select>
+        <h3 style={{ fontSize: 15 }}>이미지 스타일 {f.image_source === "official" && <span className="tiny muted">(공식 이미지 방식에서는 쓰지 않음)</span>}</h3>
         <textarea className="textarea" value={f.image_style} onChange={(e) => set("image_style", e.target.value)} placeholder="톤, 구도, 비율 등 (이미지 스튜디오·기획안에 사용)" />
       </section>
 

@@ -1,10 +1,12 @@
 import { q } from "@/lib/db";
 import { postBundle } from "@/lib/post-bundle";
 import { ensureWorker } from "@/lib/jobs";
-import { cancelJobs, insertImage, markPublished, rerun, selectTitle, setHashtags, setImage, WorkflowError } from "@/lib/workflow";
-import { createMediaJob } from "@/lib/media";
-import { HiggsfieldError } from "@/lib/higgsfield";
+import { cancelJobs, insertImage, markPublished, rerun, selectTitle, setHashtags, setImage, startWriting, requestFix, requestEdit, WorkflowError } from "@/lib/workflow";
+import { createMediaJob, estimateMedia } from "@/lib/media";
+import { HF_MODELS, HiggsfieldError } from "@/lib/higgsfield";
 import { getProject } from "@/lib/repo";
+import { moveToTrash } from "@/lib/trash";
+import { checkImageUrl, findOfficialImages } from "@/lib/official-images";
 import type { PostExtras } from "@/lib/posts-types";
 import { body, Ctx, fail, handle, ok } from "@/lib/api";
 
@@ -19,7 +21,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string }>(req);
+    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string }>(req);
     switch (b.action) {
       case "rerun":
         if (!b.step) throw new WorkflowError("다시 실행할 단계를 고르세요.");
@@ -27,6 +29,15 @@ export async function POST(req: Request, { params }: Ctx) {
         break;
       case "select_title":
         await selectTitle(id, { index: b.index, title: b.title });
+        break;
+      case "edit_request":
+        await requestEdit(id, String(b.note ?? ""));
+        break;
+      case "fix_issues":
+        await requestFix(id, Array.isArray(b.indexes) ? b.indexes : []);
+        break;
+      case "write":
+        await startWriting(id, { index: b.index, title: b.title });
         break;
       case "hashtags":
         await setHashtags(id, b.hashtags ?? []);
@@ -40,13 +51,53 @@ export async function POST(req: Request, { params }: Ctx) {
         const im = (p?.package as unknown as PostExtras | null)?.images?.[Number(b.index)];
         if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
         try {
-          const job = await createMediaJob({ model: "soul-standard", projectId: id, prompt: im.prompt, aspect_ratio: im.aspect, resolution: "1080p" });
-          await setImage(id, Number(b.index), { mediaJobId: job.id, url: null, inserted: false });
+          const model = b.model && b.model in HF_MODELS && HF_MODELS[b.model as keyof typeof HF_MODELS].media === "image" ? b.model : im.model || "soul-standard";
+          const job = await createMediaJob({ model, projectId: id, prompt: im.prompt, aspect_ratio: im.aspect, resolution: "1080p" });
+          await setImage(id, Number(b.index), { mediaJobId: job.id, url: null, inserted: false, model });
         } catch (e) {
           if (e instanceof HiggsfieldError) return fail(e.message, 502);
           throw e;
         }
         break;
+      }
+      case "find_images": {
+        // ⑤ 공식 홈페이지에서 제품 이미지 후보 찾기
+        const pageUrl = String(b.pageUrl ?? "").trim();
+        if (!pageUrl) throw new WorkflowError("공식 페이지 주소를 넣어 주세요.");
+        let candidates: string[];
+        try {
+          candidates = await findOfficialImages(pageUrl);
+        } catch (e) {
+          return fail((e as Error).message, 400);
+        }
+        await setImage(id, Number(b.index), { pageUrl, candidates, ...(b.credit !== undefined ? { credit: b.credit } : {}) });
+        break;
+      }
+      case "image_credit":
+        await setImage(id, Number(b.index), { credit: String(b.credit ?? "").slice(0, 100) });
+        break;
+      case "pick_image": {
+        // ⑤ 후보 중 하나를 고르거나 이미지 주소를 직접 입력
+        let url: string;
+        try {
+          url = await checkImageUrl(String(b.url ?? ""));
+        } catch {
+          return fail("올바른 이미지 주소가 아닙니다.", 400);
+        }
+        await setImage(id, Number(b.index), { url, inserted: false, ...(b.credit !== undefined ? { credit: b.credit } : {}) });
+        break;
+      }
+      case "estimate_image": {
+        // 생성 전 예상 비용 (Higgsfield 견적 — 생성·차감 없음)
+        const p = await getProject(id);
+        const im = (p?.package as unknown as PostExtras | null)?.images?.[Number(b.index)];
+        if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
+        try {
+          return ok(await estimateMedia({ model: String(b.model ?? "soul-standard"), prompt: im.prompt, aspect_ratio: im.aspect, resolution: "1080p" }));
+        } catch (e) {
+          if (e instanceof HiggsfieldError) return fail(e.message, 502);
+          throw e;
+        }
       }
       case "insert_image":
         await insertImage(id, Number(b.index));
@@ -70,9 +121,8 @@ export async function POST(req: Request, { params }: Ctx) {
 export async function DELETE(_req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    await q("UPDATE jobs SET status='canceled' WHERE project_id=$1 AND status='queued'", [id]);
-    await q("UPDATE keyword_picks SET status='new', project_id=NULL WHERE project_id=$1", [id]);
-    await q("DELETE FROM projects WHERE id=$1", [id]);
-    return ok({ ok: true });
+    // 바로 지우지 않고 휴지통으로 (휴지통에서 다시 삭제해야 완전 삭제)
+    await moveToTrash([id]);
+    return ok({ ok: true, trashed: true });
   });
 }

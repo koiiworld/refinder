@@ -21,6 +21,8 @@ export interface Blog {
   style_guide: string;
   review_rules: string[];
   image_style: string;
+  /** 이미지 방식: ai = Higgsfield로 생성, official = 제조사 공식 홈페이지 이미지 사용 */
+  image_source: "ai" | "official";
   ai_roles: AiRoles;
   color: string;
   archived: boolean;

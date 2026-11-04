@@ -47,6 +47,33 @@ http
       list.push({ relKeyword: "김장날짜", monthlyPcQcCnt: "< 10", monthlyMobileQcCnt: "< 10", compIdx: "낮음" });
       return send(res, 200, { keywordList: list });
     }
+    // 제조사 공식 페이지 (이미지 후보 찾기)
+    if (url.pathname === "/official/mac-mini") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      return res.end(`<html><head><meta property="og:image" content="https://www.apple.com/v/mac-mini/images/meta/mac-mini_og.jpg?2026"></head><body>
+        <img src="/v/mac-mini/images/logo.svg"><img src="/v/mac-mini/images/icon_small.png">
+        <picture><source srcset="/v/mac-mini/images/hero_small.jpg 734w, /v/mac-mini/images/hero_large.jpg 1440w"><img src="/v/mac-mini/images/hero_small.jpg" alt=""></picture>
+        <img data-src="https://cdn.example.com/ports.webp"></body></html>`);
+    }
+    // 네이버 블로그 RSS
+    if (url.pathname === "/algo_kitchen.xml") {
+      res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8" });
+      return res.end(`<?xml version="1.0"?><rss><channel><title>알고키친</title>
+        <item><title><![CDATA[굴보쌈 황금레시피｜집에서 만드는 법]]></title><link>https://blog.naver.com/algo_kitchen/224000000001?fromRss=true</link></item>
+        <item><title><![CDATA[깍두기 담그는 법 & 양념 비율]]></title><link>https://blog.naver.com/algo_kitchen/224000000002</link></item>
+        <item><title>김장 준비 &amp;middot; 절임배추 &amp;ndash; 정리</title><link>https://blog.naver.com/algo_kitchen/224000000003</link></item>
+        <item><title>개인정보처리방침</title><link>https://blog.naver.com/algo_kitchen/1</link></item>
+      </channel></rss>`);
+    }
+    // 네이버 블로그 글 본문 (PostView)
+    if (url.pathname === "/PostView.naver") {
+      if (url.searchParams.get("blogId") !== "algo_kitchen" || url.searchParams.get("logNo") !== "224458356410") return send(res, 404, {});
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      return res.end(`<html><head><meta property="og:title" content="양배추 두부전 만들기 : 네이버 블로그"></head><body><div class="blog_menu">카테고리 이웃추가</div>
+        <div class="se-main-container"><div class="se-component"><p class="se-text-paragraph">안녕하세요 : ) 알고키친입니다. 오늘은 밀가루 없이 만드는 양배추 두부전을 소개해 드릴게요. 양배추는 채 썰고 두부는 물기를 꼭 짜 주세요 ㅎㅎ</p>
+        <h3>양배추 두부전 재료</h3><ul><li>양배추 200g</li><li>두부 반 모</li><li>달걀 2개</li></ul><p>약불에서 앞뒤로 노릇하게 구우면 완성이에요 !</p></div></div>
+        <div class="comment">댓글 3</div></body></html>`);
+    }
     // YouTube Data API
     if (url.pathname.startsWith("/youtube/v3/")) {
       if (url.searchParams.get("key") !== "test-yt-key") return send(res, 400, { error: { code: 400, message: "API key not valid", errors: [{ reason: "keyInvalid" }] } });
@@ -58,12 +85,13 @@ http
     }
 
     // Higgsfield (이미지·영상)
-    if (url.pathname.startsWith("/v1/text2image") || url.pathname.startsWith("/higgsfield-ai/") || url.pathname.startsWith("/wan/") || url.pathname.startsWith("/requests/")) {
+    if (/^\/(v1\/text2image|higgsfield-ai\/|wan\/|requests\/|alibaba\/|ideogram\/|z-image\/|estimate\/)/.test(url.pathname)) {
       if (req.headers.authorization !== "Key test-id:test-secret") return send(res, 401, { detail: "Invalid credentials" });
       if (url.pathname === "/v1/text2image/soul-styles") return send(res, 200, [{ id: "s1", name: "Mock style" }]);
-      if (req.method === "POST" && (url.pathname === "/higgsfield-ai/soul/standard" || url.pathname === "/wan/v2.6/image-to-video")) {
+      if (url.pathname.startsWith("/estimate/")) return send(res, 200, { type: "estimate", credits: "0.090", usd: url.pathname.includes("soul/standard") ? "0.188" : "0.006", discount: null });
+      if (req.method === "POST" && ["/higgsfield-ai/soul/standard", "/higgsfield-ai/soul/v2/standard", "/higgsfield-ai/soul/cinema", "/alibaba/qwen-image-3/text-to-image", "/ideogram/v4.0", "/z-image/turbo", "/wan/v2.6/image-to-video"].includes(url.pathname)) {
         const id = "req" + (hfJobs.size + 1);
-        hfJobs.set(id, { polls: 0, video: url.pathname.startsWith("/wan/"), body, idem: req.headers["idempotency-key"] });
+        hfJobs.set(id, { polls: 0, video: url.pathname.startsWith("/wan/"), body, path: url.pathname, idem: req.headers["idempotency-key"] });
         return send(res, 200, { status: "queued", request_id: id, status_url: `http://localhost:${PORT}/requests/${id}/status`, cancel_url: `http://localhost:${PORT}/requests/${id}/cancel` });
       }
       const m2 = url.pathname.match(/^\/requests\/(\w+)\/(status|cancel)$/);

@@ -23,7 +23,7 @@ export const viewport: Viewport = {
 /** 발행 대기(검수까지 끝난) 글 수 */
 async function pendingCount() {
   try {
-    const r = await q1<{ n: number }>("SELECT COUNT(*)::int AS n FROM projects WHERE stage='ready' AND status <> 'running'");
+    const r = await q1<{ n: number }>("SELECT COUNT(*)::int AS n FROM projects WHERE stage='ready' AND status <> 'running' AND deleted_at IS NULL");
     return Number(r?.n ?? 0);
   } catch {
     return 0;

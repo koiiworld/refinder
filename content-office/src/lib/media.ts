@@ -1,6 +1,6 @@
 import "server-only";
 import { q, q1, newId, j } from "./db";
-import { HF_MODELS, HF_TERMINAL, hfCancel, hfStatus, hfSubmit, type HfModelId } from "./higgsfield";
+import { HF_MODELS, HF_TERMINAL, hfCancel, hfEstimate, hfStatus, hfSubmit, type HfModelId } from "./higgsfield";
 import { WorkflowError } from "./workflow";
 
 export interface MediaJob {
@@ -23,15 +23,18 @@ export interface MediaJob {
 
 const ASPECTS = ["9:16", "16:9", "4:3", "3:4", "1:1", "2:3", "3:2"];
 
-/** 모델별 요청 본문 (공식 문서 스키마 기준) */
-function buildBody(model: HfModelId, i: Record<string, unknown>) {
+/** 모델별 요청 본문 (공식 문서 스키마 기준: docs.higgsfield.ai 모델별 generate 페이지) */
+export function buildBody(model: HfModelId, i: Record<string, unknown>) {
   const prompt = String(i.prompt ?? "").trim();
   if (!prompt) throw new WorkflowError("프롬프트가 비어 있습니다.");
-  if (model === "soul-standard") {
-    const aspect = ASPECTS.includes(String(i.aspect_ratio)) ? String(i.aspect_ratio) : "1:1";
-    const resolution = i.resolution === "1080p" ? "1080p" : "720p";
+  const aspect = ASPECTS.includes(String(i.aspect_ratio)) ? String(i.aspect_ratio) : "1:1";
+  if (model === "soul-standard" || model === "soul-v2" || model === "soul-cinema") {
+    const resolution = i.resolution === "720p" ? "720p" : "1080p";
     return { prompt, aspect_ratio: aspect, resolution, batch_size: 1, enhance_prompt: false };
   }
+  if (model === "qwen-image-3") return { prompt, aspect_ratio: aspect, resolution: "2k", prompt_extend: false };
+  if (model === "z-image-turbo") return { prompt: prompt.slice(0, 800), aspect_ratio: aspect, resolution: "2k", prompt_extend: false };
+  if (model === "ideogram-4") return { prompt: prompt.slice(0, 2048), aspect_ratio: aspect, rendering_speed: "DEFAULT" };
   // wan-2.6-i2v
   const image_url = String(i.image_url ?? "").trim();
   if (!/^https:\/\//.test(image_url)) throw new WorkflowError("영상의 시작 이미지 URL(https)이 필요합니다. 먼저 이미지를 생성하거나 이미지 주소를 넣으세요.");
@@ -40,6 +43,13 @@ function buildBody(model: HfModelId, i: Record<string, unknown>) {
   const body: Record<string, unknown> = { prompt, image_url, duration, resolution };
   if (String(i.negative_prompt ?? "").trim()) body.negative_prompt = String(i.negative_prompt).trim();
   return body;
+}
+
+/** 예상 비용 (생성하지 않음) */
+export async function estimateMedia(input: { model: string } & Record<string, unknown>) {
+  if (!(input.model in HF_MODELS)) throw new WorkflowError("지원하지 않는 모델입니다.");
+  const model = input.model as HfModelId;
+  return hfEstimate(HF_MODELS[model].path, buildBody(model, input));
 }
 
 export async function createMediaJob(input: { model: string; promptId?: string | null; projectId?: string | null } & Record<string, unknown>): Promise<MediaJob> {

@@ -303,3 +303,14 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 @media (max-width: 560px) { .kv { grid-template-columns: 1fr; } .kv dt { margin-top: 6px; } }
 .chip-input { display: flex; flex-wrap: wrap; gap: 6px; }
 .phase2 { border-style: dashed; }
+
+/* 접고 펼치는 비용 카드 */
+.cost-card > summary { list-style: none; }
+.cost-card > summary::-webkit-details-marker { display: none; }
+.cost-card:not([open]) > summary { border-bottom: 0; }
+.cost-arrow { display: inline-block; transition: transform .15s; color: var(--muted); }
+.cost-card[open] .cost-arrow { transform: rotate(90deg); }
+
+/* 진행 현황에서 글을 고르면 아래에 뜨는 막대 */
+.selection-bar { position: sticky; bottom: 16px; z-index: 20; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
+@media (max-width: 860px) { .selection-bar { bottom: 76px; } }

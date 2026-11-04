@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function Blogs() {
   const blogs = await listBlogs(true);
   const counts = await q<{ blog_id: string; n: number; done: number }>(
-    "SELECT blog_id, COUNT(*)::int AS n, SUM(CASE WHEN stage='done' THEN 1 ELSE 0 END)::int AS done FROM projects GROUP BY blog_id",
+    "SELECT blog_id, COUNT(*)::int AS n, SUM(CASE WHEN stage='done' THEN 1 ELSE 0 END)::int AS done FROM projects WHERE deleted_at IS NULL GROUP BY blog_id",
   );
   const c = Object.fromEntries(counts.map((x) => [x.blog_id, x]));
   const sampleRows = await q<{ blog_id: string; n: number }>("SELECT blog_id, COUNT(*)::int AS n FROM blog_samples WHERE enabled=TRUE GROUP BY blog_id");
