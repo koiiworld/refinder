@@ -20,32 +20,7 @@ services:
       # 비밀번호 없이 공개되는 것을 막음 (APP_PASSWORD 미설정 시 앱 차단)
       - key: REQUIRE_PASSWORD
         value: "1"
-      - key: APP_PASSWORD
-        sync: false
-      # Supabase > Connect > Session pooler 연결 문자열 (IPv4 지원)
-      - key: DATABASE_URL
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: GOOGLE_AI_API_KEY
-        sync: false
-      # 네이버 데이터랩 (API HUB 방식)
-      - key: NAVER_CLIENT_ID
-        sync: false
-      - key: NAVER_CLIENT_SECRET
-        sync: false
-      # 네이버 검색광고 (월간 검색수·연관 키워드)
-      - key: NAVER_AD_API_KEY
-        sync: false
-      - key: NAVER_AD_SECRET_KEY
-        sync: false
-      - key: NAVER_AD_CUSTOMER_ID
-        sync: false
-      # 유튜브 인기 급상승·트렌드 뷰어
-      - key: YOUTUBE_API_KEY
-        sync: false
-      # Higgsfield 이미지 생성 (키ID:시크릿)
-      - key: HIGGSFIELD_API_KEY
-        sync: false
+# 키(APP_PASSWORD, DATABASE_URL, AI·네이버·유튜브·Higgsfield 키)는 저장소에 넣지 않습니다.
+# 배포 후 Render > 서비스 > Environment > "Add from .env" 에 한 번에 붙여 넣으세요.
+# 필요한 이름: APP_PASSWORD, DATABASE_URL(Supabase Session pooler), OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY,
+#   NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, NAVER_AD_API_KEY, NAVER_AD_SECRET_KEY, NAVER_AD_CUSTOMER_ID, YOUTUBE_API_KEY, HIGGSFIELD_API_KEY
