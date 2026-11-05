@@ -31,7 +31,21 @@ services:
         sync: false
       - key: GOOGLE_AI_API_KEY
         sync: false
+      # 네이버 데이터랩 (API HUB 방식)
       - key: NAVER_CLIENT_ID
         sync: false
       - key: NAVER_CLIENT_SECRET
+        sync: false
+      # 네이버 검색광고 (월간 검색수·연관 키워드)
+      - key: NAVER_AD_API_KEY
+        sync: false
+      - key: NAVER_AD_SECRET_KEY
+        sync: false
+      - key: NAVER_AD_CUSTOMER_ID
+        sync: false
+      # 유튜브 인기 급상승·트렌드 뷰어
+      - key: YOUTUBE_API_KEY
+        sync: false
+      # Higgsfield 이미지 생성 (키ID:시크릿)
+      - key: HIGGSFIELD_API_KEY
         sync: false
