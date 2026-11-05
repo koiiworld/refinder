@@ -29,6 +29,7 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
   const [err, setErr] = useState("");
   const [toast, setToast] = useToast();
   const [showTrend, setShowTrend] = useState(false);
+  const [showBench, setShowBench] = useState(false);
   const blog = blogs.find((b) => b.id === blogId);
 
   const load = useCallback(async () => {
@@ -103,6 +104,10 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
           {showTrend ? "▾" : "▸"} 네이버 크리에이터 어드바이저 유입 트렌드 붙여넣기 (선택)
         </button>
         {showTrend && <CreatorPaste blogId={blogId} onDone={(m) => setToast(m)} />}
+        <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setShowBench(!showBench)}>
+          {showBench ? "▾" : "▸"} 🔍 인기 글 분석해서 내 블로그에 적용 (크리에이터 어드바이저 인기 콘텐츠 등)
+        </button>
+        {showBench && <Benchmark key={blogId} blogId={blogId} onAdded={async (m) => { setToast(m); await load(); }} />}
       </section>
 
       {/* ② 키워드 선택 */}
@@ -287,3 +292,144 @@ function CreatorPaste({ blogId, onDone }: { blogId: string; onDone: (m: string) 
     </div>
   );
 }
+
+type BenchResult = {
+  fetched: { url: string; title: string; stats: { chars: number; headings: number; images: number; lists: number; tables: number }; error?: string }[];
+  analysis: {
+    posts: { title: string; titlePattern: string; hook: string; structure: string; whyPopular: string; keywords: string[] }[];
+    common: string[];
+    apply: { titleIdeas: { title: string; keyword: string; reason: string }[]; keywords: { keyword: string; reason: string }[]; tips: string[] };
+  };
+  volumes: Record<string, number | null>;
+  ai: { provider: string; model: string };
+  at: string;
+};
+
+function Benchmark({ blogId, onAdded }: { blogId: string; onAdded: (m: string) => Promise<void> }) {
+  const [urls, setUrls] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [r, setR] = useState<BenchResult | null>(null);
+  const [added, setAdded] = useState<string[]>([]);
+  useEffect(() => {
+    api<BenchResult | null>(`/api/research/benchmark?blogId=${blogId}`).then((x) => x && setR(x)).catch(() => {});
+  }, [blogId]);
+
+  async function analyze() {
+    setBusy(true);
+    setErr("");
+    try {
+      setR(await api<BenchResult>("/api/research/benchmark", "POST", { blogId, urls: urls.split(/\s+/).filter(Boolean) }));
+      setAdded([]);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setBusy(false);
+  }
+  async function addKeyword(k: string) {
+    try {
+      await api("/api/keywords", "POST", { action: "add", blogId, keyword: k });
+      setAdded((a) => [...a, k]);
+      await onAdded(`"${k}"를 ② 키워드 목록에 추가했습니다.`);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+  const vol = (k: string) => (r?.volumes?.[k] != null ? `월 ${Number(r.volumes[k]).toLocaleString("ko-KR")}` : "");
+
+  return (
+    <div className="card card-pad stack" style={{ background: "var(--panel-2)", gap: 10 }}>
+      <p className="tiny muted" style={{ margin: 0 }}>
+        잘 되는 글의 주소를 한 줄에 하나씩 넣으세요 (네이버 블로그·티스토리 공개 글, 최대 5개). AI가 제목 공식·도입·구성·인기 이유를 분석하고, 이 블로그에 맞는 제목·키워드·작성 팁을 제안합니다. 내용은 베끼지 않고 <b>방식만</b> 가져옵니다.
+      </p>
+      <textarea className="textarea" placeholder={"https://blog.naver.com/아이디/글번호\nhttps://blog.naver.com/아이디/글번호"} value={urls} disabled={busy} onChange={(e) => setUrls(e.target.value)} />
+      <div className="row">
+        <button className="btn btn-primary btn-sm" disabled={busy || !urls.trim()} onClick={analyze}>{busy ? <><span className="spinner" /> 글을 읽고 분석하는 중… (30초~1분)</> : "분석하기"}</button>
+        <span className="tiny muted">AI 비용이 조금 듭니다 (키워드 추천 담당 AI)</span>
+      </div>
+      {err && <div className="notice notice-bad small" style={{ whiteSpace: "pre-wrap" }}>{err}</div>}
+      {r && (
+        <div className="stack" style={{ gap: 12 }}>
+          <div className="tiny muted">{fmtWhen(r.at)} 분석 · {r.ai.provider}/{r.ai.model}</div>
+
+          <div className="card card-pad stack" style={{ gap: 8 }}>
+            <b className="small">✨ 이 블로그에 적용할 제목 아이디어</b>
+            {r.analysis.apply.titleIdeas.map((t, i) => (
+              <div key={i} className="row between" style={{ flexWrap: "nowrap", alignItems: "flex-start", gap: 8, borderTop: i ? "1px solid var(--line)" : undefined, paddingTop: i ? 8 : 0 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="small strong">{t.title}</div>
+                  <div className="tiny muted">{t.reason}</div>
+                </div>
+                {t.keyword && (
+                  <button className="btn btn-sm" style={{ flexShrink: 0 }} disabled={added.includes(t.keyword)} onClick={() => addKeyword(t.keyword)} title="② 키워드 목록에 추가">
+                    {added.includes(t.keyword) ? "추가됨" : `+ ${t.keyword}`} {vol(t.keyword) && <span className="tiny muted">{vol(t.keyword)}</span>}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {!!r.analysis.apply.keywords.length && (
+            <div className="card card-pad stack" style={{ gap: 6 }}>
+              <b className="small">🔑 노려 볼 키워드 <span className="tiny muted">(누르면 ② 목록에 추가 · 월간 검색수는 네이버 실제 값)</span></b>
+              <div className="row" style={{ gap: 6 }}>
+                {r.analysis.apply.keywords.map((k) => (
+                  <button key={k.keyword} className="btn btn-sm" disabled={added.includes(k.keyword)} onClick={() => addKeyword(k.keyword)} title={k.reason}>
+                    {added.includes(k.keyword) ? "✓ " : "+ "}{k.keyword} {vol(k.keyword) && <span className="tiny muted">{vol(k.keyword)}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!!r.analysis.apply.tips.length && (
+            <div className="card card-pad stack" style={{ gap: 4 }}>
+              <b className="small">📝 글 쓸 때 따라 할 팁</b>
+              {r.analysis.apply.tips.map((t, i) => <div key={i} className="small">• {t}</div>)}
+              <div className="tiny muted">글을 쓴 뒤 ④의 &apos;수정 요청사항&apos;에 붙여 넣으면 그대로 반영할 수 있어요.</div>
+            </div>
+          )}
+
+          {!!r.analysis.common.length && (
+            <div className="card card-pad stack" style={{ gap: 4 }}>
+              <b className="small">📊 인기 글 공통 패턴</b>
+              {r.analysis.common.map((c, i) => <div key={i} className="small">• {c}</div>)}
+            </div>
+          )}
+
+          <details className="fold">
+            <summary className="small" style={{ color: "var(--accent)", cursor: "pointer" }}>글별 분석 보기 ({r.fetched.length}개)</summary>
+            <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+              {r.fetched.map((f, i) => {
+                const a = r.analysis.posts[r.fetched.filter((x, j) => j < i && !x.error).length];
+                return (
+                  <div key={f.url} className="card card-pad stack" style={{ gap: 4 }}>
+                    <a href={f.url} target="_blank" rel="noreferrer" className="small strong" style={{ color: "var(--accent)" }}>{f.title || f.url} ↗</a>
+                    {f.error ? (
+                      <div className="tiny" style={{ color: "var(--bad)" }}>읽지 못함: {f.error}</div>
+                    ) : (
+                      <>
+                        <div className="tiny muted">본문 {f.stats.chars.toLocaleString()}자 · 소제목 {f.stats.headings}개 · 사진 {f.stats.images}장 · 목록 {f.stats.lists}줄 · 표 {f.stats.tables}개</div>
+                        {a && (
+                          <>
+                            <div className="small"><b>제목 공식</b> {a.titlePattern}</div>
+                            <div className="small"><b>도입</b> {a.hook}</div>
+                            <div className="small"><b>구성</b> {a.structure}</div>
+                            <div className="small"><b>인기 이유</b> {a.whyPopular}</div>
+                            {!!a.keywords?.length && <div className="tiny muted">노리는 키워드: {a.keywords.join(", ")}</div>}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const fmtWhen = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });

@@ -342,6 +342,24 @@ test("트렌드 뷰어: 유튜브 급상승 카드 · 스크랩 추가/해제", 
   assert.equal((await call("/api/trends?scraps=1")).data.length, 0);
 });
 
+test("인기 글 분석: 주소로 글 읽기 → 구조 수치 + AI 분석 + 내 블로그 적용 제안(실제 검색량)", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  const r = await call("/api/research/benchmark", "POST", { blogId: "blog_algokitchen", urls: ["https://blog.naver.com/algo_kitchen/224458356410", "http://169.254.169.254/latest/meta-data"] });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const ok = r.data.fetched.find((f) => !f.error);
+  assert.equal(ok.title, "양배추 두부전 만들기");
+  assert.ok(ok.stats.chars > 50 && ok.stats.lists === 3 && ok.stats.headings === 1, JSON.stringify(ok.stats));
+  assert.ok(r.data.fetched.some((f) => f.error), "허용하지 않는 주소는 읽지 않고 표시");
+  assert.equal(r.data.analysis.apply.titleIdeas[0].keyword, "굴보쌈");
+  assert.equal(r.data.volumes["굴보쌈"], 10000, "제안 키워드 실제 검색량");
+  const bp = await stepPrompt("콘텐츠 전략가");
+  assert.match(bp, /소제목 1개, 이미지 0장, 목록 줄 3개/);
+  assert.match(bp, /방식/);
+  const last = (await call("/api/research/benchmark?blogId=blog_algokitchen")).data;
+  assert.equal(last.analysis.apply.titleIdeas.length, 1, "마지막 분석 다시 보기");
+  assert.equal((await call("/api/research/benchmark", "POST", { blogId: "blog_algokitchen", urls: [] })).status, 400);
+});
+
 test("모델 목록 · Higgsfield 연결 확인", async () => {
   assert.deepEqual((await call("/api/ai/models?provider=openai")).data.models, ["gpt-mock-1", "gpt-mock-2"]);
   assert.match((await call("/api/ai/models?provider=higgsfield")).data.note, /인증 성공/);
