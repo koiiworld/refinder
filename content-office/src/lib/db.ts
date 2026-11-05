@@ -44,6 +44,10 @@ async function createDriver(): Promise<Driver> {
     };
   }
 
+  // Render 같은 클라우드 무료 서버(512MB)에서는 내장 DB(PGlite)가 메모리를 ~500MB 써서 꺼짐 → 외부 DB 필수
+  if (process.env.RENDER || process.env.REQUIRE_EXTERNAL_DB === "1") {
+    throw new Error("DATABASE_URL(Supabase 연결 주소)이 설정되지 않았습니다. Render > Environment 에 넣어 주세요.");
+  }
   const { PGlite, types } = await import("@electric-sql/pglite");
   const dir = process.env.PGLITE_DIR || path.join(process.cwd(), "data", "pglite");
   fs.mkdirSync(dir, { recursive: true });
