@@ -43,7 +43,7 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
   const imageProviders: Record<string, boolean> = {
     higgsfield,
     openai: !!b.connections.find((c) => c.provider === "openai")?.connected,
-    google: !!b.connections.find((c) => c.provider === "google")?.connected,
+    google: !!b.connections.find((c) => c.provider === "google-image")?.connected,
   };
   // 제목 입력칸: 서버 제목이 바뀌면(저장·다시 뽑기) 따라감
   const [titleDraft, setTitleDraft] = useState(title);

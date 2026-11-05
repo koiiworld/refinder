@@ -35,6 +35,11 @@ export async function resolveAssignment(
 ): Promise<{ assignment: RoleAssignment; fallback: boolean; reason?: string }> {
   const wanted = override ?? blog?.ai_roles?.[role] ?? DEFAULT_ROLES[role]!;
   if (isConnected(wanted.provider)) return { assignment: wanted, fallback: false };
+  // 담당 AI 키가 없으면(예: 글쓰기용 무료 Gemini 키 없음) 연결된 다른 AI로
+  const { FALLBACK_MODELS } = await import("../steps");
+  for (const p of ["openai", "anthropic", "google"] as const) {
+    if (p !== wanted.provider && isConnected(p)) return { assignment: { provider: p, model: FALLBACK_MODELS[p] }, fallback: true, reason: `${PROVIDER_LABELS[wanted.provider]} 미연결 → ${PROVIDER_LABELS[p]} 사용` };
+  }
   const settings = await getSettings();
   if (settings.fallbackToTemplate) {
     return {

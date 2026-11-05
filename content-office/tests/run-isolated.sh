@@ -18,7 +18,7 @@ MOCK=$!
 env -i PATH="$PATH" HOME="$HOME" PGLITE_DIR=./data/wf ./node_modules/.bin/next start -p 3101 > wf.log 2>&1 &
 WF=$!
 env -i PATH="$PATH" HOME="$HOME" PGLITE_DIR=./data/ai \
-  OPENAI_API_KEY=test-openai ANTHROPIC_API_KEY=test-anthropic GOOGLE_AI_API_KEY=test-google HIGGSFIELD_API_KEY=test-id:test-secret \
+  OPENAI_API_KEY=test-openai ANTHROPIC_API_KEY=test-anthropic GOOGLE_AI_API_KEY=test-google GOOGLE_AI_TEXT_API_KEY=test-google HIGGSFIELD_API_KEY=test-id:test-secret \
   OPENAI_BASE_URL=http://localhost:4110 ANTHROPIC_BASE_URL=http://localhost:4110 GOOGLE_AI_BASE_URL=http://localhost:4110 HIGGSFIELD_BASE_URL=http://localhost:4110 \
   NAVER_AD_API_KEY=test-ad-key NAVER_AD_SECRET_KEY=test-ad-secret NAVER_AD_CUSTOMER_ID=12345 NAVER_AD_BASE_URL=http://localhost:4110 \
   NAVER_CLIENT_ID=test-dl-id NAVER_CLIENT_SECRET=test-dl-key NAVER_DATALAB_URL=http://localhost:4110/search-trend/v1/search \

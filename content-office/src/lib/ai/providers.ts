@@ -46,7 +46,8 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
 const ENV_KEYS: Record<Exclude<ProviderId, "template">, string> = {
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
-  google: "GOOGLE_AI_API_KEY",
+  // 글쓰기용 Gemini 는 '결제를 켜지 않은 프로젝트'의 무료 키만 사용 (결제가 켜진 GOOGLE_AI_API_KEY 는 이미지 전용)
+  google: "GOOGLE_AI_TEXT_API_KEY",
 };
 
 export function providerKey(p: ProviderId): string | undefined {
@@ -67,8 +68,13 @@ export function connectionStatus() {
     connected: !!providerKey(p),
     media: false,
   }));
-  // Higgsfield: 이미지·영상 생성 전용 (글 작성 역할에는 배정되지 않음)
-  return [...text, { provider: "higgsfield", label: "Higgsfield (이미지·영상)", envKey: `${HF_ENV} (키ID:시크릿)`, connected: hfConnected(), media: true }];
+  text[2].label = "Gemini (Google) 글쓰기 — 무료 키만";
+  // Higgsfield·Gemini 이미지: 이미지 생성 전용 (글 작성 역할에는 배정되지 않음)
+  return [
+    ...text,
+    { provider: "higgsfield", label: "Higgsfield (이미지·영상)", envKey: `${HF_ENV} (키ID:시크릿)`, connected: hfConnected(), media: true },
+    { provider: "google-image", label: "Gemini 이미지 (결제된 키)", envKey: "GOOGLE_AI_API_KEY", connected: !!process.env.GOOGLE_AI_API_KEY?.trim(), media: true },
+  ];
 }
 
 const TIMEOUT_MS = 180_000;
