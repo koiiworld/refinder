@@ -110,15 +110,25 @@ export async function markPublished(projectId: string, url: string | null, publi
 }
 
 /** ⑥ 검수 지적 사항을 AI로 고치기 */
-export async function requestFix(projectId: string, indexes: number[]) {
+export async function requestFix(projectId: string, indexes: number[], notes: Record<string, string> = {}) {
   const p = await getProject(projectId);
   const issues = (p?.review as unknown as { issues?: unknown[] } | null)?.issues ?? [];
   const valid = Array.from(new Set(indexes.map(Number))).filter((i) => Number.isInteger(i) && i >= 0 && i < issues.length);
   if (!p || !valid.length) throw new WorkflowError("고칠 지적 사항을 고르세요.");
   await noRunningJob(projectId);
+  if (Object.keys(notes).length) await saveIssueNotes(projectId, notes);
   await updateProject(projectId, { status: "running", status_message: "" });
   await enqueue("fix", { projectId, payload: { indexes: valid } });
   await addEvent(projectId, "rerun", `⑥ 지적 ${valid.length}건 AI 수정 요청`);
+}
+
+/** ⑥ 검수 지적마다 사용자가 단 코멘트 저장 (AI 수정 때 함께 반영) */
+export async function saveIssueNotes(projectId: string, notes: Record<string, string>) {
+  const p = await getProject(projectId);
+  const review = p?.review as unknown as { issues?: Record<string, unknown>[] } | null;
+  if (!p || !review?.issues) throw new WorkflowError("검수 결과가 없습니다.");
+  const issues = review.issues.map((it, i) => (String(i) in notes ? { ...it, userNote: String(notes[String(i)] ?? "").slice(0, 2000) } : it));
+  await updateProject(projectId, { review: { ...review, issues } });
 }
 
 /** ④ 사용자가 직접 적은 수정 요청사항을 AI가 해당 부분만 반영 */

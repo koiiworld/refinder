@@ -116,14 +116,14 @@ ${input.html}
 }
 
 // ───────── ⑥ 검수 지적 반영 (AI 수정) ─────────
-export function fixPrompt(blog: Blog, input: { title: string; html: string; issues: { type: string; severity: string; quote: string; comment: string; suggestion: string }[] }) {
+export function fixPrompt(blog: Blog, input: { title: string; html: string; issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; userNote?: string }[] }) {
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 편집자의 검수 지적을 반영해 원고를 고칩니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
   const prompt = `${blogContext(blog)}
 ${styleSamplesText(blog)}
 [제목] ${input.title}
 
 [고쳐야 할 검수 지적]
-${input.issues.map((it, i) => `${i + 1}. (${it.severity}/${it.type}) 문제 부분: "${it.quote}"\n   설명: ${it.comment}\n   수정 제안: ${it.suggestion || "(없음)"}`).join("\n")}
+${input.issues.map((it, i) => `${i + 1}. (${it.severity}/${it.type}) 문제 부분: "${it.quote}"\n   설명: ${it.comment}\n   수정 제안: ${it.suggestion || "(없음)"}${it.userNote?.trim() ? `\n   ★ 블로그 주인 코멘트 (수정 제안보다 우선, 반드시 따를 것): ${it.userNote.trim()}` : ""}`).join("\n")}
 
 [현재 원고 HTML]
 ${input.html}

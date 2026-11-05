@@ -137,6 +137,21 @@ test("⑥ 검수 지적 '수정 요청' → AI가 해당 부분만 고침 → �
   assert.match(fp, /지적과 관계없는 문장·구성·말투는 그대로/);
 });
 
+test("⑥ 검수 지적에 내 코멘트 달기 → 저장 → AI 수정 때 코멘트 우선 반영", async () => {
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  const id = posts[0].id;
+  await call(`/api/posts/${id}`, "POST", { action: "issue_note", index: 0, note: "첫 문장은 질문형으로 바꿔 주세요" });
+  let b = (await call(`/api/posts/${id}`)).data;
+  assert.equal(b.project.review.issues[0].userNote, "첫 문장은 질문형으로 바꿔 주세요", "코멘트 저장");
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "fix_issues", indexes: [0], notes: { 0: "도입부를 짧게, 질문형으로" } });
+  b = await waitPost(id, (x) => x.project.status !== "running" && idle(x), "코멘트 반영 수정");
+  assert.equal(b.project.review.issues[0].userNote, "도입부를 짧게, 질문형으로", "수정 때 보낸 코멘트로 갱신");
+  const fp = await stepPrompt("검수 지적을 반영해");
+  assert.match(fp, /블로그 주인 코멘트/);
+  assert.match(fp, /도입부를 짧게, 질문형으로/);
+});
+
 test("④ 수정 요청사항 직접 입력 → AI가 그 내용만 반영", async () => {
   const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
   const id = posts[0].id;

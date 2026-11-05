@@ -137,7 +137,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
   // ⑥ 검수에서 고른 지적 사항을 AI가 반영 (본문 일부만 수정) → '다시 검수' 권장
   async fix(job) {
     const { project, blog } = await load(job);
-    const review = project.review as unknown as (ReviewResult & { issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; fixed?: boolean }[] }) | null;
+    const review = project.review as unknown as (ReviewResult & { issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; fixed?: boolean; userNote?: string }[] }) | null;
     const doc = await getDocument(project.id);
     const indexes = arr(job.payload.indexes).map(Number);
     const note = String(job.payload.note ?? "").trim();

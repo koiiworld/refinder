@@ -15,7 +15,7 @@ import { IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel } from "@/lib/image-mode
 type Review = {
   summary: string;
   score: number | null;
-  issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; fixed?: boolean }[];
+  issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; fixed?: boolean; userNote?: string }[];
   lastFix?: { at: string; changes: string[] };
   imageChecks?: { index: number; ok: boolean; note: string }[];
   provider: string;
@@ -188,7 +188,8 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
               busy={running}
               fixing={b.jobs.some((j) => j.type === "fix")}
               reviewing={b.jobs.some((j) => j.type === "review")}
-              onFix={(indexes) => act({ action: "fix_issues", indexes }, `지적 ${indexes.length}건을 AI가 고치고 있습니다.`)}
+              onFix={(indexes, notes) => act({ action: "fix_issues", indexes, notes: Object.fromEntries(Object.entries(notes).filter(([k]) => indexes.includes(Number(k)))) }, `지적 ${indexes.length}건을 AI가 고치고 있습니다.`)}
+              onNote={(index, note) => void act({ action: "issue_note", index, note })}
               onRereview={() => act({ action: "rerun", step: "review" }, "다시 검수합니다.")}
             />
           )}
@@ -536,13 +537,15 @@ function OfficialImageCard({ index, im, disabled, act }: { index: number; im: Po
   );
 }
 
-function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFix, onRereview }: { review: Review; rereview: boolean; imagesNow: number; busy: boolean; fixing: boolean; reviewing: boolean; onFix: (indexes: number[]) => void; onRereview: () => void }) {
+function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFix, onNote, onRereview }: { review: Review; rereview: boolean; imagesNow: number; busy: boolean; fixing: boolean; reviewing: boolean; onFix: (indexes: number[], notes: Record<number, string>) => void; onNote: (index: number, note: string) => void; onRereview: () => void }) {
   const sev: Record<string, string> = { high: "badge-bad", medium: "badge-warn", low: "" };
+  const [notes, setNotes] = useState<Record<number, string>>(() => Object.fromEntries(review.issues.map((it, i) => [i, it.userNote ?? ""])));
+  useEffect(() => setNotes(Object.fromEntries(review.issues.map((it, i) => [i, it.userNote ?? ""]))), [review]);
   const open = review.issues.map((it, i) => (it.fixed ? -1 : i)).filter((i) => i >= 0);
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="row">
-        <button className="btn btn-sm btn-primary" disabled={busy || !open.length} onClick={() => confirm(`남은 지적 ${open.length}건을 AI가 본문에 반영할까요?\n지적과 관계없는 부분은 그대로 둡니다.`) && onFix(open)}>
+        <button className="btn btn-sm btn-primary" disabled={busy || !open.length} onClick={() => confirm(`남은 지적 ${open.length}건을 AI가 본문에 반영할까요?\n적어 둔 내 코멘트도 함께 반영하고, 지적과 관계없는 부분은 그대로 둡니다.`) && onFix(open, notes)}>
           {fixing ? <><span className="spinner" /> AI가 고치는 중…</> : `✏️ 지적 모두 AI로 수정 (${open.length})`}
         </button>
         <button className="btn btn-sm" disabled={busy} onClick={onRereview}>
@@ -563,22 +566,36 @@ function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFi
         <p className="small" style={{ flex: 1 }}>{review.summary}</p>
         {review.score !== null && <span className="badge badge-accent">점수 {review.score}/100</span>}
       </div>
-      {review.issues.map((it, i) => (
-        <div key={i} className="card card-pad stack" style={{ gap: 4, padding: 10 }}>
-          <div className="row"><span className={`badge ${sev[it.severity] ?? ""}`}>{it.severity}</span><span className="badge">{it.type}</span></div>
-          {it.quote && <div className="tiny muted">“{it.quote}”</div>}
-          <div className="small">{it.comment}</div>
-          {it.suggestion && <div className="small" style={{ color: "var(--ok)" }}>→ {it.suggestion}</div>}
-          <div className="row" style={{ marginTop: 4 }}>
-            {it.fixed ? (
-              <span className="badge badge-ok">✅ AI가 수정함 · 다시 검수로 확인</span>
-            ) : (
-              <button className="btn btn-sm" disabled={busy} onClick={() => onFix([i])}>✏️ 수정 요청</button>
-            )}
-            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={onRereview}>🔄 다시 검수</button>
+      {review.issues.map((it, i) => {
+        const note = notes[i] ?? "";
+        const noteChanged = note.trim() !== (it.userNote ?? "").trim();
+        return (
+          <div key={i} className="card card-pad stack" style={{ gap: 4, padding: 10 }}>
+            <div className="row"><span className={`badge ${sev[it.severity] ?? ""}`}>{it.severity}</span><span className="badge">{it.type}</span></div>
+            {it.quote && <div className="tiny muted">“{it.quote}”</div>}
+            <div className="small">{it.comment}</div>
+            {it.suggestion && <div className="small" style={{ color: "var(--ok)" }}>→ {it.suggestion}</div>}
+            <textarea
+              className="textarea"
+              style={{ minHeight: 44, fontSize: 13, marginTop: 4 }}
+              placeholder="💬 내 코멘트 (선택) — 예: 링크는 넣지 말고 확인일만 적어 주세요 / 이 부분은 그대로 둬도 돼요"
+              value={note}
+              disabled={busy}
+              onChange={(e) => setNotes((n) => ({ ...n, [i]: e.target.value }))}
+              onBlur={() => noteChanged && onNote(i, note)}
+              aria-label={`지적 ${i + 1} 내 코멘트`}
+            />
+            <div className="row" style={{ marginTop: 4 }}>
+              {it.fixed && !noteChanged ? (
+                <span className="badge badge-ok">✅ AI가 수정함 · 다시 검수로 확인</span>
+              ) : (
+                <button className="btn btn-sm" disabled={busy} onClick={() => onFix([i], { [i]: note })}>{it.fixed ? "✏️ 코멘트대로 다시 수정" : note.trim() ? "✏️ 코멘트 반영해 수정 요청" : "✏️ 수정 요청"}</button>
+              )}
+              <button className="btn btn-sm btn-ghost" disabled={busy} onClick={onRereview}>🔄 다시 검수</button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       {!review.issues.length && <p className="small muted">지적 사항 없음</p>}
       {!!review.imageChecks?.length && (
         <div>
