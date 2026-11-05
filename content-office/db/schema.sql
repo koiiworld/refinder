@@ -287,3 +287,18 @@ CREATE TABLE IF NOT EXISTS blog_visits (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (blog_id, day)
 );
+-- 트렌드 뷰어 스크랩 (유튜브 급상승 영상 저장)
+CREATE TABLE IF NOT EXISTS trend_scraps (
+  id          TEXT PRIMARY KEY,
+  source      TEXT NOT NULL DEFAULT 'youtube',
+  item_id     TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  channel     TEXT NOT NULL DEFAULT '',
+  thumbnail   TEXT NOT NULL DEFAULT '',
+  url         TEXT NOT NULL,
+  views       BIGINT,
+  category    TEXT NOT NULL DEFAULT '',
+  memo        TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (source, item_id)
+);

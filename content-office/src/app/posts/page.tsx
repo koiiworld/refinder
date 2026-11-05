@@ -38,7 +38,10 @@ export default async function Posts() {
           <h1>진행 현황</h1>
           <p className="sub">AI가 ③ 제목 후보를 뽑으면 직접 고르고 '글 쓰기'를 누르세요. 그 뒤 ④ 글 → ⑥ 검수는 자동으로 진행되고, 이 화면을 닫아도 계속됩니다.</p>
         </div>
-        <Link href="/new" className="btn btn-primary">+ 키워드 더 고르기</Link>
+        <div className="row">
+          <Link href="/trash" className="btn">🗑 휴지통</Link>
+          <Link href="/new" className="btn btn-primary">+ 키워드 더 고르기</Link>
+        </div>
       </div>
       <div className="stack" style={{ gap: 16 }}>
         <details className="card cost-card">

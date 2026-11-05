@@ -38,6 +38,9 @@ export interface YtVideo {
   tags: string[];
   thumbnail: string;
   url: string;
+  /** 영상 길이(초). contentDetails 를 요청했을 때만 */
+  seconds?: number;
+  channelId?: string;
 }
 
 async function get(path: string, params: Record<string, string>) {
@@ -56,7 +59,8 @@ async function get(path: string, params: Record<string, string>) {
 
 type RawVideo = {
   id: string | { videoId?: string };
-  snippet?: { title?: string; channelTitle?: string; publishedAt?: string; tags?: string[]; thumbnails?: { medium?: { url?: string } } };
+  snippet?: { title?: string; channelTitle?: string; channelId?: string; publishedAt?: string; tags?: string[]; thumbnails?: Record<string, { url?: string } | undefined> };
+  contentDetails?: { duration?: string };
   statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
 };
 
@@ -73,7 +77,26 @@ function toVideo(v: RawVideo): YtVideo {
     tags: v.snippet?.tags ?? [],
     thumbnail: v.snippet?.thumbnails?.medium?.url ?? "",
     url: `https://www.youtube.com/watch?v=${id}`,
+    channelId: v.snippet?.channelId,
+    ...(v.contentDetails?.duration ? { seconds: isoSeconds(v.contentDetails.duration) } : {}),
   };
+}
+
+/** ISO 8601 길이(PT1H2M3S) → 초 */
+function isoSeconds(d: string) {
+  const m = /P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d);
+  return m ? Number(m[1] ?? 0) * 86400 + Number(m[2] ?? 0) * 3600 + Number(m[3] ?? 0) * 60 + Number(m[4] ?? 0) : 0;
+}
+
+/** 트렌드 뷰어용: 큰 썸네일·길이까지 (할당량 1) */
+export async function trendingVideos(categoryId = "", max = 24) {
+  const params: Record<string, string> = { part: "snippet,statistics,contentDetails", chart: "mostPopular", regionCode: "KR", maxResults: String(max), hl: "ko" };
+  if (categoryId) params.videoCategoryId = categoryId;
+  const d = await get("videos", params);
+  return ((d.items as RawVideo[]) ?? []).map((v) => {
+    const t = v.snippet?.thumbnails ?? {};
+    return { ...toVideo(v), thumbnail: t.maxres?.url ?? t.high?.url ?? t.medium?.url ?? "" };
+  });
 }
 
 const STOP = new Set(["the", "and", "official", "mv", "video", "shorts", "feat", "ep", "with", "of", "in", "to", "a", "vs", "ver", "full", "live", "teaser", "trailer", "m/v", "합니다", "하는", "있는", "없는", "그리고", "이번", "오늘", "진짜", "너무", "우리", "영상", "공식", "최초", "공개", "티저", "예고"]);

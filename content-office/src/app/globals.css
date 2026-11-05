@@ -342,3 +342,23 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .rev-row { grid-template-columns: minmax(0, 1fr); }
   .kpi-num { font-size: 24px; }
 }
+
+/* ───────── 트렌드 뷰어 ───────── */
+.trend-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px; margin-bottom: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; scrollbar-width: none; }
+.trend-tabs::-webkit-scrollbar { display: none; }
+.trend-tab { flex-shrink: 0; padding: 8px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.trend-tab:hover { background: var(--panel-2); color: var(--text); }
+.trend-tab.on { background: var(--accent); color: var(--accent-ink); }
+.trend-tab.on .badge { background: rgba(255,255,255,.25); color: inherit; }
+.trend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.trend-card { display: flex; flex-direction: column; overflow: hidden; }
+.trend-thumb { position: relative; display: block; aspect-ratio: 16 / 9; background: var(--panel-2); overflow: hidden; }
+.trend-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease; }
+.trend-card:hover .trend-thumb img { transform: scale(1.03); }
+.trend-thumb-empty { display: grid; place-items: center; height: 100%; font-size: 28px; color: var(--muted); }
+.trend-rank { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 8px; font-size: 12px; font-weight: 800; background: rgba(17,19,24,.72); color: #fff; }
+.trend-rank.top { background: var(--accent); }
+.trend-len { position: absolute; right: 8px; bottom: 8px; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; background: rgba(17,19,24,.8); color: #fff; }
+.trend-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.trend-title { font-size: 14px; font-weight: 700; line-height: 1.4; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 860px) { .trend-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .trend-body { padding: 10px; } .trend-title { font-size: 13px; } }

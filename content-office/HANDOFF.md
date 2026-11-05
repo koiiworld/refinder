@@ -24,7 +24,7 @@
 | ⑥ 검수 | AI(Claude) | 지적마다 "수정 요청"(AI가 그 부분만 수정, `fix_issues`) / "다시 검수" |
 | ⑦ 발행 | 사용자 | 복사·HTML/MD 다운로드 → 직접 게시 → "발행 완료" |
 
-그 밖: **메인(`/`) = 대시보드**(`src/lib/dashboard.ts` — 실제 기록만: 발행·1차 검수 통과율(첫 검수 80점↑)·완성 글 검색량·AI 비용·10주 추이·블로그별·키워드 TOP5·운영 상태, 수익은 정산 숫자 직접 입력 → `settings` 테이블 `revenue` 키). 글 만들기(①②)는 `/new`. 진행 현황 체크박스 → **휴지통**(되살리기·완전 삭제), 진행 현황 맨 위 **오늘 쓴 AI 비용**(단계별·모델별, 접기), 설정 > 단계별 AI(모델 드롭다운·가격).
+그 밖: **메인(`/`) = 대시보드**(`src/lib/dashboard.ts` — 실제 기록만: 발행·1차 검수 통과율(첫 검수 80점↑)·완성 글 검색량·AI 비용·10주 추이·블로그별·키워드 TOP5·운영 상태, 수익은 정산 숫자 직접 입력 → `settings` 테이블 `revenue` 키). 글 만들기(①②)는 `/new`. **트렌드 뷰어 `/trends`**(`src/lib/trends.ts`: 유튜브 한국 급상승 카테고리별 30분 캐시, 스크랩 `trend_scraps`, '글감으로' → `/new?hint=`). 대시보드 방문자 비교는 `src/lib/visits.ts`(네이버 `m.blog.naver.com/rego/BlogInfo.naver`, 티스토리 PC 화면 카운터, 1시간마다 `blog_visits`). 진행 현황 체크박스 → **휴지통**(되살리기·완전 삭제), 진행 현황 맨 위 **오늘 쓴 AI 비용**(단계별·모델별, 접기), 설정 > 단계별 AI(모델 드롭다운·가격).
 
 ## 2. 코드 구조 (`content-office/`)
 
@@ -49,7 +49,7 @@
 - 키: `content-office/.env.local` (커밋 금지). 변수 이름: `OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY, HIGGSFIELD_API_KEY(키ID:시크릿), NAVER_AD_API_KEY, NAVER_AD_SECRET_KEY, NAVER_AD_CUSTOMER_ID(=3618959, 광고계정ID 106077 아님), NAVER_CLIENT_ID/SECRET(데이터랩, API HUB 방식), YOUTUBE_API_KEY, APP_PASSWORD, PGLITE_DIR, DATABASE_URL(비어 있음)`
 - 데이터: `PGLITE_DIR=/Users/minemone/.ai-content-office/pglite` (iCloud 밖. 블로그 설정·말투 예시·글·비용 기록이 모두 여기 — **코드가 아니라 DB에 있음**)
 - 실행 스크립트(`~/.ai-content-office/`):
-  - `restart-app.sh` — 3000번 종료 → `.next` 삭제 → `next build` → `npm start` (코드 바꾼 뒤 이걸로 반영)
+  - `restart-app.sh` — `.next-new`에 먼저 빌드(기존 앱 계속 동작) → 성공하면 교체 후 `npm start` (멈춤 수십 초). 빌드 실패 시 기존 앱 유지
   - `start-app.sh` — 빌드 없이 시작
   - `start-tunnel.sh` — Cloudflare 임시 터널(휴대폰 접속용). **재시작하면 주소가 바뀜** → `tunnel.log`에서 `https://*.trycloudflare.com` 확인 후 사용자에게 알려 주기
   - 터미널 창에서 돌리려면: `osascript -e 'tell application "Terminal" to do script "~/.ai-content-office/restart-app.sh"'`
@@ -60,7 +60,7 @@
 
 ```bash
 cd content-office
-zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테스트 (현재 9 + 13 통과)
+zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테스트 (현재 9 + 17 통과)
 ```
 - `tests/workflow.test.mjs` — AI 없이(템플릿) 흐름·휴지통·말투 예시
 - `tests/ai-providers.test.mjs` — 모의 OpenAI/Anthropic/Gemini/네이버/유튜브/Higgsfield/RSS/공식 페이지 서버로 전체 경로

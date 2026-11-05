@@ -325,6 +325,23 @@ test("크리에이터 어드바이저 캡처 → AI가 검색어 목록을 읽�
   assert.equal(saved.data.count, 3);
 });
 
+test("트렌드 뷰어: 유튜브 급상승 카드 · 스크랩 추가/해제", async () => {
+  const html = (await (await fetch(BASE + "/trends")).text()).replace(/<!-- -->/g, "");
+  for (const t of ["트렌드 뷰어", "급상승", "요리·뷰티·살림", "김장 김치 황금레시피 공개", "1위", "조회 90만회", "글감으로"]) assert.ok(html.includes(t), t);
+  const t = (await call("/api/trends?c=26")).data;
+  assert.equal(t.connected, true);
+  assert.ok(t.videos.length >= 1);
+  const v = t.videos[0];
+  assert.equal((await call("/api/trends", "POST", { action: "scrap", item_id: v.id, title: v.title, url: "javascript:alert(1)" })).status, 400, "잘못된 주소 거절");
+  const s = await call("/api/trends", "POST", { action: "scrap", item_id: v.id, title: v.title, channel: v.channel, thumbnail: v.thumbnail, url: v.url, views: v.views, category: "요리·뷰티·살림" });
+  assert.equal(s.status, 200, JSON.stringify(s.data));
+  assert.equal(s.data.scraps[0].item_id, v.id);
+  const sc = (await (await fetch(BASE + "/trends?tab=scraps")).text()).replace(/<!-- -->/g, "");
+  assert.ok(sc.includes(v.title) && sc.includes("스크랩됨"));
+  await call("/api/trends", "POST", { action: "unscrap", item_id: v.id });
+  assert.equal((await call("/api/trends?scraps=1")).data.length, 0);
+});
+
 test("모델 목록 · Higgsfield 연결 확인", async () => {
   assert.deepEqual((await call("/api/ai/models?provider=openai")).data.models, ["gpt-mock-1", "gpt-mock-2"]);
   assert.match((await call("/api/ai/models?provider=higgsfield")).data.note, /인증 성공/);

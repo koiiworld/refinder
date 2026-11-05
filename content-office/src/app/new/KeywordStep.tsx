@@ -19,6 +19,11 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
   const [picks, setPicks] = useState<KeywordPick[]>([]);
   const [sel, setSel] = useState<string[]>([]);
   const [hint, setHint] = useState("");
+  // 트렌드 뷰어 '글감으로'에서 넘어오면 방향 칸을 채워 둠
+  useEffect(() => {
+    const h = new URLSearchParams(window.location.search).get("hint");
+    if (h) setHint(h);
+  }, []);
   const [own, setOwn] = useState("");
   const [busy, setBusy] = useState<"" | "recommend" | "create" | "add">("");
   const [err, setErr] = useState("");
