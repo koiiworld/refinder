@@ -327,8 +327,28 @@ test("크리에이터 어드바이저 캡처 → AI가 검색어 목록을 읽�
 
 test("트렌드 뷰어: 유튜브 급상승 카드 · 스크랩 추가/해제", async () => {
   const html = (await (await fetch(BASE + "/trends")).text()).replace(/<!-- -->/g, "");
-  for (const t of ["트렌드 뷰어", "급상승", "요리·뷰티·살림", "김장 김치 황금레시피 공개", "1위", "조회 90만회", "글감으로"]) assert.ok(html.includes(t), t);
-  const t = (await call("/api/trends?c=26")).data;
+  for (const t of ["트렌드 뷰어", "급상승", "요리", "육아", "IT", "여행", "김장 김치 황금레시피 공개", "1위", "조회 90만회", "글감으로"]) assert.ok(html.includes(t), t);
+  for (const gone of ["게임", "스포츠", "뷰티"]) assert.ok(!html.includes(`</span> ${gone}<`), `${gone} 탭 없음`);
+  // 요리 탭: 인기 급상승(노하우 카테고리) 중 음식 관련만 + 레시피·먹방 등 검색, 뜨는 속도 순
+  await call("/__reset", "POST", undefined, MOCK);
+  const food = (await call("/api/trends?c=food")).data;
+  assert.equal(food.ranked, "speed");
+  assert.ok(!food.videos.some((v) => v.title.includes("캠핑")), "주제와 상관없는 영상 제외");
+  assert.ok(food.videos.some((v) => v.group === "급상승") && food.videos.some((v) => v.group === "레시피"));
+  for (const g of food.groups) {
+    const vs = food.videos.filter((v) => v.group === g);
+    assert.ok(vs.every((v, i, a) => i === 0 || a[i - 1].perHour >= v.perHour), `${g}: 시간당 조회수 순`);
+  }
+  assert.ok(new Set(food.videos.slice(0, food.groups.length).map((v) => v.group)).size > 1, "여러 묶음이 번갈아 위에");
+  const searches = (await mockLog()).filter((l) => l.path === "/youtube/v3/search");
+  assert.equal(searches.length, 4, "요리 탭 검색 4개");
+  // 다시 열면 DB에 저장된 결과 사용 (할당량 절약)
+  await call("/__reset", "POST", undefined, MOCK);
+  await call("/api/trends?c=food");
+  assert.equal((await mockLog()).filter((l) => l.path.startsWith("/youtube/")).length, 0, "6시간 안에는 다시 부르지 않음");
+  const kids = (await call("/api/trends?c=kids")).data;
+  assert.ok(kids.groups.includes("육아 정책"), JSON.stringify(kids.groups));
+  const t = (await call("/api/trends?c=food")).data;
   assert.equal(t.connected, true);
   assert.ok(t.videos.length >= 1);
   const v = t.videos[0];

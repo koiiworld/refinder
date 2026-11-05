@@ -6,7 +6,7 @@ import { useState } from "react";
 import { api } from "@/components/client-utils";
 import { fmtDate } from "@/components/ui";
 
-export type TrendCardVideo = { id: string; title: string; channel: string; thumbnail: string; url: string; views: number; publishedAt: string; seconds?: number; likes?: number; scrappedAt?: string; category?: string };
+export type TrendCardVideo = { id: string; title: string; channel: string; thumbnail: string; url: string; views: number; publishedAt: string; seconds?: number; likes?: number; scrappedAt?: string; category?: string; group?: string; perHour?: number };
 
 const views = (n: number) => (n >= 100_000_000 ? `${(n / 100_000_000).toFixed(1)}억` : n >= 10_000 ? `${Math.round(n / 10_000).toLocaleString("ko-KR")}만` : n.toLocaleString("ko-KR"));
 function ago(iso: string) {
@@ -25,8 +25,11 @@ function len(s?: number) {
 /** 영상 제목 → 키워드 추천 방향 (해시태그·괄호·특수문자 정리) */
 const hintOf = (t: string) => t.replace(/#\S+/g, "").replace(/[\[\(【].*?[\]\)】]/g, " ").replace(/[|｜·•!?~"'“”‘’]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
 
-export default function TrendGrid({ videos, scrapped, category, ranked }: { videos: TrendCardVideo[]; scrapped: string[]; category: string; ranked: boolean }) {
+export default function TrendGrid({ videos: all, groups = [], scrapped, category, ranked }: { videos: TrendCardVideo[]; groups?: string[]; scrapped: string[]; category: string; ranked: boolean }) {
   const router = useRouter();
+  const [group, setGroup] = useState("");
+  const [shortsOnly, setShortsOnly] = useState(false);
+  const videos = all.filter((v) => (!group || v.group === group) && (!shortsOnly || (v.seconds ?? 999) <= 180));
   const [saved, setSaved] = useState<string[]>(scrapped);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -44,6 +47,23 @@ export default function TrendGrid({ videos, scrapped, category, ranked }: { vide
   }
 
   return (
+    <>
+    {(groups.length > 0 || all.some((v) => v.seconds)) && (
+      <div className="row" style={{ gap: 6, marginBottom: 12 }}>
+        {groups.length > 0 && (
+          <>
+            <button className={`chip ${!group ? "on" : ""}`} onClick={() => setGroup("")}>전체 {all.length}</button>
+            {groups.map((g) => (
+              <button key={g} className={`chip ${group === g ? "on" : ""}`} onClick={() => setGroup(g)}>
+                {g} {all.filter((v) => v.group === g).length}
+              </button>
+            ))}
+          </>
+        )}
+        <button className={`chip ${shortsOnly ? "on" : ""}`} onClick={() => setShortsOnly(!shortsOnly)} aria-pressed={shortsOnly}>⚡ 쇼츠만</button>
+      </div>
+    )}
+    {!videos.length && <div className="card empty">조건에 맞는 영상이 없습니다.</div>}
     <div className="trend-grid">
       {videos.map((v, i) => {
         const on = saved.includes(v.id);
@@ -57,13 +77,14 @@ export default function TrendGrid({ videos, scrapped, category, ranked }: { vide
                 <span className="trend-thumb-empty">▶</span>
               )}
               {ranked && <span className={`trend-rank ${i < 3 ? "top" : ""}`}>{i + 1}위</span>}
-              {v.seconds ? <span className="trend-len">{v.seconds <= 60 ? "Shorts" : len(v.seconds)}</span> : null}
+              {v.seconds ? <span className="trend-len">{v.seconds <= 180 ? "Shorts" : len(v.seconds)}</span> : null}
+              {v.group && v.group !== "급상승" && groups.length > 0 && <span className="trend-group">{v.group}</span>}
             </a>
             <div className="trend-body">
               <h3 className="trend-title" title={v.title}>{v.title}</h3>
               <div className="tiny muted ellipsis">{v.channel}</div>
               <div className="tiny muted">
-                조회 {views(v.views)}회{v.publishedAt ? ` · ${ago(v.publishedAt)}` : ""}{v.scrappedAt ? ` · ${fmtDate(v.scrappedAt, false)} 스크랩${v.category ? ` (${v.category})` : ""}` : ""}
+                조회 {views(v.views)}회{v.publishedAt ? ` · ${ago(v.publishedAt)}` : ""}{v.perHour ? ` · 시간당 ${views(v.perHour)}회` : ""}{v.scrappedAt ? ` · ${fmtDate(v.scrappedAt, false)} 스크랩${v.category ? ` (${v.category})` : ""}` : ""}
               </div>
               <div className="row" style={{ gap: 6, marginTop: "auto", paddingTop: 8 }}>
                 <button className={`btn btn-sm ${on ? "btn-primary" : ""}`} disabled={busy === v.id} onClick={() => toggle(v)} aria-pressed={on}>
@@ -76,5 +97,6 @@ export default function TrendGrid({ videos, scrapped, category, ranked }: { vide
         );
       })}
     </div>
+    </>
   );
 }

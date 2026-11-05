@@ -88,6 +88,25 @@ function isoSeconds(d: string) {
   return m ? Number(m[1] ?? 0) * 86400 + Number(m[2] ?? 0) * 3600 + Number(m[3] ?? 0) * 60 + Number(m[4] ?? 0) : 0;
 }
 
+/** 트렌드 뷰어용 검색: 최근 N일 조회수 순 (search 100 + videos 1) */
+export async function searchRecent(query: string, days: number, opts: { short?: boolean; max?: number } = {}) {
+  const after = new Date(Date.now() - days * 86400000).toISOString();
+  const params: Record<string, string> = { part: "id", q: query, type: "video", regionCode: "KR", relevanceLanguage: "ko", order: "viewCount", publishedAfter: after, maxResults: String(opts.max ?? 12), safeSearch: "moderate" };
+  if (opts.short) params.videoDuration = "short";
+  const s = await get("search", params);
+  const ids = ((s.items as RawVideo[]) ?? []).map((v) => (typeof v.id === "string" ? v.id : v.id?.videoId)).filter(Boolean) as string[];
+  if (!ids.length) return [] as YtVideo[];
+  return videosByIds(ids);
+}
+
+export async function videosByIds(ids: string[]) {
+  const d = await get("videos", { part: "snippet,statistics,contentDetails", id: ids.slice(0, 50).join(",") });
+  return ((d.items as RawVideo[]) ?? []).map((v) => {
+    const t = v.snippet?.thumbnails ?? {};
+    return { ...toVideo(v), thumbnail: t.maxres?.url ?? t.high?.url ?? t.medium?.url ?? "" };
+  });
+}
+
 /** 트렌드 뷰어용: 큰 썸네일·길이까지 (할당량 1) */
 export async function trendingVideos(categoryId = "", max = 24) {
   const params: Record<string, string> = { part: "snippet,statistics,contentDetails", chart: "mostPopular", regionCode: "KR", maxResults: String(max), hl: "ko" };

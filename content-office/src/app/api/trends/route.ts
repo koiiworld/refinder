@@ -6,7 +6,7 @@ export async function GET(req: Request) {
   return handle(async () => {
     const sp = new URL(req.url).searchParams;
     if (sp.get("scraps") === "1") return ok(await listScraps());
-    return ok(await trendTab(sp.get("c") ?? "", sp.get("refresh") === "1"));
+    return ok(await trendTab(sp.get("c") ?? "hot"));
   });
 }
 
