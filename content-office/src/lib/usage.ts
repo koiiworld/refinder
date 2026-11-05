@@ -13,6 +13,7 @@ const STEP_OF: Record<string, [string, string]> = {
   write: ["4", "④ 글 작성 (해시태그·이미지 프롬프트 포함)"],
   review: ["6", "⑥ 글·이미지 검수"],
   edit: ["8", "에디터에서 부분 수정"],
+  image: ["5", "⑤ 이미지 생성 (ChatGPT·Gemini)"],
 };
 
 /** 오늘(한국 시간) AI 사용량·비용 — 단계별·모델별. 기록된 비용이 0이면 현재 단가로 다시 계산 */

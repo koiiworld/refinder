@@ -88,9 +88,11 @@ export interface HfSubmitResult {
 }
 
 /** 생성 전 예상 비용 (Higgsfield 견적 API, 생성·차감 없음) */
-export async function hfEstimate(path: string, body: Record<string, unknown>): Promise<{ usd: number; credits: number }> {
+export async function hfEstimate(path: string, body: Record<string, unknown>): Promise<{ usd: number | null; credits: number | null; note?: string }> {
   const d = await call("POST", `${base()}/estimate/${path.replace(/^\//, "")}`, body);
-  return { usd: Number(d.usd ?? 0), credits: Number(d.credits ?? 0) };
+  // 토큰 단위로 과금되는 모델은 금액 대신 설명만 돌려줌
+  if (d.usd == null) return { usd: null, credits: null, note: "쓴 토큰만큼 과금 (미리 금액이 나오지 않음)" };
+  return { usd: Number(d.usd), credits: Number(d.credits ?? 0) };
 }
 
 export async function hfSubmit(path: string, body: Record<string, unknown>, idempotencyKey: string): Promise<HfSubmitResult> {

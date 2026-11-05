@@ -181,6 +181,44 @@ test("⑤ Higgsfield 모델 선택: 예상 비용 · 고른 모델의 공식 요
   assert.ok(!(await mockLog()).some((l) => l.path.startsWith("/wan/")), "영상 모델은 이미지 생성에 안 씀");
 });
 
+test("⑤ ChatGPT·Gemini 이미지: 바로 만들어 저장 → 이 사이트 주소로 공개 · 결제 안 된 Gemini는 안내", async () => {
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  const id = posts[0].id;
+  await call(`/api/posts/${id}`, "POST", { action: "image_prompt", index: 0, aspect: "2:3" });
+  await call("/__reset", "POST", undefined, MOCK);
+  const est = (await call(`/api/posts/${id}`, "POST", { action: "estimate_image", index: 0, model: "openai:gpt-image-2" })).data;
+  assert.equal(est.usd, null, "토큰 과금은 금액 대신 안내");
+  let b = (await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "openai:gpt-image-2" })).data;
+  const url = b.project.package.images[0].url;
+  assert.match(url, /\/api\/img\/img_[0-9a-f]{24}\.jpg$/);
+  assert.equal(b.project.package.images[0].model, "openai:gpt-image-2");
+  const req = (await mockLog()).find((l) => l.path === "/v1/images/generations");
+  assert.equal(req.body.model, "gpt-image-2");
+  assert.equal(req.body.size, "1024x1536", "2:3 → 세로");
+  const img = await fetch(BASE + new URL(url).pathname);
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get("content-type"), "image/jpeg");
+  assert.ok((await img.arrayBuffer()).byteLength > 100);
+  assert.equal((await fetch(BASE + "/api/img/img_000000000000000000000000.jpg")).status, 404);
+  // Gemini
+  b = (await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "google:gemini-3.1-flash-image" })).data;
+  assert.equal(b.project.package.images[0].model, "google:gemini-3.1-flash-image");
+  const g = (await mockLog()).find((l) => l.path.includes("gemini-3.1-flash-image:generateContent"));
+  assert.equal(g.body.generationConfig.imageConfig.aspectRatio, "2:3");
+  const lite = await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "google:gemini-3.1-flash-lite-image" });
+  assert.equal(lite.status, 502);
+  assert.match(lite.data.error, /무료 등급에서 쓸 수 없습니다/);
+  // 본문에 넣기
+  b = (await call(`/api/posts/${id}`, "POST", { action: "insert_image", index: 0 })).data;
+  assert.ok(b.document.content_html.includes("/api/img/img_"));
+  // 새 Higgsfield 모델 요청 형식
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "recraft-4.1-pro" });
+  const rc = (await mockLog()).find((l) => l.path === "/recraft/v4.1/pro/text-to-image");
+  assert.ok(rc, "Recraft Pro 경로");
+  assert.equal(rc.body.resolution, "2k");
+});
+
 test("④ 글 다시 쓰기 (수정 요청) · 에디터 부분 수정", async () => {
   const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
   const id = posts[posts.length - 1].id;

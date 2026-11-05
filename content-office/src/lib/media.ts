@@ -35,6 +35,10 @@ export function buildBody(model: HfModelId, i: Record<string, unknown>) {
   if (model === "qwen-image-3") return { prompt, aspect_ratio: aspect, resolution: "2k", prompt_extend: false };
   if (model === "z-image-turbo") return { prompt: prompt.slice(0, 800), aspect_ratio: aspect, resolution: "2k", prompt_extend: false };
   if (model === "ideogram-4") return { prompt: prompt.slice(0, 2048), aspect_ratio: aspect, rendering_speed: "DEFAULT" };
+  if (model.startsWith("recraft-")) return { prompt: prompt.slice(0, 10000), aspect_ratio: aspect, resolution: model.endsWith("-pro") ? "2k" : "1k", output_format: "jpg" };
+  if (model === "grok-image-2") return { prompt, aspect_ratio: aspect, resolution: "2k", quality: "medium" };
+  if (model.startsWith("marketing-image")) return { prompt: prompt.slice(0, 5000), aspect_ratio: aspect, resolution: "2k", quality: "high", enhance_prompt: false };
+  if (model === "ads-studio") return { prompt: prompt.slice(0, 8000), aspect_ratio: aspect, batch_size: 1, language: "ko" };
   // wan-2.6-i2v
   const image_url = String(i.image_url ?? "").trim();
   if (!/^https:\/\//.test(image_url)) throw new WorkflowError("영상의 시작 이미지 URL(https)이 필요합니다. 먼저 이미지를 생성하거나 이미지 주소를 넣으세요.");

@@ -302,3 +302,14 @@ CREATE TABLE IF NOT EXISTS trend_scraps (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (source, item_id)
 );
+-- ChatGPT·Gemini로 만든 이미지 (응답이 파일 자체라 DB에 보관하고 /api/img/아이디 로 보여 줌)
+CREATE TABLE IF NOT EXISTS generated_images (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT,
+  provider    TEXT NOT NULL,
+  model       TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  data        BYTEA NOT NULL,
+  prompt      TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

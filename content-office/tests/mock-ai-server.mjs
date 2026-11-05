@@ -94,11 +94,11 @@ http
     }
 
     // Higgsfield (이미지·영상)
-    if (/^\/(v1\/text2image|higgsfield-ai\/|wan\/|requests\/|alibaba\/|ideogram\/|z-image\/|estimate\/)/.test(url.pathname)) {
+    if (/^\/(v1\/text2image|higgsfield-ai\/|higgsfield\/|wan\/|requests\/|alibaba\/|ideogram\/|z-image\/|recraft\/|xai\/|marketing-studio\/|estimate\/)/.test(url.pathname)) {
       if (req.headers.authorization !== "Key test-id:test-secret") return send(res, 401, { detail: "Invalid credentials" });
       if (url.pathname === "/v1/text2image/soul-styles") return send(res, 200, [{ id: "s1", name: "Mock style" }]);
       if (url.pathname.startsWith("/estimate/")) return send(res, 200, { type: "estimate", credits: "0.090", usd: url.pathname.includes("soul/standard") ? "0.188" : "0.006", discount: null });
-      if (req.method === "POST" && ["/higgsfield-ai/soul/standard", "/higgsfield-ai/soul/v2/standard", "/higgsfield-ai/soul/cinema", "/alibaba/qwen-image-3/text-to-image", "/ideogram/v4.0", "/z-image/turbo", "/wan/v2.6/image-to-video"].includes(url.pathname)) {
+      if (req.method === "POST" && (["/higgsfield-ai/soul/standard", "/higgsfield-ai/soul/v2/standard", "/higgsfield-ai/soul/cinema", "/alibaba/qwen-image-3/text-to-image", "/ideogram/v4.0", "/z-image/turbo", "/wan/v2.6/image-to-video", "/xai/grok-imagine-image-2.0", "/higgsfield/ads-studio/v1.0"].includes(url.pathname) || /^\/(recraft|marketing-studio)\//.test(url.pathname))) {
         const id = "req" + (hfJobs.size + 1);
         hfJobs.set(id, { polls: 0, video: url.pathname.startsWith("/wan/"), body, path: url.pathname, idem: req.headers["idempotency-key"] });
         return send(res, 200, { status: "queued", request_id: id, status_url: `http://localhost:${PORT}/requests/${id}/status`, cancel_url: `http://localhost:${PORT}/requests/${id}/cancel` });
@@ -129,6 +129,19 @@ http
     };
     const sysOf = (b) => (typeof b.system === "string" ? b.system : b.messages?.find?.((m) => m.role === "system")?.content ?? b.systemInstruction?.parts?.[0]?.text ?? "");
     const promptOf = (c) => (typeof c === "string" ? c : Array.isArray(c) ? c.filter((x) => x.type === "text").map((x) => x.text).join("") : "");
+
+    // 이미지 생성: OpenAI Images API · Gemini 이미지 출력 (1x1 픽셀 이미지)
+    const PIXEL = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==";
+    if (url.pathname === "/v1/images/generations") {
+      if (req.headers.authorization !== "Bearer test-openai") return send(res, 401, { error: { message: "bad key" } });
+      if (!["1024x1024", "1536x1024", "1024x1536"].includes(body.size)) return send(res, 400, { error: { message: "bad size" } });
+      return send(res, 200, { data: [{ b64_json: PIXEL }], usage: { input_tokens: 20, output_tokens: 400 } });
+    }
+    const gimg = url.pathname.match(/^\/v1beta\/models\/(.+):generateContent$/);
+    if (gimg && body.generationConfig?.responseModalities?.includes("IMAGE")) {
+      if (gimg[1].includes("lite")) return send(res, 429, { error: { message: "Quota exceeded for metric: generate_content_free_tier_requests, limit: 0" } });
+      return send(res, 200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: PIXEL } }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1290 } });
+    }
 
     // OpenAI Chat Completions
     if (url.pathname === "/v1/chat/completions") {

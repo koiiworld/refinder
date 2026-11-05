@@ -10,7 +10,7 @@ import { api, useToast } from "@/components/client-utils";
 import { BlogTag, fmtDate, fmtUsd, Steps } from "@/components/ui";
 import DocEditor from "@/components/DocEditor";
 import BackButton from "@/components/BackButton";
-import { HF_IMAGE_MODELS } from "@/lib/hf-models";
+import { IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel } from "@/lib/image-models";
 
 type Review = {
   summary: string;
@@ -40,6 +40,11 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
   const doc = b.document;
   const title = doc?.title || plan?.selectedTitle || p.title;
   const choosing = !!plan && p.stage === "titles" && !running && p.status !== "error";
+  const imageProviders: Record<string, boolean> = {
+    higgsfield,
+    openai: !!b.connections.find((c) => c.provider === "openai")?.connected,
+    google: !!b.connections.find((c) => c.provider === "google")?.connected,
+  };
   // 제목 입력칸: 서버 제목이 바뀌면(저장·다시 뽑기) 따라감
   const [titleDraft, setTitleDraft] = useState(title);
   useEffect(() => setTitleDraft(title), [title]);
@@ -140,7 +145,7 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
         </Section>
 
         {/* ⑤ 이미지 */}
-        <Section n={5} title={extras.images.some((im) => im.kind === "official") ? "이미지 (공식 홈페이지)" : "이미지 (Higgsfield)"}>
+        <Section n={5} title={extras.images.some((im) => im.kind === "official") ? "이미지 (공식 홈페이지)" : "이미지 (Higgsfield · ChatGPT · Gemini)"}>
           {!extras.images.length ? (
             <p className="small muted">글이 완성되면 AI가 이미지 프롬프트를 만들어 둡니다.</p>
           ) : (
@@ -151,15 +156,15 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
                 </p>
               ) : (
               <p className="small muted">
-                AI가 글 내용에 맞는 이미지 프롬프트를 만들었습니다. <b>생성은 자동으로 하지 않습니다</b>. 필요한 것만 "생성"을 누르세요(Higgsfield 크레딧 차감). 생성되면 "본문에 넣기"로 글의 [이미지 N] 자리에 넣습니다.
-                {!higgsfield && " · 지금은 Higgsfield가 연결되지 않아 프롬프트를 복사해서 Higgsfield 사이트에서 만들 수 있습니다."}
+                AI가 글 내용에 맞는 이미지 프롬프트를 만들었습니다. <b>생성은 자동으로 하지 않습니다</b>. 이미지마다 모델(Higgsfield · ChatGPT · Gemini)을 고르고 &quot;이미지 만들기&quot;를 누르세요(고른 곳의 크레딧 차감). 다 되면 &quot;본문에 넣기&quot;로 글의 [이미지 N] 자리에 넣습니다.
+                {!Object.values(imageProviders).some(Boolean) && " · 지금은 이미지 AI가 연결되지 않아 프롬프트를 복사해서 각 사이트에서 만들 수 있습니다."}
               </p>
               )}
               {extras.images.map((im, i) => (
                 im.kind === "official" ? (
                   <OfficialImageCard key={i} index={i} im={im} disabled={running} act={act} />
                 ) : (
-                  <ImageCard key={i} projectId={p.id} index={i} im={im} higgsfield={higgsfield} disabled={running} act={act} copy={copy} />
+                  <ImageCard key={i} projectId={p.id} index={i} im={im} providers={imageProviders} disabled={running} act={act} copy={copy} />
                 )
               ))}
             </div>
@@ -351,39 +356,52 @@ function Rewrite({ onRun }: { onRun: (feedback: string) => void }) {
   );
 }
 
-function ImageCard({ projectId, index, im, higgsfield, disabled, act, copy }: { projectId: string; index: number; im: PostExtras["images"][number]; higgsfield: boolean; disabled: boolean; act: (p: Record<string, unknown>, m?: string) => Promise<boolean>; copy: (t: string, w: string) => void }) {
+function ImageCard({ projectId, index, im, providers, disabled, act, copy }: { projectId: string; index: number; im: PostExtras["images"][number]; providers: Record<string, boolean>; disabled: boolean; act: (p: Record<string, unknown>, m?: string) => Promise<boolean>; copy: (t: string, w: string) => void }) {
   const [prompt, setPrompt] = useState(im.prompt);
   useEffect(() => setPrompt(im.prompt), [im.prompt]);
-  const generating = !!im.mediaJobId && !im.url;
-  // 모델: 이 이미지에서 마지막으로 쓴 것 → 이 기기에서 마지막으로 고른 것 → SOUL
+  const [making, setMaking] = useState(false);
+  const generating = (!!im.mediaJobId && !im.url) || making;
+  const usable = IMAGE_MODELS.filter((m) => providers[m.provider]);
+  // 모델: 이 이미지에서 마지막으로 쓴 것 → 이 기기에서 마지막으로 고른 것 → 연결된 첫 모델
   const [model, setModel] = useState(() => {
-    if (im.model) return im.model;
+    if (im.model && imageModel(im.model)) return im.model;
     try {
-      return localStorage.getItem("hf-image-model") || "soul-standard";
+      const saved = localStorage.getItem("image-model") || localStorage.getItem("hf-image-model");
+      if (saved && imageModel(saved)) return saved;
     } catch {
-      return "soul-standard";
+      /* 없으면 기본 */
     }
+    return usable[0]?.id ?? "soul-standard";
   });
-  const [price, setPrice] = useState<{ model: string; aspect: string; usd: number | null } | null>(null);
+  const info = imageModel(model);
+  const [price, setPrice] = useState<{ model: string; aspect: string; usd: number | null; note?: string } | null>(null);
   useEffect(() => {
-    if (!higgsfield) return;
+    if (!usable.length) return;
     let alive = true;
-    api<{ usd: number }>(`/api/posts/${projectId}`, "POST", { action: "estimate_image", index, model })
-      .then((r) => alive && setPrice({ model, aspect: im.aspect, usd: r.usd }))
+    api<{ usd: number | null; note?: string }>(`/api/posts/${projectId}`, "POST", { action: "estimate_image", index, model })
+      .then((r) => alive && setPrice({ model, aspect: im.aspect, usd: r.usd, note: r.note }))
       .catch(() => alive && setPrice({ model, aspect: im.aspect, usd: null }));
     return () => {
       alive = false;
     };
-  }, [model, im.aspect, index, projectId, higgsfield]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, im.aspect, index, projectId]);
   const pickModel = (m: string) => {
     setModel(m);
     try {
-      localStorage.setItem("hf-image-model", m);
+      localStorage.setItem("image-model", m);
     } catch {
       /* 저장 못 해도 동작 */
     }
   };
-  const label = HF_IMAGE_MODELS.find((m) => m.id === model)?.label ?? model;
+  const providerName = info ? IMAGE_PROVIDER_NAMES[info.provider] : "Higgsfield";
+  async function generate() {
+    const cost = price?.model === model && price.usd != null ? `\n예상 비용: ${fmtUsd(price.usd)}` : "";
+    if (!confirm(`이미지 ${index + 1}을 ${providerName} · ${info?.label ?? model}(으)로 만들까요?${cost}\n${providerName} 크레딧(사용량)이 차감됩니다.`)) return;
+    setMaking(info?.provider !== "higgsfield");
+    await act({ action: "generate_image", index, model }, info?.provider === "higgsfield" ? "이미지 생성을 시작했습니다." : "이미지를 만들었습니다.");
+    setMaking(false);
+  }
   return (
     <div className="card card-pad stack" style={{ gap: 8 }}>
       <div className="row between">
@@ -399,31 +417,31 @@ function ImageCard({ projectId, index, im, higgsfield, disabled, act, copy }: { 
       <div className="row">
         {prompt !== im.prompt && <button className="btn btn-sm" onClick={() => act({ action: "image_prompt", index, prompt }, "프롬프트를 저장했습니다.")}>프롬프트 저장</button>}
         <button className="btn btn-sm" onClick={() => copy(prompt, "프롬프트")}>프롬프트 복사</button>
-        {higgsfield && (
-          <select className="select" style={{ width: 230 }} value={model} disabled={disabled || generating} onChange={(e) => pickModel(e.target.value)} aria-label="Higgsfield 모델">
-            {HF_IMAGE_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>{m.label} — {m.note}</option>
-            ))}
+        {usable.length > 0 && (
+          <select className="select" style={{ width: 270, maxWidth: "100%" }} value={model} disabled={disabled || generating} onChange={(e) => pickModel(e.target.value)} aria-label="이미지 모델">
+            {(["higgsfield", "openai", "google"] as const).map((pv) => {
+              const list = IMAGE_MODELS.filter((m) => m.provider === pv);
+              return (
+                <optgroup key={pv} label={`${IMAGE_PROVIDER_NAMES[pv]}${providers[pv] ? "" : " — 연결 안 됨"}`}>
+                  {list.map((m) => (
+                    <option key={m.id} value={m.id} disabled={!providers[pv]}>{m.label} — {m.note}</option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
         )}
-        {higgsfield && (
-          <button
-            className="btn btn-sm btn-primary"
-            disabled={disabled || generating || prompt !== im.prompt}
-            onClick={() =>
-              confirm(`이미지 ${index + 1}을 ${label}(으)로 생성할까요?${price?.model === model && price.usd != null ? `\n예상 비용: ${fmtUsd(price.usd)}` : ""}\nHiggsfield 크레딧이 차감됩니다.`) &&
-              act({ action: "generate_image", index, model }, "이미지 생성을 시작했습니다.")
-            }
-          >
-            {generating ? <><span className="spinner" /> 생성 중…</> : im.url ? "다시 생성" : "Higgsfield로 생성"}
+        {usable.length > 0 && (
+          <button className="btn btn-sm btn-primary" disabled={disabled || generating || prompt !== im.prompt || !info || !providers[info.provider]} onClick={() => void generate()}>
+            {generating ? <><span className="spinner" /> {making ? "만드는 중… (10~60초)" : "생성 중…"}</> : im.url ? "다시 생성" : "이미지 만들기"}
           </button>
         )}
-        {im.url && <button className="btn btn-sm btn-ok" disabled={disabled} onClick={() => act({ action: "insert_image", index }, "본문에 넣었습니다.")}>{im.inserted ? "다시 넣기" : "본문에 넣기"}</button>}
+        {im.url && <button className="btn btn-sm btn-ok" disabled={disabled || generating} onClick={() => act({ action: "insert_image", index }, "본문에 넣었습니다.")}>{im.inserted ? "다시 넣기" : "본문에 넣기"}</button>}
       </div>
-      {higgsfield && (
+      {usable.length > 0 && (
         <div className="tiny muted">
-          {price?.model === model ? (price.usd != null ? `예상 비용 ${fmtUsd(price.usd)} / 1장 (Higgsfield 견적, ${im.aspect})` : "예상 비용을 불러오지 못했습니다") : "예상 비용 확인 중…"}
-          {im.url && im.model && ` · 지금 이미지: ${HF_IMAGE_MODELS.find((m) => m.id === im.model)?.label ?? im.model}`}
+          {price?.model === model ? (price.usd != null ? `예상 비용 ${fmtUsd(price.usd)} / 1장 (Higgsfield 견적, ${im.aspect})` : price.note ?? "예상 비용을 불러오지 못했습니다") : "예상 비용 확인 중…"}
+          {im.url && im.model && ` · 지금 이미지: ${imageModel(im.model)?.label ?? im.model}`}
         </div>
       )}
       {im.url && (

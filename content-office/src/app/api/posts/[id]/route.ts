@@ -4,6 +4,8 @@ import { ensureWorker } from "@/lib/jobs";
 import { cancelJobs, insertImage, markPublished, rerun, selectTitle, setHashtags, setImage, startWriting, requestFix, requestEdit, WorkflowError } from "@/lib/workflow";
 import { createMediaJob, estimateMedia } from "@/lib/media";
 import { HF_MODELS, HiggsfieldError } from "@/lib/higgsfield";
+import { generateDirect, ImageGenError } from "@/lib/image-gen";
+import { imageModel } from "@/lib/image-models";
 import { getProject } from "@/lib/repo";
 import { moveToTrash } from "@/lib/trash";
 import { checkImageUrl, findOfficialImages } from "@/lib/official-images";
@@ -50,8 +52,22 @@ export async function POST(req: Request, { params }: Ctx) {
         const p = await getProject(id);
         const im = (p?.package as unknown as PostExtras | null)?.images?.[Number(b.index)];
         if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
+        const chosen = String(b.model ?? im.model ?? "soul-standard");
+        // ChatGPT·Gemini: 바로 만들어 DB에 저장하고 이 사이트 주소로 보여 줌
+        if (imageModel(chosen) && imageModel(chosen)!.provider !== "higgsfield") {
+          try {
+            const imgId = await generateDirect({ modelId: chosen, prompt: im.prompt, aspect: im.aspect, projectId: id, blogId: p?.blog_id });
+            const h = req.headers;
+            const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+            await setImage(id, Number(b.index), { mediaJobId: null, url: `${origin}/api/img/${imgId}.jpg`, inserted: false, model: chosen });
+          } catch (e) {
+            if (e instanceof ImageGenError) return fail(e.message, 502);
+            throw e;
+          }
+          break;
+        }
         try {
-          const model = b.model && b.model in HF_MODELS && HF_MODELS[b.model as keyof typeof HF_MODELS].media === "image" ? b.model : im.model || "soul-standard";
+          const model = chosen in HF_MODELS && HF_MODELS[chosen as keyof typeof HF_MODELS].media === "image" ? chosen : "soul-standard";
           const job = await createMediaJob({ model, projectId: id, prompt: im.prompt, aspect_ratio: im.aspect, resolution: "1080p" });
           await setImage(id, Number(b.index), { mediaJobId: job.id, url: null, inserted: false, model });
         } catch (e) {
@@ -92,6 +108,7 @@ export async function POST(req: Request, { params }: Ctx) {
         const p = await getProject(id);
         const im = (p?.package as unknown as PostExtras | null)?.images?.[Number(b.index)];
         if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
+        if (imageModel(String(b.model)) && imageModel(String(b.model))!.provider !== "higgsfield") return ok({ usd: null, credits: null, note: "만든 뒤 각 사 사용량 페이지에서 확인 (토큰 과금)" });
         try {
           return ok(await estimateMedia({ model: String(b.model ?? "soul-standard"), prompt: im.prompt, aspect_ratio: im.aspect, resolution: "1080p" }));
         } catch (e) {
