@@ -314,3 +314,31 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* 진행 현황에서 글을 고르면 아래에 뜨는 막대 */
 .selection-bar { position: sticky; bottom: 16px; z-index: 20; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
 @media (max-width: 860px) { .selection-bar { bottom: 76px; } }
+
+/* ───────── 대시보드 ───────── */
+:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; } }
+:root[data-theme="dark"] { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; }
+.kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.kpi-num { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; margin: 4px 0 2px; }
+.up { color: var(--ok); font-weight: 600; }
+.down { color: var(--bad); font-weight: 600; }
+.dash-2col { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0; }
+.hbar { flex: 1; height: 10px; background: var(--panel-2); border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
+.hbar > div { height: 100%; border-radius: 999px; }
+.chart-tip { position: absolute; top: 4px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; box-shadow: 0 4px 16px rgba(0,0,0,.08); pointer-events: none; white-space: nowrap; }
+.cost-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.cost-day { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.cost-bar-wrap { height: 70px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.cost-bar { width: 60%; max-width: 28px; background: var(--series-1); border-radius: 4px 4px 0 0; }
+.rev-row { display: grid; grid-template-columns: 140px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; align-items: center; }
+.fold > summary { list-style: none; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: "▸ "; }
+.fold[open] > summary::before { content: "▾ "; }
+@media (max-width: 860px) {
+  .kpi-grid, .dash-2col { grid-template-columns: minmax(0, 1fr); }
+  .rev-row { grid-template-columns: minmax(0, 1fr); }
+  .kpi-num { font-size: 24px; }
+}

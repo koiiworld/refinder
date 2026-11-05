@@ -38,7 +38,7 @@ export default async function Posts() {
           <h1>진행 현황</h1>
           <p className="sub">AI가 ③ 제목 후보를 뽑으면 직접 고르고 '글 쓰기'를 누르세요. 그 뒤 ④ 글 → ⑥ 검수는 자동으로 진행되고, 이 화면을 닫아도 계속됩니다.</p>
         </div>
-        <Link href="/" className="btn btn-primary">+ 키워드 더 고르기</Link>
+        <Link href="/new" className="btn btn-primary">+ 키워드 더 고르기</Link>
       </div>
       <div className="stack" style={{ gap: 16 }}>
         <details className="card cost-card">
@@ -94,7 +94,7 @@ export default async function Posts() {
         <PostGroups groups={groups} />
         {!rows.length && (
           <div className="card empty">
-            아직 만든 글이 없습니다. <Link href="/" style={{ color: "var(--accent)" }}>글 만들기</Link>에서 키워드를 골라 주세요.
+            아직 만든 글이 없습니다. <Link href="/new" style={{ color: "var(--accent)" }}>글 만들기</Link>에서 키워드를 골라 주세요.
           </div>
         )}
       </div>

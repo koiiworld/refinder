@@ -24,7 +24,7 @@
 | ⑥ 검수 | AI(Claude) | 지적마다 "수정 요청"(AI가 그 부분만 수정, `fix_issues`) / "다시 검수" |
 | ⑦ 발행 | 사용자 | 복사·HTML/MD 다운로드 → 직접 게시 → "발행 완료" |
 
-그 밖: 진행 현황 체크박스 → **휴지통**(되살리기·완전 삭제), 진행 현황 맨 위 **오늘 쓴 AI 비용**(단계별·모델별, 접기), 설정 > 단계별 AI(모델 드롭다운·가격).
+그 밖: **메인(`/`) = 대시보드**(`src/lib/dashboard.ts` — 실제 기록만: 발행·1차 검수 통과율(첫 검수 80점↑)·완성 글 검색량·AI 비용·10주 추이·블로그별·키워드 TOP5·운영 상태, 수익은 정산 숫자 직접 입력 → `settings` 테이블 `revenue` 키). 글 만들기(①②)는 `/new`. 진행 현황 체크박스 → **휴지통**(되살리기·완전 삭제), 진행 현황 맨 위 **오늘 쓴 AI 비용**(단계별·모델별, 접기), 설정 > 단계별 AI(모델 드롭다운·가격).
 
 ## 2. 코드 구조 (`content-office/`)
 
@@ -41,7 +41,7 @@
 - `src/lib/sample-html.ts` — 말투 예시 HTML→마크다운, 네이버 저장 파일은 글 번호로 PostView 본문을 다시 가져옴, 글 주소로 가져오기(네이버·티스토리·등록 블로그 도메인만).
 - `src/lib/blog-posts.ts` — 블로그 RSS(네이버 `rss.blog.naver.com/<id>.xml`, 그 외 `<origin>/rss`) 6시간 캐시, 안내 페이지 제외, 이중 인코딩 해제.
 - `src/lib/trash.ts` + `src/app/api/trash` + `src/app/trash` — 휴지통(`projects.deleted_at`).
-- 화면: `src/app/page.tsx`+`KeywordStep.tsx`(①②), `src/app/posts/page.tsx`+`PostGroups.tsx`(목록·체크박스·비용), `src/app/posts/[id]/PostView.tsx`(③~⑦ 전부), `src/components/*`.
+- 화면: `src/app/page.tsx`+`DashboardParts.tsx`(대시보드), `src/app/new/page.tsx`+`new/KeywordStep.tsx`(①②), `src/app/posts/page.tsx`+`PostGroups.tsx`(목록·체크박스·비용), `src/app/posts/[id]/PostView.tsx`(③~⑦ 전부), `src/components/*`.
 
 ## 3. 사용자의 맥에서 실행 중인 환경
 
@@ -60,7 +60,7 @@
 
 ```bash
 cd content-office
-zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테스트 (현재 8 + 13 통과)
+zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테스트 (현재 9 + 13 통과)
 ```
 - `tests/workflow.test.mjs` — AI 없이(템플릿) 흐름·휴지통·말투 예시
 - `tests/ai-providers.test.mjs` — 모의 OpenAI/Anthropic/Gemini/네이버/유튜브/Higgsfield/RSS/공식 페이지 서버로 전체 경로

@@ -173,3 +173,23 @@ test("단계별 AI 설정 저장", async () => {
   assert.ok(!("bogus" in r.data.stepAi));
   await call("/api/settings", "PUT", { stepAi: { titles: { provider: "openai", model: "gpt-5.4-mini" } } });
 });
+
+test("대시보드: 메인 화면 · 실제 기록 집계 · 수익 직접 입력", async () => {
+  const home = await fetch(BASE + "/");
+  const html = await home.text();
+  assert.equal(home.status, 200);
+  for (const t of ["대시보드", "이번 달 발행 글", "1차 검수 통과율", "최근 10주 완성 글 추이", "블로그별 성과 비교", "운영 상태"]) assert.ok(html.includes(t), t);
+  assert.ok(html.includes("아직 입력한 수익이 없습니다"), "수익은 지어내지 않음");
+  assert.equal((await fetch(BASE + "/new")).status, 200, "글 만들기는 /new");
+  const now = new Date(Date.now() + 9 * 3600 * 1000);
+  const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  assert.equal((await call("/api/dashboard/revenue", "PUT", { month: "2026/11", data: {} })).status, 400);
+  const r = await call("/api/dashboard/revenue", "PUT", { month, data: { coupang: { krw: 212000, metric: "주문 46" }, adsense: { usd: 18.6, krw: 0 }, adpost: { krw: -5 } } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.coupang.krw, 212000);
+  assert.equal(r.data.adsense.usd, 18.6);
+  assert.equal(r.data.adpost, undefined, "음수·0은 저장 안 함");
+  const after = await (await fetch(BASE + "/")).text();
+  assert.ok(after.includes("₩212,000"), "입력한 수익 표시");
+  await call("/api/dashboard/revenue", "PUT", { month, data: {} });
+});
