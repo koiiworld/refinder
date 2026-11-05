@@ -206,7 +206,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const feedback = job.payload.feedback as string | undefined;
     const doc = await getDocument(project.id);
     const myPosts = await recentPosts(blog);
-    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined, myPosts });
+    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined, myPosts, titleByUser: !plan.candidates.some((c) => c.title.trim() === plan.selectedTitle.trim()) });
     const res = await runStep({
       step: "writing", role: "writer", purpose: "write", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
       template: () => JSON.stringify({ html: `<p><strong>⚠ AI 미연결: 템플릿 원고입니다.</strong></p><h2>${esc(plan.keyword)}</h2><p>[작성 필요]</p><p>[이미지 1]</p><h2>정리</h2><p>[작성 필요]</p>`, hashtags: [plan.keyword.replace(/\s+/g, "")], images: [{ prompt: plan.keyword, alt: plan.keyword, aspect: "4:3" }] }),

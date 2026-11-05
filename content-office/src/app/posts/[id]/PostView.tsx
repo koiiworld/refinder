@@ -40,6 +40,9 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
   const doc = b.document;
   const title = doc?.title || plan?.selectedTitle || p.title;
   const choosing = !!plan && p.stage === "titles" && !running && p.status !== "error";
+  // 제목 입력칸: 서버 제목이 바뀌면(저장·다시 뽑기) 따라감
+  const [titleDraft, setTitleDraft] = useState(title);
+  useEffect(() => setTitleDraft(title), [title]);
 
   const refresh = useCallback(async () => {
     try {
@@ -103,10 +106,10 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
             <p className="small muted">{running ? "AI가 네이버 연관 키워드 검색량을 보고 제목 후보를 만들고 있습니다…" : "아직 제목이 없습니다."}</p>
           ) : (
             <div className="stack" style={{ gap: 12 }}>
-              {choosing && <div className="notice small">마음에 드는 제목을 고르거나 직접 입력한 뒤 <b>이 제목으로 글 쓰기</b>를 누르세요. 누르기 전에는 글을 쓰지 않습니다.</div>}
-              <TitlePicker plan={plan} current={title} disabled={running} onPick={(payload) => act({ action: "select_title", ...payload }, "제목을 골랐습니다.")} />
+              {choosing && <div className="notice small">후보를 누르거나 &apos;선택한 제목&apos; 칸에 원하는 대로 고친 뒤 <b>이 제목으로 글 쓰기</b>를 누르세요. 칸에 적힌 제목 그대로 글을 씁니다.</div>}
+              <TitlePicker plan={plan} current={title} draft={titleDraft} setDraft={setTitleDraft} choosing={choosing} disabled={running} onPick={(payload) => act({ action: "select_title", ...payload }, "제목을 저장했습니다.")} />
               {choosing && (
-                <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} disabled={running} onClick={() => act({ action: "write" }, "글 작성을 시작합니다.")}>
+                <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} disabled={running || !titleDraft.trim()} onClick={() => act({ action: "write", title: titleDraft.trim() }, "글 작성을 시작합니다.")}>
                   이 제목으로 글 쓰기 →
                 </button>
               )}
@@ -241,24 +244,43 @@ function Section({ n, title, ai, right, children }: { n: number; title: string; 
   );
 }
 
-function TitlePicker({ plan, current, disabled, onPick }: { plan: PostPlan; current: string; disabled: boolean; onPick: (p: { index?: number; title?: string }) => void }) {
-  const [own, setOwn] = useState("");
+function TitlePicker({ plan, current, draft, setDraft, choosing, disabled, onPick }: { plan: PostPlan; current: string; draft: string; setDraft: (t: string) => void; choosing: boolean; disabled: boolean; onPick: (p: { index?: number; title?: string }) => void }) {
+  const dirty = draft.trim() !== current.trim();
   return (
     <div className="stack" style={{ gap: 8 }}>
+      <div className="field">
+        <span className="label">선택한 제목 — 후보를 누르면 여기에 들어오고, 원하는 대로 고칠 수 있어요 (예: 모델명을 상위 모델로)</span>
+        <div className="row" style={{ flexWrap: "nowrap" }}>
+          <input className="input" style={{ fontWeight: 600 }} placeholder="제목을 직접 입력하거나 아래 후보를 누르세요" value={draft} disabled={disabled} onChange={(e) => setDraft(e.target.value)} aria-label="선택한 제목" />
+          {!choosing && dirty && (
+            <button className="btn btn-sm btn-primary" disabled={disabled || !draft.trim()} onClick={() => onPick({ title: draft.trim() })}>제목 저장</button>
+          )}
+        </div>
+        <span className="tiny muted">
+          {draft.trim().length}자{draft.trim().length > 40 ? " · 40자가 넘으면 검색 결과에서 잘릴 수 있어요" : ""}
+          {!choosing && dirty ? " · 저장 전입니다 (본문은 바뀌지 않음)" : ""}
+        </span>
+      </div>
       {plan.candidates.map((c, i) => (
-        <label key={i} className="card card-pad row" style={{ flexWrap: "nowrap", alignItems: "flex-start", cursor: disabled ? "default" : "pointer", borderColor: c.title === current ? "var(--accent)" : undefined, background: c.title === current ? "var(--accent-soft)" : undefined, padding: 10 }}>
-          <input type="radio" name="title" checked={c.title === current} disabled={disabled} onChange={() => onPick({ index: i })} style={{ marginTop: 3 }} />
+        <label key={i} className="card card-pad row" style={{ flexWrap: "nowrap", alignItems: "flex-start", cursor: disabled ? "default" : "pointer", borderColor: c.title === draft ? "var(--accent)" : undefined, background: c.title === draft ? "var(--accent-soft)" : undefined, padding: 10 }}>
+          <input
+            type="radio"
+            name="title"
+            checked={c.title === draft}
+            disabled={disabled}
+            onChange={() => {
+              setDraft(c.title);
+              if (!choosing) onPick({ index: i });
+            }}
+            style={{ marginTop: 3 }}
+          />
           <div>
-            <div className="strong small">{c.title} {i === plan.best && <span className="badge badge-accent">AI 선택</span>}</div>
+            <div className="strong small">{c.title} {i === plan.best && <span className="badge badge-accent">AI 추천</span>}</div>
             <div className="tiny muted">{c.reason}</div>
           </div>
         </label>
       ))}
       {plan.bestReason && <p className="tiny muted">AI가 고른 이유: {plan.bestReason}</p>}
-      <div className="row" style={{ flexWrap: "nowrap" }}>
-        <input className="input" placeholder="제목 직접 입력" value={own} disabled={disabled} onChange={(e) => setOwn(e.target.value)} />
-        <button className="btn btn-sm" disabled={disabled || !own.trim()} onClick={() => { onPick({ title: own }); setOwn(""); }}>이 제목으로</button>
-      </div>
       {!!plan.related.length && (
         <div>
           <div className="label">참고한 네이버 연관 키워드 (월간 검색수)</div>

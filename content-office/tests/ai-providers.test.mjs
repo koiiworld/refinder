@@ -101,6 +101,22 @@ test("⑤ 이미지: 버튼으로 Higgsfield 생성 → 본문에 넣기 → ⑥
   assert.ok(msg.body.messages[0].content.some((c) => c.type === "image" && c.source.url === "https://cdn.example.com/out.png"), "Claude에 이미지 첨부");
 });
 
+test("③ 제목을 직접 고쳐서 글 쓰기 → 그 제목 그대로 쓰고 AI에게 제목 우선 지시", async () => {
+  const add = await call("/api/keywords", "POST", { action: "add", blogId: "blog_tistory", keyword: "보조배터리" });
+  const c = await call("/api/posts", "POST", { blogId: "blog_tistory", pickIds: [add.data.id] });
+  const id = c.data.ids[0];
+  await waitPost(id, (x) => x.project.stage === "titles" && idle(x), "제목 선택 대기");
+  await call("/__reset", "POST", undefined, MOCK);
+  const mine = "앤커 프라임 보조배터리 27650 상위 모델 비교, 고속충전 기준 정리";
+  await call(`/api/posts/${id}`, "POST", { action: "write", title: mine });
+  const b = await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "직접 고친 제목으로 작성");
+  assert.equal(b.document.title, mine, "본문 제목 = 직접 고친 제목");
+  assert.equal(b.project.plan.selectedTitle, mine);
+  const wp = await stepPrompt("전속 작가");
+  assert.ok(wp.includes(`[제목] ${mine}`));
+  assert.match(wp, /사용자가 직접 고친 제목입니다/);
+});
+
 test("⑥ 검수 지적 '수정 요청' → AI가 해당 부분만 고침 → 다시 검수 권장", async () => {
   const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
   const id = posts[0].id;

@@ -52,12 +52,12 @@ best 는 candidates 의 번호(0부터)입니다.`;
 }
 
 // ───────── ④ 글 작성 (해시태그·이미지 프롬프트 포함) ─────────
-export function writePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; feedback?: string; previousHtml?: string; myPosts?: { title: string; url: string }[] }) {
+export function writePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; feedback?: string; previousHtml?: string; myPosts?: { title: string; url: string }[]; titleByUser?: boolean }) {
   const posts = (input.myPosts ?? []).filter((p) => p.title.trim() !== input.title.trim());
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 블로그 문체를 정확히 따릅니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
   const prompt = `${blogContext(blog)}
 ${styleSamplesText(blog)}
-[제목] ${input.title}
+[제목] ${input.title}${input.titleByUser ? "\n(사용자가 직접 고친 제목입니다. 제목에 나온 제품·모델·주제·각도를 기준으로 본문을 쓰세요. 메인 키워드와 다르면 제목을 따르세요.)" : ""}
 [메인 키워드] ${input.keyword}
 [함께 넣을 키워드] ${input.subKeywords.join(", ") || "(없음)"}
 ${posts.length ? `\n[내 블로그의 실제 글 목록 - 블로그 RSS에서 가져옴 (제목 | 주소)]\n${posts.map((p) => `- ${p.title} | ${p.url}`).join("\n")}\n` : ""}${input.previousHtml ? `\n[이전 원고]\n${input.previousHtml}\n` : ""}${input.feedback ? `\n[수정 요청 - 반드시 반영]\n${input.feedback}\n` : ""}
