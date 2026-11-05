@@ -56,6 +56,12 @@
 - 주의: `~/.npm` 캐시에 root 소유 파일이 있어 `npx`가 실패함 → `./node_modules/.bin/tsc`, `./node_modules/.bin/next`처럼 직접 실행.
 - 타입 확인: `./node_modules/.bin/tsc --noEmit -p .`
 
+## 3-1. 클라우드 배포 (상시 주소)
+
+- **https://ai-content-office-m7sx.onrender.com** — Render 무료(Blueprint `render.yaml`, 브랜치 `feature/ai-content-office` 푸시 시 자동 배포). 키는 Render > Environment.
+- DB: Supabase(서울, Session pooler). 맥 앱도 같은 `DATABASE_URL` 사용. Render에서는 PGlite 사용 금지(512MB 초과로 꺼짐) — `db.ts`에서 막음.
+- 깨워 두기: Supabase **pg_cron** 작업 `keep-awake-ai-content-office`가 10분마다 `pg_net`으로 `/api/health` 호출 (컴퓨터 불필요). 확인: `select * from cron.job;`, 응답: `net._http_response`.
+
 ## 4. 테스트
 
 ```bash
