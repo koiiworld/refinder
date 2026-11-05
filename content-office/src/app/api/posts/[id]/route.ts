@@ -23,7 +23,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string> }>(req);
+    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string }>(req);
     switch (b.action) {
       case "rerun":
         if (!b.step) throw new WorkflowError("다시 실행할 단계를 고르세요.");
@@ -36,7 +36,7 @@ export async function POST(req: Request, { params }: Ctx) {
         await requestEdit(id, String(b.note ?? ""));
         break;
       case "fix_issues":
-        await requestFix(id, Array.isArray(b.indexes) ? b.indexes : [], b.notes && typeof b.notes === "object" ? b.notes : {});
+        await requestFix(id, Array.isArray(b.indexes) ? b.indexes : [], b.notes && typeof b.notes === "object" ? b.notes : {}, String(b.general ?? ""));
         break;
       case "issue_note":
         await saveIssueNotes(id, { [String(Number(b.index))]: String(b.note ?? "") });

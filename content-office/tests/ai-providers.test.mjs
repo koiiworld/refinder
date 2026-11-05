@@ -134,7 +134,7 @@ test("⑥ 검수 지적 '수정 요청' → AI가 해당 부분만 고침 → �
   const fp = await stepPrompt("검수 지적을 반영해");
   assert.match(fp, /고쳐야 할 검수 지적/);
   assert.match(fp, new RegExp(b.project.review.issues[0].comment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(fp, /지적과 관계없는 문장·구성·말투는 그대로/);
+  assert.match(fp, /관계없는 문장·구성·말투는 그대로/);
 });
 
 test("⑥ 검수 지적에 내 코멘트 달기 → 저장 → AI 수정 때 코멘트 우선 반영", async () => {
@@ -150,6 +150,30 @@ test("⑥ 검수 지적에 내 코멘트 달기 → 저장 → AI 수정 때 코
   const fp = await stepPrompt("검수 지적을 반영해");
   assert.match(fp, /블로그 주인 코멘트/);
   assert.match(fp, /도입부를 짧게, 질문형으로/);
+});
+
+test("⑥ 코멘트 + 글 전체 수정사항 한꺼번에 반영 (글 전체만 적어도 가능)", async () => {
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  const id = posts[0].id;
+  assert.equal((await call(`/api/posts/${id}`, "POST", { action: "fix_issues", indexes: [], general: "  " })).status, 400, "아무것도 없으면 거절");
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "fix_issues", indexes: [0], notes: { 0: "표로 정리해 주세요" }, general: "부모급여 정책 추가해줘" });
+  let b = await waitPost(id, (x) => x.project.status !== "running" && idle(x), "한꺼번에 수정");
+  let fp = await stepPrompt("검수 지적을 반영해");
+  assert.match(fp, /표로 정리해 주세요/);
+  assert.match(fp, /글 전체 수정사항[^\n]*\n부모급여 정책 추가해줘/);
+  assert.match(fp, /맥락|흐름에 맞는 위치/);
+  assert.equal(b.project.review.lastFix.general, "부모급여 정책 추가해줘");
+  assert.equal(b.project.review.generalNote, "", "반영 후 칸 비움");
+  assert.equal(b.project.needs_rereview, true);
+  await call("/__reset", "POST", undefined, MOCK);
+  const before = b.document.revision;
+  await call(`/api/posts/${id}`, "POST", { action: "fix_issues", indexes: [], general: "마지막 문단은 빼줘" });
+  b = await waitPost(id, (x) => x.project.status !== "running" && idle(x), "글 전체만 수정");
+  assert.ok(b.document.revision > before, "본문 갱신");
+  fp = await stepPrompt("검수 지적을 반영해");
+  assert.match(fp, /마지막 문단은 빼줘/);
+  assert.doesNotMatch(fp, /\[고쳐야 할 검수 지적\]/);
 });
 
 test("④ 수정 요청사항 직접 입력 → AI가 그 내용만 반영", async () => {

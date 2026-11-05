@@ -141,27 +141,28 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const doc = await getDocument(project.id);
     const indexes = arr(job.payload.indexes).map(Number);
     const note = String(job.payload.note ?? "").trim();
+    const general = note ? "" : String(job.payload.general ?? "").trim();
     // 검수 지적 수정 또는 사용자가 직접 적은 '수정 요청사항'
     const issues = note
       ? [{ type: "user", severity: "high", quote: "", comment: `사용자 수정 요청: ${note}`, suggestion: "" }]
       : (review?.issues ?? []).filter((_, i) => indexes.includes(i));
-    if (!doc?.content_html || !issues.length) throw new Error("고칠 지적 사항이나 본문이 없습니다.");
-    const { system, prompt } = fixPrompt(blog, { title: doc.title || project.title, html: doc.content_html, issues });
+    if (!doc?.content_html || (!issues.length && !general)) throw new Error("고칠 지적 사항이나 본문이 없습니다.");
+    const { system, prompt } = fixPrompt(blog, { title: doc.title || project.title, html: doc.content_html, issues, general });
     const res = await runStep({ step: "writing", role: "writer", purpose: "fix", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000, template: () => JSON.stringify({ html: doc.content_html, changes: [] }) });
     const raw = extractJson<{ html?: string; changes?: string[] }>(res.text);
     const html = sanitizeHtml(String(raw.html ?? ""));
     if (!html) throw new AiError("AI가 고친 본문을 돌려주지 않았습니다.", true);
     // 사용자가 직접 요청한 수정이므로 바로 적용 (이전 글은 버전 기록에 남음)
-    await writeAiDraft(project.id, html, { provider: res.provider, model: res.model, label: note ? "수정 요청사항 반영" : `⑥ 지적 ${issues.length}건 AI 수정`, force: true });
+    await writeAiDraft(project.id, html, { provider: res.provider, model: res.model, label: note ? "수정 요청사항 반영" : `⑥ ${issues.length ? `지적 ${issues.length}건` : ""}${issues.length && general ? " + " : ""}${general ? "글 전체 수정사항" : ""} AI 수정`, force: true });
     const changes = arr(raw.changes).map(String).slice(0, 20);
     if (note) {
       await updateProject(project.id, { status: project.stage === "published" ? "done" : "waiting", status_message: "", needs_rereview: !!review, package: { ...((project.package as unknown as PostExtras) ?? { hashtags: [], images: [] }), lastEdit: { at: new Date().toISOString(), note, changes } } });
       await addEvent(project.id, "ai", `수정 요청사항 반영 (${res.provider}/${res.model}): ${note}${changes.length ? ` · ${changes.join(" / ")}` : ""}`);
       return;
     }
-    const next = { ...review!, issues: review!.issues.map((it, i) => (indexes.includes(i) ? { ...it, fixed: true } : it)), lastFix: { at: new Date().toISOString(), changes, provider: res.provider, model: res.model } };
+    const next = { ...review!, issues: review!.issues.map((it, i) => (indexes.includes(i) ? { ...it, fixed: true } : it)), generalNote: general ? "" : (review as unknown as { generalNote?: string })?.generalNote ?? "", lastFix: { at: new Date().toISOString(), changes, provider: res.provider, model: res.model, ...(general ? { general } : {}) } };
     await updateProject(project.id, { review: next, status: project.stage === "published" ? "done" : "waiting", status_message: "", needs_rereview: true });
-    await addEvent(project.id, "ai", `⑥ 지적 ${issues.length}건 AI 수정 (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""})${changes.length ? ` · ${changes.join(" / ")}` : ""}`);
+    await addEvent(project.id, "ai", `⑥ ${issues.length ? `지적 ${issues.length}건` : ""}${general ? `${issues.length ? " + " : ""}글 전체 수정사항(${general})` : ""} AI 수정 (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""})${changes.length ? ` · ${changes.join(" / ")}` : ""}`);
   },
 
   // ③ SEO 제목 후보 추천 → 사용자가 고르고 '글 쓰기'를 누를 때까지 대기

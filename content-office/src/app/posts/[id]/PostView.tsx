@@ -16,7 +16,8 @@ type Review = {
   summary: string;
   score: number | null;
   issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; fixed?: boolean; userNote?: string }[];
-  lastFix?: { at: string; changes: string[] };
+  lastFix?: { at: string; changes: string[]; general?: string };
+  generalNote?: string;
   imageChecks?: { index: number; ok: boolean; note: string }[];
   provider: string;
   model: string;
@@ -188,7 +189,7 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
               busy={running}
               fixing={b.jobs.some((j) => j.type === "fix")}
               reviewing={b.jobs.some((j) => j.type === "review")}
-              onFix={(indexes, notes) => act({ action: "fix_issues", indexes, notes: Object.fromEntries(Object.entries(notes).filter(([k]) => indexes.includes(Number(k)))) }, `지적 ${indexes.length}건을 AI가 고치고 있습니다.`)}
+              onFix={(indexes, notes, general) => act({ action: "fix_issues", indexes, notes: Object.fromEntries(Object.entries(notes).filter(([k]) => indexes.includes(Number(k)))), general: general ?? "" }, `${indexes.length ? `지적 ${indexes.length}건` : ""}${indexes.length && general?.trim() ? " + " : ""}${general?.trim() ? "글 전체 수정사항" : ""}을 AI가 고치고 있습니다.`)}
               onNote={(index, note) => void act({ action: "issue_note", index, note })}
               onRereview={() => act({ action: "rerun", step: "review" }, "다시 검수합니다.")}
             />
@@ -537,11 +538,19 @@ function OfficialImageCard({ index, im, disabled, act }: { index: number; im: Po
   );
 }
 
-function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFix, onNote, onRereview }: { review: Review; rereview: boolean; imagesNow: number; busy: boolean; fixing: boolean; reviewing: boolean; onFix: (indexes: number[], notes: Record<number, string>) => void; onNote: (index: number, note: string) => void; onRereview: () => void }) {
+function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFix, onNote, onRereview }: { review: Review; rereview: boolean; imagesNow: number; busy: boolean; fixing: boolean; reviewing: boolean; onFix: (indexes: number[], notes: Record<number, string>, general?: string) => void; onNote: (index: number, note: string) => void; onRereview: () => void }) {
   const sev: Record<string, string> = { high: "badge-bad", medium: "badge-warn", low: "" };
   const [notes, setNotes] = useState<Record<number, string>>(() => Object.fromEntries(review.issues.map((it, i) => [i, it.userNote ?? ""])));
   useEffect(() => setNotes(Object.fromEntries(review.issues.map((it, i) => [i, it.userNote ?? ""]))), [review]);
   const open = review.issues.map((it, i) => (it.fixed ? -1 : i)).filter((i) => i >= 0);
+  const [general, setGeneral] = useState(review.generalNote ?? "");
+  useEffect(() => setGeneral(review.generalNote ?? ""), [review]);
+  // 코멘트를 단 지적 (이미 고친 지적이라도 코멘트를 바꿨으면 다시 포함)
+  const commented = review.issues.map((it, i) => {
+    const n = (notes[i] ?? "").trim();
+    return n && (!it.fixed || n !== (it.userNote ?? "").trim()) ? i : -1;
+  }).filter((i) => i >= 0);
+  const bulkLabel = [commented.length ? `코멘트 ${commented.length}건` : "", general.trim() ? "글 전체 수정사항" : ""].filter(Boolean).join(" + ");
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="row">
@@ -552,9 +561,31 @@ function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFi
           {reviewing ? <><span className="spinner" /> 검수 중…</> : "🔄 다시 검수"}
         </button>
       </div>
+      <div className="card card-pad stack" style={{ gap: 6, padding: 10 }}>
+        <button
+          className="btn btn-sm btn-primary"
+          style={{ alignSelf: "flex-start" }}
+          disabled={busy || !bulkLabel}
+          onClick={() => confirm(`${bulkLabel}을(를) 한 번에 AI가 본문에 반영할까요?\n내 코멘트는 AI 수정 제안보다 우선하고, 관계없는 부분은 그대로 둡니다.`) && onFix(commented, notes, general)}
+        >
+          {fixing ? <><span className="spinner" /> AI가 고치는 중…</> : `💬 코멘트 반영해 한꺼번에 고치기${bulkLabel ? ` (${bulkLabel})` : ""}`}
+        </button>
+        <div className="label" style={{ marginTop: 4 }}>📝 글 전체 수정사항 (선택)</div>
+        <textarea
+          className="textarea"
+          style={{ minHeight: 70, fontSize: 13 }}
+          placeholder={"글 전체에 더하거나 빼고 싶은 내용을 적어 주세요. 짧게 적어도 AI가 맥락에 맞는 자리에 넣어요.\n예: 2026년 부모급여 인상 내용 추가해줘 / 마지막 광고 느낌 문단은 빼줘"}
+          value={general}
+          disabled={busy}
+          onChange={(e) => setGeneral(e.target.value)}
+          aria-label="글 전체 수정사항"
+        />
+        <div className="tiny muted">아래 지적마다 코멘트를 달고, 필요하면 여기에 글 전체 수정사항을 적은 뒤 위 버튼을 누르세요. 코멘트를 단 지적 + 글 전체 수정사항이 한 번에 반영돼요.</div>
+      </div>
       {review.lastFix?.changes?.length ? (
         <div className="notice notice-ok small">
           <b>AI가 고친 내용</b> · {fmtDate(review.lastFix.at)}
+          {review.lastFix.general && <div className="tiny">📝 반영한 글 전체 수정사항: {review.lastFix.general}</div>}
           {review.lastFix.changes.map((c, i) => <div key={i} className="tiny">{c}</div>)}
           <div className="tiny">고친 글이 괜찮은지 &apos;다시 검수&apos;로 확인해 보세요. 이전 글은 버전 기록에 남아 있습니다.</div>
         </div>
@@ -566,11 +597,13 @@ function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFi
         <p className="small" style={{ flex: 1 }}>{review.summary}</p>
         {review.score !== null && <span className="badge badge-accent">점수 {review.score}/100</span>}
       </div>
-      {review.issues.map((it, i) => {
+      {(() => {
+        const card = (i: number) => {
+        const it = review.issues[i];
         const note = notes[i] ?? "";
         const noteChanged = note.trim() !== (it.userNote ?? "").trim();
         return (
-          <div key={i} className="card card-pad stack" style={{ gap: 4, padding: 10 }}>
+          <div key={i} className="card card-pad stack" style={{ gap: 4, padding: 10, ...(it.fixed ? { background: "var(--ok-bg, #f3faf5)" } : {}) }}>
             <div className="row"><span className={`badge ${sev[it.severity] ?? ""}`}>{it.severity}</span><span className="badge">{it.type}</span></div>
             {it.quote && <div className="tiny muted">“{it.quote}”</div>}
             <div className="small">{it.comment}</div>
@@ -587,15 +620,34 @@ function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFi
             />
             <div className="row" style={{ marginTop: 4 }}>
               {it.fixed && !noteChanged ? (
-                <span className="badge badge-ok">✅ AI가 수정함 · 다시 검수로 확인</span>
+                <span className="badge badge-ok">✅ 수정 완료</span>
               ) : (
                 <button className="btn btn-sm" disabled={busy} onClick={() => onFix([i], { [i]: note })}>{it.fixed ? "✏️ 코멘트대로 다시 수정" : note.trim() ? "✏️ 코멘트 반영해 수정 요청" : "✏️ 수정 요청"}</button>
               )}
-              <button className="btn btn-sm btn-ghost" disabled={busy} onClick={onRereview}>🔄 다시 검수</button>
+              {!it.fixed && <button className="btn btn-sm btn-ghost" disabled={busy} onClick={onRereview}>🔄 다시 검수</button>}
             </div>
           </div>
         );
-      })}
+        };
+        const done = review.issues.map((it, i) => (it.fixed ? i : -1)).filter((i) => i >= 0);
+        return (
+          <>
+            {open.map(card)}
+            {!!done.length && (
+              <div className="stack" style={{ gap: 8, marginTop: 6 }}>
+                <div className="row between" style={{ borderTop: "1px solid var(--line, #e5e7eb)", paddingTop: 10 }}>
+                  <b className="small">✅ 수정 완료 ({done.length})</b>
+                  <button className="btn btn-sm" disabled={busy} onClick={onRereview}>
+                    {reviewing ? <><span className="spinner" /> 검수 중…</> : "🔄 다시 검수"}
+                  </button>
+                </div>
+                <div className="tiny muted">AI가 고친 지적이에요. 고친 글이 괜찮은지 &apos;다시 검수&apos;로 확인하세요. 코멘트를 바꾸면 다시 고칠 수 있어요.</div>
+                {done.map(card)}
+              </div>
+            )}
+          </>
+        );
+      })()}
       {!review.issues.length && <p className="small muted">지적 사항 없음</p>}
       {!!review.imageChecks?.length && (
         <div>

@@ -116,23 +116,29 @@ ${input.html}
 }
 
 // ───────── ⑥ 검수 지적 반영 (AI 수정) ─────────
-export function fixPrompt(blog: Blog, input: { title: string; html: string; issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; userNote?: string }[] }) {
+export function fixPrompt(blog: Blog, input: { title: string; html: string; issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; userNote?: string }[]; general?: string }) {
+  const general = input.general?.trim();
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 편집자의 검수 지적을 반영해 원고를 고칩니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
   const prompt = `${blogContext(blog)}
 ${styleSamplesText(blog)}
 [제목] ${input.title}
 
-[고쳐야 할 검수 지적]
-${input.issues.map((it, i) => `${i + 1}. (${it.severity}/${it.type}) 문제 부분: "${it.quote}"\n   설명: ${it.comment}\n   수정 제안: ${it.suggestion || "(없음)"}${it.userNote?.trim() ? `\n   ★ 블로그 주인 코멘트 (수정 제안보다 우선, 반드시 따를 것): ${it.userNote.trim()}` : ""}`).join("\n")}
-
+${input.issues.length ? "[고쳐야 할 검수 지적]\n" : ""}${input.issues.map((it, i) => `${i + 1}. (${it.severity}/${it.type}) 문제 부분: "${it.quote}"\n   설명: ${it.comment}\n   수정 제안: ${it.suggestion || "(없음)"}${it.userNote?.trim() ? `\n   ★ 블로그 주인 코멘트 (수정 제안보다 우선, 반드시 따를 것): ${it.userNote.trim()}` : ""}`).join("\n")}
+${general ? `
+[★ 글 전체 수정사항 — 블로그 주인 요청 (반드시 반영)]
+${general}
+- 요청이 짧아도(예: "OO 정책 추가해줘") 글의 주제·흐름에 맞는 위치를 골라, 필요하면 소제목·문단을 새로 만들어 기존 말투로 자연스럽게 녹여 넣으세요.
+- 빼 달라는 내용은 지우고 앞뒤 문장이 매끄럽게 이어지도록 다듬으세요. 목차·요약·마무리에 같은 내용이 있으면 함께 맞추세요.
+- 추가하는 금액·날짜·조건 등이 확실하지 않으면 지어내지 말고 [확인 필요]로 표시하세요.
+` : ""}
 [현재 원고 HTML]
 ${input.html}
 
-위 지적만 반영해 원고를 고치세요.
-- 지적과 관계없는 문장·구성·말투는 그대로 두세요 (전체를 새로 쓰지 말 것).
+위 ${input.issues.length ? "지적" : ""}${input.issues.length && general ? "과 " : ""}${general ? "글 전체 수정사항" : ""}만 반영해 원고를 고치세요.
+- 요청·지적과 관계없는 문장·구성·말투는 그대로 두세요 (전체를 새로 쓰지 말 것).
 - <img ...> 태그, 출처 문단, <p>[이미지 N]</p> 자리 표시는 그대로 두세요.
 - 확인할 수 없는 사실은 지어내지 말고, 단정하지 않는 표현으로 바꾸거나 [확인 필요]로 두세요.
-- changes: 무엇을 어떻게 고쳤는지 지적 번호별로 한 줄씩
+- changes: 무엇을 어떻게 고쳤는지 지적 번호별로 한 줄씩${general ? " (글 전체 수정사항은 \"전체: ...\"로)" : ""}
 형식: {"html": "고친 전체 본문 HTML", "changes": ["1. ...", "2. ..."]}`;
   return { system, prompt };
 }
