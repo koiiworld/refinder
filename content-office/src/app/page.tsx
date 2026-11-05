@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { dashboardData, PASS_SCORE } from "@/lib/dashboard";
 import { ensureWorker } from "@/lib/jobs";
-import { fmtUsd, KRW_PER_USD } from "@/components/ui";
+import { fmtDate, fmtUsd, KRW_PER_USD } from "@/components/ui";
 import { CostDays, RevenueCard, TrendChart } from "./DashboardParts";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function Dashboard() {
   const d = await dashboardData();
   const [y, m] = d.month.split("-").map(Number);
   const pubDelta = d.kpi.publishedThisMonth - d.kpi.publishedPrevSame;
-  const maxCompleted = Math.max(1, ...d.perBlog.map((b) => b.completed));
+  const maxWeek = Math.max(1, ...d.visits.blogs.map((b) => b.week ?? 0));
   const seriesVar = (i: number) => `var(--series-${(i % 3) + 1})`;
 
   return (
@@ -98,48 +98,76 @@ export default async function Dashboard() {
           </div>
         </section>
 
-        {/* 추이 + 블로그별 */}
+        {/* 추이(좁게) + 방문자 성과 비교(넓게) */}
         <div className="dash-2col">
           <section className="card">
-            <div className="card-head"><h2 style={{ fontSize: 15 }}>최근 10주 완성 글 추이</h2></div>
+            <div className="card-head"><h2 style={{ fontSize: 15 }}>최근 5주 완성 글 추이</h2></div>
             <div className="card-pad">
               <p className="tiny muted" style={{ marginTop: 0 }}>블로그별 주간 완성 글 수 (⑥ 검수까지 끝난 글, 월요일 시작 주)</p>
               <TrendChart weeks={d.trend.weeks} series={d.trend.series} />
             </div>
           </section>
           <section className="card">
-            <div className="card-head"><h2 style={{ fontSize: 15 }}>블로그별 성과 비교</h2></div>
+            <div className="card-head" style={{ flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 15 }}>블로그별 방문자 비교</h2>
+              <span className="tiny muted">{d.visits.updatedAt ? `${fmtDate(d.visits.updatedAt)} 수집 · 1시간마다 갱신` : "아직 수집 전"}</span>
+            </div>
             <div className="card-pad stack" style={{ gap: 10 }}>
-              <div className="tiny muted">이번 달 완성 글 수</div>
-              {d.perBlog.map((b, i) => (
+              <div className="tiny muted">최근 7일 방문자 (수집한 날만 합산)</div>
+              {d.visits.blogs.map((b, i) => (
                 <div key={b.id} className="row" style={{ flexWrap: "nowrap", gap: 10 }}>
-                  <span className="small ellipsis" style={{ width: 110, flexShrink: 0 }}>
+                  <span className="small ellipsis" style={{ width: 130, flexShrink: 0 }}>
                     <span className="dot" style={{ background: seriesVar(i) }} /> {b.name}
                   </span>
-                  <div className="hbar" title={`${b.name} ${b.completed}건`}>
-                    <div style={{ width: `${(b.completed / maxCompleted) * 100}%`, background: seriesVar(i) }} />
+                  <div className="hbar" title={`${b.name} 최근 7일 ${b.week ?? 0}명`}>
+                    <div style={{ width: `${((b.week ?? 0) / maxWeek) * 100}%`, background: seriesVar(i) }} />
                   </div>
-                  <span className="small" style={{ width: 40, textAlign: "right", flexShrink: 0 }}>{b.completed}건</span>
+                  <span className="small" style={{ width: 64, textAlign: "right", flexShrink: 0 }}>{b.week == null ? "-" : `${b.week.toLocaleString("ko-KR")}명`}</span>
                 </div>
               ))}
               <div className="table-wrap" style={{ marginTop: 6 }}>
                 <table className="tbl">
-                  <thead><tr><th>블로그</th><th style={{ textAlign: "right" }}>발행</th><th style={{ textAlign: "right" }}>1차 통과율</th><th style={{ textAlign: "right" }}>평균 검색량</th></tr></thead>
+                  <thead><tr><th>블로그</th><th style={{ textAlign: "right" }}>오늘</th><th style={{ textAlign: "right" }}>최근 7일</th><th style={{ textAlign: "right" }}>이번 달</th><th style={{ textAlign: "right" }}>누적</th></tr></thead>
                   <tbody>
-                    {d.perBlog.map((b) => (
+                    {d.visits.blogs.map((b) => (
                       <tr key={b.id}>
-                        <td>{b.name}</td>
-                        <td style={{ textAlign: "right" }}>{b.published}</td>
-                        <td style={{ textAlign: "right" }}>{pct(b.passRate)}</td>
-                        <td style={{ textAlign: "right" }}>{num(b.avgVolume)}</td>
+                        <td>{b.name}{!b.hasUrl && <div className="tiny muted">블로그 주소를 넣으면 집계</div>}</td>
+                        <td style={{ textAlign: "right" }}>{num(b.today)}</td>
+                        <td style={{ textAlign: "right" }}>{num(b.week)}</td>
+                        <td style={{ textAlign: "right" }}>{num(b.month)}</td>
+                        <td style={{ textAlign: "right" }}>{num(b.total)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <p className="tiny muted" style={{ margin: 0 }}>
+                네이버 블로그 정보와 티스토리 방문자 카운터의 공개 숫자입니다. 맥이 켜져 있을 때 1시간마다 기록해서, 기록을 시작한 날({d.visits.blogs.map((b) => b.since).filter(Boolean).sort()[0] ?? "오늘"})부터 쌓입니다. 글별 조회수는 공개되지 않아 표시하지 않습니다.
+              </p>
             </div>
           </section>
         </div>
+
+        {/* 블로그별 글 작업 */}
+        <section className="card">
+          <div className="card-head"><h2 style={{ fontSize: 15 }}>블로그별 글 작업 (이번 달)</h2></div>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead><tr><th>블로그</th><th style={{ textAlign: "right" }}>완성</th><th style={{ textAlign: "right" }}>발행</th><th style={{ textAlign: "right" }}>1차 통과율</th><th style={{ textAlign: "right" }}>평균 검색량</th></tr></thead>
+              <tbody>
+                {d.perBlog.map((b) => (
+                  <tr key={b.id}>
+                    <td>{b.name}</td>
+                    <td style={{ textAlign: "right" }}>{b.completed}</td>
+                    <td style={{ textAlign: "right" }}>{b.published}</td>
+                    <td style={{ textAlign: "right" }}>{pct(b.passRate)}</td>
+                    <td style={{ textAlign: "right" }}>{num(b.avgVolume)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {/* 키워드 TOP 5 */}
         <section className="card">

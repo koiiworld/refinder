@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeywordPick } from "@/lib/keywords";
 import { api, useToast } from "@/components/client-utils";
 import { Steps } from "@/components/ui";
@@ -203,22 +203,74 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
 function CreatorPaste({ blogId, onDone }: { blogId: string; onDone: (m: string) => void }) {
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
+  const [reading, setReading] = useState(false);
+  const [note, setNote] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function readImages(files: File[]) {
+    const imgs = files.filter((f) => f.type.startsWith("image/")).slice(0, 4);
+    if (!imgs.length) return;
+    setErr("");
+    setNote("");
+    setReading(true);
+    try {
+      const images = await Promise.all(imgs.map((f) => new Promise<string>((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = no; r.readAsDataURL(f); })));
+      const r = await api<{ text: string; provider: string; model: string }>("/api/research/creator/image", "POST", { blogId, images });
+      if (!r.text) setErr("캡처에서 검색어 목록을 찾지 못했습니다. 유입 검색어 목록이 보이게 다시 캡처해 주세요.");
+      else {
+        setText((t) => (t.trim() ? `${t.trim()}\n${r.text}` : r.text));
+        setNote(`캡처 ${imgs.length}장에서 읽었습니다 (${r.provider}/${r.model}). 틀린 글자가 있으면 고친 뒤 '저장'을 누르세요.`);
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setReading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   return (
     <div className="card card-pad stack" style={{ background: "var(--panel-2)", gap: 8 }}>
       <p className="tiny muted">
-        <a href="https://creator-advisor.naver.com" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>크리에이터 어드바이저 ↗</a> 트렌드 화면에서 인기 유입 검색어 목록을 복사해 붙여 넣으면, 다음 키워드 추천부터 14일간 반영합니다. (공식 API가 없어 붙여넣기 방식)
+        <a href="https://creator-advisor.naver.com" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>크리에이터 어드바이저 ↗</a> 트렌드·유입 검색어 화면을 <b>캡처해서 올리거나</b>(여기에 붙여넣기 ⌘V도 됨), 목록을 복사해 붙여 넣으세요. 다음 키워드 추천부터 14일간 반영합니다.
       </p>
-      <textarea className="textarea" placeholder={"1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW"} value={text} onChange={(e) => setText(e.target.value)} />
+      <div
+        className="card"
+        role="button"
+        tabIndex={0}
+        onClick={() => fileRef.current?.click()}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); void readImages(Array.from(e.dataTransfer.files)); }}
+        style={{ borderStyle: "dashed", padding: 14, textAlign: "center", cursor: "pointer", background: "var(--panel)" }}
+      >
+        {reading ? <span className="small"><span className="spinner" /> AI가 캡처에서 검색어를 읽는 중…</span> : <span className="small">📷 캡처 이미지를 끌어다 놓거나 <b style={{ color: "var(--accent)" }}>눌러서 선택</b> (최대 4장)</span>}
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => e.target.files && void readImages(Array.from(e.target.files))} />
+      </div>
+      <textarea
+        className="textarea"
+        placeholder={"1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW"}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onPaste={(e) => {
+          const files = Array.from(e.clipboardData.files);
+          if (files.some((f) => f.type.startsWith("image/"))) {
+            e.preventDefault();
+            void readImages(files);
+          }
+        }}
+      />
+      {note && <div className="notice notice-ok small">{note}</div>}
       {err && <div className="notice notice-bad small">{err}</div>}
       <button
         className="btn btn-sm"
         style={{ alignSelf: "flex-start" }}
-        disabled={!text.trim()}
+        disabled={!text.trim() || reading}
         onClick={async () => {
           setErr("");
           try {
             const r = await api<{ count: number }>("/api/research/creator", "POST", { blogId, text });
             setText("");
+            setNote("");
             onDone(`유입 트렌드 ${r.count}개를 저장했습니다. 다음 추천에 반영됩니다.`);
           } catch (e) {
             setErr((e as Error).message);

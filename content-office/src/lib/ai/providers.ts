@@ -17,7 +17,7 @@ export interface AiRequest {
   maxTokens?: number;
   json?: boolean;
   temperature?: number;
-  images?: string[]; // https 이미지 URL (비전 지원 모델에 함께 전달)
+  images?: string[]; // https 이미지 URL 또는 data:image/...;base64 (비전 지원 모델에 함께 전달)
 }
 
 export interface AiResponse {
@@ -155,7 +155,13 @@ async function callAnthropic(key: string, r: AiRequest): Promise<AiResponse> {
         {
           role: "user",
           content: r.images?.length
-            ? [...r.images.map((url) => ({ type: "image", source: { type: "url", url } })), { type: "text", text: r.prompt }]
+            ? [
+                ...r.images.map((url) => {
+                  const m = /^data:([^;]+);base64,(.+)$/.exec(url);
+                  return m ? { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } } : { type: "image", source: { type: "url", url } };
+                }),
+                { type: "text", text: r.prompt },
+              ]
             : r.prompt,
         },
       ],
@@ -178,6 +184,11 @@ async function callAnthropic(key: string, r: AiRequest): Promise<AiResponse> {
 async function inlineImages(urls: string[] = []) {
   const parts: { inline_data: { mime_type: string; data: string } }[] = [];
   for (const url of urls.slice(0, 6)) {
+    const dm = /^data:([^;]+);base64,(.+)$/.exec(url);
+    if (dm) {
+      parts.push({ inline_data: { mime_type: dm[1], data: dm[2] } });
+      continue;
+    }
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
       if (!res.ok) continue;

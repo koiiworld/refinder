@@ -55,6 +55,15 @@ http
         <picture><source srcset="/v/mac-mini/images/hero_small.jpg 734w, /v/mac-mini/images/hero_large.jpg 1440w"><img src="/v/mac-mini/images/hero_small.jpg" alt=""></picture>
         <img data-src="https://cdn.example.com/ports.webp"></body></html>`);
     }
+    // 네이버 블로그 정보 (방문자 수) · 티스토리 첫 화면 방문자 카운터
+    if (url.pathname === "/rego/BlogInfo.naver") {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      return res.end(`)]}',\n` + JSON.stringify({ result: { blogId: url.searchParams.get("blogId"), dayVisitorCount: 146, totalVisitorCount: 979 } }));
+    }
+    if (url.pathname === "/tistory-home") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      return res.end(`<html><body><div class="visitor"><span>방문자수</span>Total<p class="total">1,229</p><ul><li>Today : 12</li><li>Yesterday : 31</li></ul></div><script>var Today = 999;</script></body></html>`);
+    }
     // 네이버 블로그 RSS
     if (url.pathname === "/algo_kitchen.xml") {
       res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8" });
@@ -114,6 +123,7 @@ http
       if (system.includes("전속 작가")) return JSON.stringify({ html: "<h2>김장 준비</h2><p>본문 " + (prompt.includes("말투마커") ? "말투반영" : "") + "</p><p>[이미지 1]</p><h2>양념</h2><p>[이미지 2]</p><script>x()</script>", hashtags: ["#김장", "절임배추", "김장 양념"], images: [{ prompt: "Top-down kimchi", alt: "김치", aspect: "4:3" }, { prompt: "Seasoning bowl", alt: "양념", aspect: "1:1" }] });
       if (system.includes("편집장이자 팩트체커")) return JSON.stringify({ summary: "모의 검수", score: 88, issues: [{ type: "fact", severity: "low", quote: "본문", comment: "확인", suggestion: "" }], factChecks: [], ruleChecks: [], imageChecks: [{ index: 1, ok: true, note: "좋음" }] });
       if (system.includes("교정")) return "AI가 다듬은 문장입니다.";
+      if (system.includes("크리에이터 어드바이저 화면")) return "1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW";
       return "{}";
     };
     const sysOf = (b) => (typeof b.system === "string" ? b.system : b.messages?.find?.((m) => m.role === "system")?.content ?? b.systemInstruction?.parts?.[0]?.text ?? "");

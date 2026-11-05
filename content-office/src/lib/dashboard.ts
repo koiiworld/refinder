@@ -2,6 +2,7 @@ import "server-only";
 import { q, q1, j } from "./db";
 import { todayUsage } from "./usage";
 import { getSettings } from "./settings";
+import { collectVisits, visitSummary } from "./visits";
 
 /**
  * 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음)
@@ -87,12 +88,12 @@ export async function dashboardData() {
      GROUP BY p.blog_id`,
   );
 
-  // ── 최근 10주 주간 완성 글 수 (블로그별, 한국 시간 월요일 기준 주)
+  // ── 최근 5주 주간 완성 글 수 (블로그별, 한국 시간 월요일 기준 주)
   const weeksRows = await q<{ blog_id: string; wk: string; n: number }>(
     `SELECT p.blog_id, to_char(date_trunc('week', p.updated_at AT TIME ZONE 'Asia/Seoul'), 'YYYY-MM-DD') AS wk, COUNT(*)::int AS n
      FROM projects p
      WHERE p.deleted_at IS NULL AND p.stage IN ('ready','published')
-       AND p.updated_at >= (date_trunc('week', NOW() AT TIME ZONE 'Asia/Seoul') - INTERVAL '9 weeks') AT TIME ZONE 'Asia/Seoul'
+       AND p.updated_at >= (date_trunc('week', NOW() AT TIME ZONE 'Asia/Seoul') - INTERVAL '4 weeks') AT TIME ZONE 'Asia/Seoul'
      GROUP BY 1, 2`,
   );
   const weeks: string[] = [];
@@ -100,7 +101,7 @@ export async function dashboardData() {
     const now = new Date(Date.now() + 9 * 3600 * 1000);
     const dow = (now.getUTCDay() + 6) % 7; // 월=0
     const monday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow);
-    for (let i = 9; i >= 0; i--) weeks.push(new Date(monday - i * 7 * 86400000).toISOString().slice(0, 10));
+    for (let i = 4; i >= 0; i--) weeks.push(new Date(monday - i * 7 * 86400000).toISOString().slice(0, 10));
   }
 
   // ── 키워드 TOP 5 (완성 글 키워드, 월간 검색량 순)
@@ -155,6 +156,11 @@ export async function dashboardData() {
   const firstTotal = perBlog.reduce((s, b) => s + b.first_total, 0);
   const volBlogs = perBlog.filter((b) => b.avg_volume != null);
 
+  // 방문자 수 (1시간마다 수집 — 오래됐으면 지금 한 번 시도)
+  await collectVisits().catch(() => {});
+  const vis = await visitSummary();
+  const blogUrls = await q<{ id: string; url: string }>("SELECT id, url FROM blogs");
+
   const revenueAll = await getRevenue();
   const month = monthKey();
   const revenue = revenueAll[month] ?? {};
@@ -171,6 +177,13 @@ export async function dashboardData() {
       firstPass,
       firstTotal,
       avgVolume: volBlogs.length ? volBlogs.reduce((s, b) => s + Number(b.avg_volume), 0) / volBlogs.length : null,
+    },
+    visits: {
+      updatedAt: vis.updatedAt,
+      blogs: blogs.map((b) => {
+        const v = vis.rows.find((r) => r.blog_id === b.id);
+        return { id: b.id, name: b.name, hasUrl: !!blogUrls.find((x) => x.id === b.id)?.url, today: v?.today ?? null, week: v?.week ?? null, month: v?.month ?? null, total: v?.total ?? null, since: v?.since ?? null, days: v?.days ?? 0 };
+      }),
     },
     perBlog: blogs.map((b) => {
       const r = perBlog.find((x) => x.blog_id === b.id);

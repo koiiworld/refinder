@@ -9,6 +9,7 @@ import { fixPrompt, postReviewPrompt, titlesPrompt, writePrompt } from "./ai/ste
 import { keywordStats, naverAdConnected } from "./searchad";
 import type { PostExtras, PostPlan } from "./posts-types";
 import { recentPosts, writtenTitles } from "./blog-posts";
+import { collectVisits } from "./visits";
 
 const postKeywords = (topic: string) => topic.split(/\s*,\s*/).map((k) => k.trim()).filter(Boolean);
 
@@ -50,6 +51,9 @@ export function ensureWorker() {
   ).catch(() => {});
   w.timer = setInterval(() => void tick(), TICK_MS);
   w.timer.unref?.();
+  // 블로그 방문자 수: 시작 30초 뒤 한 번, 이후 1시간마다 (맥이 켜져 있는 동안)
+  setTimeout(() => void collectVisits().catch(() => {}), 30_000).unref?.();
+  setInterval(() => void collectVisits().catch(() => {}), 10 * 60 * 1000).unref?.();
 }
 
 async function tick() {

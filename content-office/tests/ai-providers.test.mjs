@@ -294,6 +294,37 @@ test("주제 중복 피하기: 키워드 추천·제목 추천에 이미 쓴 글
   assert.match(tp, /- 굴보쌈 황금레시피｜집에서 만드는 법/);
 });
 
+test("대시보드 방문자 수: 네이버 블로그 정보 · 티스토리 카운터 공개 숫자 수집", async () => {
+  await call("/api/blogs/blog_algokitchen", "PUT", { url: "https://blog.naver.com/algo_kitchen" });
+  await call("/api/blogs/blog_tistory", "PUT", { url: `${MOCK}/tistory-home` });
+  const v = (await call("/api/dashboard/visits?refresh=1")).data;
+  const naver = v.rows.find((r) => r.blog_id === "blog_algokitchen");
+  const tis = v.rows.find((r) => r.blog_id === "blog_tistory");
+  assert.equal(naver.today, 146);
+  assert.equal(naver.total, 979);
+  assert.equal(tis.today, 12, "스크립트 안 숫자는 무시");
+  assert.equal(tis.total, 1229);
+  assert.equal(tis.week, 12 + 31, "어제 방문자도 기록");
+  const html = await (await fetch(BASE + "/")).text();
+  assert.ok(html.includes("블로그별 방문자 비교"));
+  assert.ok(html.replace(/<!-- -->/g, "").includes("43명"), "최근 7일 합");
+});
+
+test("크리에이터 어드바이저 캡처 → AI가 검색어 목록을 읽어 줌 (저장은 사용자가)", async () => {
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+  assert.equal((await call("/api/research/creator/image", "POST", { blogId: "blog_algokitchen", images: ["https://x.com/a.png"] })).status, 400, "이미지 파일만");
+  await call("/__reset", "POST", undefined, MOCK);
+  const r = await call("/api/research/creator/image", "POST", { blogId: "blog_algokitchen", images: [png] });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.text, /^1 김장 양념 비율\n2 절임배추 ▲3/);
+  const log = await mockLog();
+  const sent = log.find((l) => JSON.stringify(l.body ?? {}).includes("크리에이터 어드바이저 화면"));
+  const raw = JSON.stringify(sent.body);
+  assert.ok(raw.includes("iVBORw0KGgo"), "캡처 이미지를 AI에 전달");
+  const saved = await call("/api/research/creator", "POST", { blogId: "blog_algokitchen", text: r.data.text });
+  assert.equal(saved.data.count, 3);
+});
+
 test("모델 목록 · Higgsfield 연결 확인", async () => {
   assert.deepEqual((await call("/api/ai/models?provider=openai")).data.models, ["gpt-mock-1", "gpt-mock-2"]);
   assert.match((await call("/api/ai/models?provider=higgsfield")).data.note, /인증 성공/);

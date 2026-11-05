@@ -178,7 +178,7 @@ test("대시보드: 메인 화면 · 실제 기록 집계 · 수익 직접 입�
   const home = await fetch(BASE + "/");
   const html = await home.text();
   assert.equal(home.status, 200);
-  for (const t of ["대시보드", "이번 달 발행 글", "1차 검수 통과율", "최근 10주 완성 글 추이", "블로그별 성과 비교", "운영 상태"]) assert.ok(html.includes(t), t);
+  for (const t of ["대시보드", "이번 달 발행 글", "1차 검수 통과율", "최근 5주 완성 글 추이", "블로그별 방문자 비교", "운영 상태"]) assert.ok(html.includes(t), t);
   assert.ok(html.includes("아직 입력한 수익이 없습니다"), "수익은 지어내지 않음");
   assert.equal((await fetch(BASE + "/new")).status, 200, "글 만들기는 /new");
   const now = new Date(Date.now() + 9 * 3600 * 1000);

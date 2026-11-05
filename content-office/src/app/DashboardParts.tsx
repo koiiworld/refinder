@@ -22,16 +22,22 @@ export function TrendChart({ weeks, series }: { weeks: string[]; series: { id: s
   // 선 끝 이름표가 겹치지 않게 살짝 띄움
   const ends = series.map((s, i) => ({ i, y: yv(s.values[s.values.length - 1]) })).sort((a, b) => a.y - b.y);
   for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 14) ends[k].y = ends[k - 1].y + 14;
+  // 아래로 넘치면 위로 밀어 올림 (값이 모두 0일 때 이름표가 축 아래로 내려가지 않게)
+  const bottom = H - B;
+  if (ends.length && ends[ends.length - 1].y > bottom) {
+    ends[ends.length - 1].y = bottom;
+    for (let k = ends.length - 2; k >= 0; k--) if (ends[k + 1].y - ends[k].y < 14) ends[k].y = ends[k + 1].y - 14;
+  }
   const labelY = (i: number) => ends.find((e) => e.i === i)!.y;
 
   return (
     <div style={{ position: "relative" }}>
-      {empty && <p className="small muted" style={{ margin: "0 0 6px" }}>최근 10주 동안 완성한 글이 아직 없습니다.</p>}
+      {empty && <p className="small muted" style={{ margin: "0 0 6px" }}>최근 5주 동안 완성한 글이 아직 없습니다.</p>}
       <svg
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
         role="img"
-        aria-label="최근 10주 블로그별 주간 완성 글 수"
+        aria-label="최근 5주 블로그별 주간 완성 글 수"
         onMouseLeave={() => setHover(null)}
         onPointerMove={(e) => {
           const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -47,7 +53,7 @@ export function TrendChart({ weeks, series }: { weeks: string[]; series: { id: s
             <text x={L - 8} y={yv(t) + 4} textAnchor="end" fontSize={11} fill="var(--muted)">{t}</text>
           </g>
         ))}
-        {weeks.map((w, i) => (i % 3 === 0 || i === weeks.length - 1 ? <text key={w} x={x(i)} y={H - 6} textAnchor="middle" fontSize={11} fill="var(--muted)">{w.slice(5).replace("-", "/")}</text> : null))}
+        {weeks.map((w, i) => (weeks.length <= 6 || i % 3 === 0 || i === weeks.length - 1 ? <text key={w} x={x(i)} y={H - 6} textAnchor="middle" fontSize={11} fill="var(--muted)">{w.slice(5).replace("-", "/")}</text> : null))}
         {hover != null && <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="var(--muted)" strokeWidth={1} strokeDasharray="3 3" />}
         {series.map((s, si) => (
           <g key={s.id}>

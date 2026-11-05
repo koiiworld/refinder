@@ -278,3 +278,12 @@ ALTER TABLE media_jobs ADD COLUMN IF NOT EXISTS project_id TEXT;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 -- 블로그별 이미지 방식: ai(Higgsfield 생성) | official(제조사 공식 홈페이지 이미지)
 ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image_source TEXT NOT NULL DEFAULT 'ai';
+-- 블로그 방문자 수 (네이버 블로그 정보·티스토리 방문자 카운터에서 1시간마다 수집). today = 그날 방문자(하루 중 최댓값)
+CREATE TABLE IF NOT EXISTS blog_visits (
+  blog_id     TEXT NOT NULL REFERENCES blogs(id) ON DELETE CASCADE,
+  day         DATE NOT NULL,
+  today       INTEGER NOT NULL DEFAULT 0,
+  total       INTEGER,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (blog_id, day)
+);
