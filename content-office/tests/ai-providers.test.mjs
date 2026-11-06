@@ -837,11 +837,14 @@ test("⚠️ 고장 알림: 방문자 수집이 3번 연속 실패하면 대시�
   assert.equal(v.fix, "code");
   assert.equal(v.fails, 3);
   const html = await (await fetch(`${BASE}/`)).text();
-  assert.ok(html.includes("점검이 필요한 기능") && html.includes("블로그 방문자 수 수집"), "대시보드에 표시");
+  assert.ok(html.includes("⚠️점검필요") && html.includes("점검 필요 1개"), "대시보드 버튼에 숫자 표시");
+  assert.ok(!html.includes("+ 글 만들기"), "대시보드에서 글 만들기 버튼은 빠짐");
   await call("/__break?visits=0", "GET", undefined, MOCK);
   await call("/api/dashboard/visits?refresh=1");
   h = (await call("/api/dashboard/health")).data;
   assert.ok(!h.some((x) => x.id === "visits"), "다시 성공하면 사라짐");
+  const html2 = await (await fetch(`${BASE}/`)).text();
+  assert.ok(html2.includes("점검 필요 0개"), "문제 없으면 0");
 });
 
 test("✅ 발행 준비 판정: 지금 원고 기준 · 재검수 필요 · 근거 확인 · 이미지 자리(앱/직접) · 진행 목록 표시", async () => {

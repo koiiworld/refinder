@@ -671,28 +671,65 @@ export function TopKeywordsCard({ blogs, byBlog }: { blogs: { id: string; name: 
 
 // ───────── 고장 알림: 연속으로 실패하는 기능 ─────────
 type HealthItem = { id: string; label: string; fix: "self" | "code" | "auto"; hint: string; fails: number; since: string | null; error: string };
-const FIX_LABEL = { self: "🙋 직접 해결 가능", code: "🛠 코드 수정 필요 (Claude Code·Codex)", auto: "🔄 자동 복구 시도 중" } as const;
+export type HealthFeature = { id: string; label: string; fix: "self" | "code" | "auto"; hint: string };
+const FIX_COLS = [
+  { fix: "self", title: "🙋 직접 해결 가능", desc: "충전·키·설정을 직접 확인하면 돼요." },
+  { fix: "auto", title: "🔄 자동 복구 중", desc: "앱이 알아서 다시 시도해요. 계속되면 코드 확인이 필요해요." },
+  { fix: "code", title: "🛠 코드 수정 필요", desc: "Claude Code나 Codex에게 이 문구를 그대로 보여 주세요." },
+] as const;
 
-export function HealthBanner({ items }: { items: HealthItem[] }) {
+/** ⚠️점검필요 버튼 + 숫자 · 누르면 3칸(직접 해결 / 자동 복구 / 코드 수정) 팝업 */
+export function HealthButton({ items, features }: { items: HealthItem[]; features: HealthFeature[] }) {
   const [list, setList] = useState(items);
-  if (!list.length) return null;
+  const [open, setOpen] = useState(false);
+  const n = list.length;
   async function dismiss(id: string) {
     setList(await api<HealthItem[]>("/api/dashboard/health", "POST", { id }));
   }
+  const when = (s: string | null) => (s ? new Date(s).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
   return (
-    <section className="card card-pad stack" style={{ gap: 8, borderColor: "var(--warn, #e8a000)", background: "var(--panel)" }}>
-      <b className="small">⚠️ 점검이 필요한 기능 {list.length}개</b>
-      {list.map((h) => (
-        <div key={h.id} className="row between" style={{ flexWrap: "nowrap", gap: 10, alignItems: "flex-start", borderTop: "1px solid var(--line)", paddingTop: 8 }}>
-          <div className="stack" style={{ gap: 2, flex: 1 }}>
-            <span className="small"><b>{h.label}</b> · <span className="tiny">{FIX_LABEL[h.fix]}</span></span>
-            <span className="tiny muted">{h.hint}</span>
-            <span className="tiny muted">{h.fails}번 연속 실패{h.since ? ` · 마지막 ${new Date(h.since).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}{h.error ? ` · ${h.error.slice(0, 120)}` : ""}</span>
+    <>
+      <button type="button" className={`btn health-btn${n ? " has" : ""}`} onClick={() => setOpen(true)} aria-label={`점검 필요 ${n}개`}>
+        ⚠️점검필요<span className="badge" style={{ marginLeft: 6, background: "rgba(255,255,255,.25)", color: "inherit" }}>{n > 99 ? "99+" : n}</span>
+      </button>
+      {open && (
+        <Modal title={`⚠️ 점검 필요 ${n}개`} onClose={() => setOpen(false)}>
+          <div className="health-cols">
+            {FIX_COLS.map((c) => {
+              const feats = features.filter((f) => f.fix === c.fix);
+              const bad = list.filter((h) => h.fix === c.fix);
+              return (
+                <section key={c.fix} className="card card-pad stack health-col" style={{ gap: 8 }}>
+                  <div className="row between" style={{ flexWrap: "nowrap" }}>
+                    <b className="small">{c.title}</b>
+                    <span className={`badge${bad.length ? " badge-bad" : ""}`}>{bad.length}</span>
+                  </div>
+                  <span className="tiny muted">{c.desc}</span>
+                  {feats.map((f) => {
+                    const h = bad.find((x) => x.id === f.id);
+                    return (
+                      <div key={f.id} className={`health-item${h ? " bad" : ""}`}>
+                        <div className="row between" style={{ flexWrap: "nowrap", gap: 6 }}>
+                          <span className="small"><b>{f.label}</b></span>
+                          <span className="tiny" style={{ whiteSpace: "nowrap" }}>{h ? "❗ 문제" : "✅ 정상"}</span>
+                        </div>
+                        {h && (
+                          <>
+                            <span className="tiny muted">{f.hint}</span>
+                            <span className="tiny muted">{h.fails}번 연속 실패{h.since ? ` · 마지막 ${when(h.since)}` : ""}{h.error ? ` · ${h.error.slice(0, 120)}` : ""}</span>
+                            <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-end" }} onClick={() => dismiss(h.id)} title="고쳤으면 닫기 (다시 실패하면 또 떠요)">해결했어요</button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </section>
+              );
+            })}
           </div>
-          <button className="btn btn-sm btn-ghost" onClick={() => dismiss(h.id)} title="고쳤으면 닫기 (다시 실패하면 또 떠요)">닫기</button>
-        </div>
-      ))}
-      <span className="tiny muted">다시 성공하면 저절로 사라져요. &apos;코드 수정 필요&apos;는 Claude Code나 Codex에게 이 문구를 그대로 보여 주면 돼요.</span>
-    </section>
+          <p className="tiny muted" style={{ marginTop: 10 }}>다시 성공하면 저절로 0으로 돌아가요.</p>
+        </Modal>
+      )}
+    </>
   );
 }

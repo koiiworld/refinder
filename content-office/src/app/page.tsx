@@ -2,8 +2,9 @@ import Link from "next/link";
 import { dashboardData, PASS_SCORE } from "@/lib/dashboard";
 import { todayCount } from "@/lib/todos";
 import { ensureWorker } from "@/lib/jobs";
+import { FEATURES } from "@/lib/health";
 import { fmtDate, fmtUsd, KRW_PER_USD } from "@/components/ui";
-import { AiBalances, BlogTopButton, CostDays, HealthBanner, RevenueCard, TopKeywordsCard, TrendChart } from "./DashboardParts";
+import { AiBalances, BlogTopButton, CostDays, HealthButton, RevenueCard, TopKeywordsCard, TrendChart } from "./DashboardParts";
 
 export const dynamic = "force-dynamic";
 
@@ -29,13 +30,11 @@ export default async function Dashboard() {
         </div>
         <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
           <Link href="/todos?tab=today" className="btn btn-danger todo-today-btn" aria-label={`오늘 할 일 ${todoN}개`}>🚨오늘할일🚨{todoN > 0 && <span className="badge" style={{ marginLeft: 6, background: "rgba(255,255,255,.25)", color: "inherit" }}>{todoN > 99 ? "99+" : todoN}</span>}</Link>
-          <Link href="/new" className="btn btn-primary">+ 글 만들기</Link>
+          <HealthButton items={d.health} features={Object.entries(FEATURES).map(([id, f]) => ({ id, label: f.label, fix: f.fix, hint: f.hint }))} />
         </div>
       </div>
 
       <div className="stack" style={{ gap: 16 }}>
-        {/* 고장 알림 */}
-        <HealthBanner items={d.health} />
         {/* 핵심 지표 */}
         <div className="kpi-grid">
           <div className="card card-pad kpi">
