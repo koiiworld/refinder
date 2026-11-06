@@ -63,25 +63,49 @@ export function ensureWorker() {
 export const VIDEO_JOBS = ["video_fetch", "video_edit", "studio_plan", "studio_character", "studio_scene", "studio_render"];
 const ON_RENDER = !!process.env.RENDER;
 const hb = globalThis as unknown as { __macAlive?: { at: number; alive: boolean }; __macBeat?: number };
+/** 맥이 켜져 있고, 영상을 같은 저장소(Supabase)에 넣을 수 있을 때만 맥에 영상 작업을 맡김 */
 async function macAlive() {
   if (!ON_RENDER) return true;
   if (hb.__macAlive && Date.now() - hb.__macAlive.at < 30_000) return hb.__macAlive.alive;
-  const r = await q1<{ value: { at?: string } }>("SELECT value FROM settings WHERE key='worker_mac'").catch(() => null);
-  const alive = !!r?.value?.at && Date.now() - new Date(r.value.at).getTime() < 90_000;
+  const r = await q1<{ value: { at?: string; storage?: string } }>("SELECT value FROM settings WHERE key='worker_mac'").catch(() => null);
+  const { storageKind } = await import("./video-store");
+  const alive = !!r?.value?.at && Date.now() - new Date(r.value.at).getTime() < 90_000 && (r.value.storage ?? "db") === storageKind();
   hb.__macAlive = { at: Date.now(), alive };
   return alive;
 }
 async function macHeartbeat() {
   if (ON_RENDER || (hb.__macBeat && Date.now() - hb.__macBeat < 30_000)) return;
   hb.__macBeat = Date.now();
-  await q(`INSERT INTO settings (key, value) VALUES ('worker_mac', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j({ at: new Date().toISOString() })]).catch(() => {});
+  const { storageKind } = await import("./video-store");
+  await q(`INSERT INTO settings (key, value) VALUES ('worker_mac', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j({ at: new Date().toISOString(), storage: storageKind() })]).catch(() => {});
+}
+
+/** Render 쪽 저장소 종류를 기록 → 맥은 저장소가 다르면 영상 작업을 가져가지 않음 */
+async function renderStorageBeat() {
+  if (!ON_RENDER || (hb.__macBeat && Date.now() - hb.__macBeat < 60_000)) return;
+  hb.__macBeat = Date.now();
+  const { storageKind } = await import("./video-store");
+  await q(`INSERT INTO settings (key, value) VALUES ('worker_render', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j({ at: new Date().toISOString(), storage: storageKind() })]).catch(() => {});
+}
+const hr = globalThis as unknown as { __renderStorage?: { at: number; storage: string | null } };
+async function renderStorage() {
+  if (hr.__renderStorage && Date.now() - hr.__renderStorage.at < 60_000) return hr.__renderStorage.storage;
+  const r = await q1<{ value: { storage?: string } }>("SELECT value FROM settings WHERE key='worker_render'").catch(() => null);
+  hr.__renderStorage = { at: Date.now(), storage: r?.value?.storage ?? null };
+  return hr.__renderStorage.storage;
 }
 
 async function tick() {
   const w = g.__worker!;
   void macHeartbeat();
+  void renderStorageBeat();
   // 이 서버가 처리할 수 있는 작업만 가져감 (버전이 다른 서버가 모르는 작업을 '완료'로 처리하는 일 방지)
-  const known = Object.keys(HANDLERS);
+  let known = Object.keys(HANDLERS);
+  // 맥에 저장소 키가 없는데 Render는 Supabase를 쓰면, 영상 작업은 Render에 맡김 (영상이 다른 곳에 저장되지 않게)
+  if (!ON_RENDER) {
+    const { storageKind } = await import("./video-store");
+    if (storageKind() === "db" && (await renderStorage()) === "supabase") known = known.filter((t) => !VIDEO_JOBS.includes(t));
+  }
   const deferVideo = ON_RENDER && (await macAlive());
   while (w.running < CONCURRENCY) {
     let job: Job | null = null;
