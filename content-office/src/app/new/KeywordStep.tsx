@@ -21,8 +21,12 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
   const [hint, setHint] = useState("");
   // 트렌드 뷰어 '글감으로'에서 넘어오면 방향 칸을 채워 둠
   useEffect(() => {
-    const h = new URLSearchParams(window.location.search).get("hint");
+    const sp = new URLSearchParams(window.location.search);
+    const h = sp.get("hint");
     if (h) setHint(h);
+    // 아이디어 노트에서 넘어오면 블로그도 골라 둠 (자동으로 AI를 부르지 않음)
+    const bl = sp.get("blog");
+    if (bl && blogs.some((b) => b.id === bl)) setBlogId(bl);
   }, []);
   const [own, setOwn] = useState("");
   const [busy, setBusy] = useState<"" | "recommend" | "create" | "add">("");

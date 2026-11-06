@@ -1,3 +1,4 @@
+import { updateProject } from "@/lib/repo";
 import { q } from "@/lib/db";
 import { postBundle } from "@/lib/post-bundle";
 import { ensureWorker } from "@/lib/jobs";
@@ -23,7 +24,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean }>(req);
+    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; date?: string }>(req);
     switch (b.action) {
       case "rerun":
         if (!b.step) throw new WorkflowError("다시 실행할 단계를 고르세요.");
@@ -90,6 +91,12 @@ export async function POST(req: Request, { params }: Ctx) {
           return fail((e as Error).message, 400);
         }
         await setImage(id, Number(b.index), { pageUrl, candidates, ...(b.credit !== undefined ? { credit: b.credit } : {}) });
+        break;
+      }
+      case "publish_date": {
+        const d = String(b.date ?? "");
+        if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return fail("날짜를 확인해 주세요.");
+        await updateProject(id, { publish_date: d || null } as never);
         break;
       }
       case "image_manual":

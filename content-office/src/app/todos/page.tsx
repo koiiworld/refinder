@@ -3,6 +3,7 @@ import { q } from "@/lib/db";
 import { listBlogs } from "@/lib/repo";
 import { kstToday, listTodos, telegramConnected } from "@/lib/todos";
 import TodoBoard from "./TodoBoard";
+import TelegramSetup from "./TelegramSetup";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function Todos({ searchParams }: { searchParams: Promise<{ 
           <Link key={t.id} href={`/todos?tab=${t.id}`} scroll={false} className={`trend-tab ${t.id === tab ? "on" : ""}`}>{t.label}</Link>
         ))}
       </nav>
+      <div style={{ marginBottom: 16 }}><TelegramSetup connected={telegramConnected()} hasToken={!!process.env.TELEGRAM_BOT_TOKEN?.trim()} /></div>
       <TodoBoard
         key={tab}
         tab={tab}

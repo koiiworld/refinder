@@ -12,10 +12,11 @@
 | `benchmark.ts` | 인기 글 분석 → 내 블로그에 적용 | PostStats, statsOf, analyzePopular, lastBenchmark |
 | `blog-hot.ts` | 📰 블로그 핫이슈: 네이버 블로그 홈 '주제별 보기'에 지금 올라오는 글 중 반응(공감·댓글) 많은 글 | HOT_TABS, HotPost, HotTabData, topWords, hotTab |
 | `blog-posts.ts` | 내 블로그의 실제 최근 글 목록 (블로그 RSS) | BlogPostLink, rssUrlOf, parseRss, recentPosts, writtenTitles, PostStat, naverPostStats |
+| `calendar.ts` | 📅 마케팅 달력 | CalCat, CalEvent, CAT_LABEL, krHolidays, monthEvents, addCalendarEvent, deleteCalendarEvent |
 | `carousel.ts` | 📱 인스타 캐러셀(카드뉴스) | Slide, CarouselImage, TypeVersion, CarouselStyle, Carousel, CONTENT_TYPES, ContentTypeId, FORMATS … |
 | `coupang.ts` | 쿠팡파트너스 Open API: 이번 달 수익·클릭·주문 자동 집계 | coupangConnected, coupangAuth, syncCoupang, lastCoupangSync |
 | `creator.ts` | 네이버 크리에이터 어드바이저 '유입 트렌드' — 공식 API가 없어 사용자가 화면에서 복사해 붙여 넣은 목록을 저장 | CreatorTrend, parseTrendText, saveCreatorTrend, listCreatorTrends, creatorTrendContext |
-| `dashboard.ts` | 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음) | PASS_SCORE, RevenueChannel, RevenueEntry, MonthRevenue, monthKey, getRevenue, saveRevenue, dashboardData … |
+| `dashboard.ts` | 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음) | PASS_SCORE, RevenueChannel, RevenueEntry, MonthRevenue, monthKey, getRevenue, saveRevenue, getGoals … |
 | `db.ts` | 데이터베이스 어댑터 | getDb, q, q1, dbKind, newId, j |
 | `diagnose.ts` | 🩺 블로그 진단 | naverBlogSearch, naverSearch, postKey, blogKey, Check, diagnoseBlog, Diagnosis, DiagnoseState … |
 | `exporter.ts` | 표를 단순 마크다운 표로 변환 | htmlToMarkdown, plainText, buildPackage, packageHtmlFile, escapeHtml |
@@ -23,6 +24,7 @@
 | `hf-models.ts` | 공식 문서에서 요청 형식(스키마)을 확인한 모델 | HF_MODELS, HfModelId, HF_IMAGE_MODELS |
 | `higgsfield.ts` | Higgsfield 공식 API (이미지·영상 생성 전용) — https://docs.higgsfield.ai | HF_ENV, hfConnected, HiggsfieldError, hfTest, HfSubmitResult, hfEstimate, hfSubmit, HfStatus … |
 | `hot-report.ts` | 📋 블로그 글감 추천 리포트 | Issue, ReportItem, HotReport, googleTrends, createReport, lastReport, approveItem, restoreItem … |
+| `ideas.ts` | 💡 아이디어 노트: 한 줄 메모 + 블로그 + 참고 링크 | Idea, listIdeasNotes, getIdea, createIdea, updateIdea, deleteIdea |
 | `image-gen.ts` | ChatGPT(OpenAI Images API)·Gemini(이미지 출력) 로 바로 생성 → DB에 저장 → /api/img/<아이디> 로 공개 | ImageGenError, generateDirect, getGeneratedImage |
 | `image-models.ts` | 이미지 생성 모델 목록 (클라이언트·서버 공용) — Higgsfield · ChatGPT(OpenAI) · Gemini(Google) | ImageModel, IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel |
 | `jobs.ts` | 서버 측 작업 큐 | enqueue, ensureWorker, VIDEO_JOBS, jobLabel |
@@ -32,6 +34,7 @@
 | `official-images.ts` | 제조사 공식 페이지에서 제품 이미지 후보 찾기 | extractImages, findOfficialImages, checkImageUrl |
 | `post-bundle.ts` | 글 상세 화면 데이터. 생성 중인 이미지는 Higgsfield 에 상태를 물어 갱신 | postBundle, PostBundle |
 | `posts-types.ts` | 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) | PostPlan, PostBrief, PostImage, PostExtras |
+| `readiness.ts` | 발행 준비 판정 (서버·화면 공용) — 항상 '지금 원고' 기준 | ReadyState, READY_LABEL, Readiness, placeholderNumbers, readiness |
 | `repo.ts` | 말투 예시 파일(사용 중인 것)을 붙인 블로그 — AI 작업 전용 | listBlogs, getBlog, getBlogForAi, getProject, getDocument, getVersion, listVersions, listIdeas … |
 | `research.ts` | 경쟁·참고 콘텐츠 URL에서 제목/설명을 실제로 수집 (수집일 기록) | fetchUrlMeta, naverConnected, naverTrend |
 | `sample-html.ts` | 말투 예시용 HTML(블로그 글 저장 파일·편집기 HTML) → 마크다운 텍스트 | findNaverPost, fetchNaverPostHtml, importPostFromUrl, importPostWithImages, postImages, isHtmlFile, sampleHtmlToText |
@@ -41,6 +44,7 @@
 | `settings.ts` | 기본 단가 (USD / 100만 토큰). 설정에서 직접 고치면 그 값이 우선합니다. | AppSettings, DEFAULT_PRICING, getSettings, saveSettings |
 | `steps.ts` | 글(프로젝트) 진행 단계 | StepKey, STEP_AI_LABEL, DEFAULT_STEP_AI, FALLBACK_MODELS, POST_STAGES, STEP_NAMES, stageLabel, stageStep |
 | `studio.ts` | 🎬 영상 제작 스튜디오 (쇼츠·릴스) | StudioImage, StudioClip, StudioScene, StudioPlan, StudioCharacter, StudioOptions, StudioProject, STUDIO_STYLES … |
+| `todos.ts` | ✅ 할 일 + 🔔 텔레그램 알림 | Todo, kstToday, kstToDate, telegramConnected, listTodos, todayCount, getTodo, createTodo … |
 | `top-posts.ts` | 블로그별 인기 글 TOP 10 | ViewItem, ViewKind, ViewsBlock, ReactionTop, viewsOf, topPosts, saveViewsFromCapture, lastCaptureDay |
 | `trash.ts` | 휴지통으로 옮기기 (대기 중인 AI 작업은 취소, 키워드는 그대로 '사용됨'으로 둠) | moveToTrash, restoreFromTrash, purge |
 | `trends.ts` | 트렌드 뷰어 탭 | TrendTabDef, TREND_TABS, TrendVideo, TrendTabData, trendTab, TrendScrap, listScraps, addScrap … |
@@ -72,6 +76,7 @@
 | `api/blogs/[id]/samples/[sid]/route.ts` | 사용 여부 전환 | PATCH, DELETE |
 | `api/blogs/[id]/samples/route.ts` | HTML에서 뽑은 글이 이보다 짧으면 네이버 글 번호로 본문을 다시 찾아봄 | GET, POST |
 | `api/blogs/route.ts` |  | GET, POST |
+| `api/calendar/route.ts` | 행사 직접 추가 { title, start, end, kind: official/irregular, link, memo } · 지우기 { remove: id } | GET, POST |
 | `api/carousels/[id]/img/[n]/route.ts` | 캐러셀 사진을 같은 주소로 전달 (브라우저 캔버스에 그려 저장하려면 같은 출처여야 함) | GET |
 | `api/carousels/[id]/route.ts` | 장면·캡션·해시태그·디자인 저장 | GET, PUT, POST, DELETE |
 | `api/carousels/ideas/route.ts` | 알고리즘 타기 쉬운 캐러셀 주제 추천 | POST |
@@ -87,6 +92,8 @@
 | `api/export/route.ts` | 전체 백업 내보내기 (API 키는 DB에 저장하지 않으므로 포함되지 않음) | GET |
 | `api/health/route.ts` |  | GET |
 | `api/hot/route.ts` | action: report(새 리포트) · approve(승인 → 글 만들기 시작) · skip(넘기기) | GET, POST |
+| `api/ideas/[id]/route.ts` |  | GET, PUT, DELETE |
+| `api/ideas/route.ts` | 아이디어 저장 (AI 호출 없음) | GET, POST |
 | `api/img/[id]/route.ts` | ChatGPT·Gemini로 만든 이미지 (로그인 없이 공개 — 블로그 글에 넣어도 보이도록. 아이디는 추측하기 어려움) | GET |
 | `api/keywords/route.ts` | recommend(① AI 추천) / add(직접 입력) / dismiss(목록에서 빼기) | GET, POST |
 | `api/login/route.ts` |  | POST |
@@ -96,14 +103,17 @@
 | `api/posts/route.ts` | ② 선택한 키워드로 글 만들기 → ③④⑥ 자동 진행 | GET, POST |
 | `api/projects/[id]/document/route.ts` | 에디터 자동 저장 (revision 으로 동시 수정 충돌 감지) | GET, PUT |
 | `api/projects/[id]/export/route.ts` | ⑦ 발행용 내려받기: format=html / md / json | GET |
-| `api/projects/[id]/versions/[vid]/route.ts` |  | GET |
-| `api/projects/[id]/versions/route.ts` | 현재 원고(또는 기획안)를 수동으로 버전 저장 | POST |
+| `api/projects/[id]/versions/[vid]/route.ts` | 이 버전으로 되돌리기 | GET, POST |
+| `api/projects/[id]/versions/route.ts` | 원고 버전 목록 (내용 미리보기는 앞부분만) | GET, POST |
 | `api/research/benchmark/route.ts` | 인기 글 주소(최대 5개) 분석 → 내 블로그 적용 제안 | GET, POST |
 | `api/research/creator/image/route.ts` | 크리에이터 어드바이저 캡처 → AI가 화면의 유입 검색어 목록을 읽어 붙여넣기 형식(한 줄에 하나)으로 돌려줌 | POST |
 | `api/research/creator/route.ts` | 크리에이터 어드바이저 유입 트렌드 붙여넣기 저장 | GET, POST, DELETE |
 | `api/settings/route.ts` |  | GET, PUT |
 | `api/studio/[id]/route.ts` | 상태 (진행 중인 장면 영상은 Higgsfield에 확인해 갱신) | GET, PUT, POST, DELETE |
 | `api/studio/route.ts` | ① 프롬프트로 기획 시작 | GET, POST |
+| `api/telegram/route.ts` | action: find_chat (채팅 ID 찾기, 메시지 안 보냄) · test (시험 메시지 1건) | GET, POST |
+| `api/todos/[id]/route.ts` | 수정 · 완료(done: true/false) · 알림 켜기/끄기 | PUT, DELETE |
+| `api/todos/route.ts` |  | GET, POST |
 | `api/trash/route.ts` | action: trash(휴지통으로) / restore(되살리기) / purge(완전 삭제) / empty(휴지통 비우기) | GET, POST |
 | `api/trends/route.ts` | ?c=카테고리ID&refresh=1 · ?scraps=1 | GET, POST |
 | `api/videos/[id]/file/route.ts` | 영상·썸네일 파일: Supabase 저장소면 1시간짜리 서명 주소로 보냄, DB 보관이면 직접 전송 (구간 재생 지원) | GET |
@@ -111,6 +121,8 @@
 | `api/videos/route.ts` | 링크 넣기 → 받기 시작 | GET, POST |
 | `blogs/[id]/page.tsx` |  | dynamic |
 | `blogs/page.tsx` |  | dynamic |
+| `calendar/CalendarView.tsx` | 아이디어로 저장 → 아이디어 노트에서 바로 열기 |  |
+| `calendar/page.tsx` |  | dynamic |
 | `carousels/NewCarousel.tsx` |  |  |
 | `carousels/[id]/CarouselEditor.tsx` |  |  |
 | `carousels/[id]/page.tsx` |  | dynamic |
@@ -120,6 +132,8 @@
 | `diagnose/page.tsx` |  | dynamic |
 | `hot/HotReport.tsx` |  |  |
 | `hot/page.tsx` |  | dynamic |
+| `ideas/IdeaBoard.tsx` | 아이디어 → 할 일: 메모를 할 일 이름으로, 링크를 메모로 | todoHref, planHref |
+| `ideas/page.tsx` |  | dynamic |
 | `layout.tsx` | 발행 대기(검수까지 끝난) 글 수 | dynamic, metadata, viewport |
 | `login/page.tsx` |  |  |
 | `manifest.ts` | 휴대폰 '홈 화면에 추가' 시 앱처럼 실행 |  |
@@ -138,6 +152,9 @@
 | `studio/[id]/StudioEditor.tsx` |  |  |
 | `studio/[id]/page.tsx` |  | dynamic |
 | `studio/page.tsx` |  | dynamic |
+| `todos/TelegramSetup.tsx` | 텔레그램 연결 도우미: 채팅 ID 찾기(메시지 안 보냄) · 시험 메시지(누를 때만) |  |
+| `todos/TodoBoard.tsx` |  |  |
+| `todos/page.tsx` |  | dynamic |
 | `trash/TrashList.tsx` |  | TrashRow |
 | `trash/page.tsx` |  | dynamic |
 | `trends/TrendGrid.tsx` | 영상 제목 → 키워드 추천 방향 (해시태그·괄호·특수문자 정리) | TrendCardVideo |

@@ -979,3 +979,47 @@ test("🔔 텔레그램 알림: 서버 예약 · 시간 변경 시 갱신 · 완
   const f = await call("/api/telegram", "POST", { action: "find_chat" });
   assert.deepEqual(f.data.chats, [{ id: "987654", name: "민" }]);
 });
+
+test("💡📅 아이디어·달력: 김장철 → 김치 보관 글감 저장 → 아이디어에서 할 일·글 기획으로 (AI 호출 없음) · 선거는 비정기 · 발행 예정일", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  // 김장철이 있는 11월 달력
+  const y = new Date().getUTCFullYear();
+  const nov = (await call(`/api/calendar?m=${y}-11`)).data;
+  const kimjang = nov.find((e) => e.cat === "season" && e.title === "김장철");
+  assert.ok(kimjang, JSON.stringify(nov.map((e) => e.title)));
+  assert.ok(kimjang.seeds.length > 0 && kimjang.link.startsWith("https://search.naver.com"));
+  // 이번 달: 선거일 = 비정기, 공휴일 = 공식
+  const ym = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 7);
+  let cur = (await call(`/api/calendar?m=${ym}`)).data;
+  assert.equal(cur.find((e) => e.title === "국회의원선거일")?.cat, "irregular");
+  assert.equal(cur.find((e) => e.title === "시험공휴일")?.cat, "official");
+  // 직접 추가한 갑작스런 행사
+  const add = await call("/api/calendar", "POST", { title: "재보궐선거", start: `${ym}-15`, kind: "irregular", link: "https://www.nec.go.kr" });
+  assert.equal(add.status, 200);
+  // 발행 예정일 → 내 발행
+  const post = (await call("/api/posts")).data.find((p) => p.blog_id === "blog_algokitchen" && p.stage !== "published");
+  await call(`/api/posts/${post.id}`, "POST", { action: "publish_date", date: `${ym}-25` });
+  cur = (await call(`/api/calendar?m=${ym}`)).data;
+  assert.ok(cur.some((e) => e.title === "재보궐선거" && e.cat === "irregular" && e.custom));
+  assert.ok(cur.some((e) => e.cat === "publish" && e.postId === post.id && e.start === `${ym}-25`));
+  const page = (await (await fetch(`${BASE}/calendar?m=${ym}`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(page.includes("비정기·갑작스런 행사") && page.includes("재보궐선거"), "달력 화면");
+  // 김장철 → 김치 보관 글감으로 저장 (달력에서 누르는 것과 같은 요청)
+  const idea = (await call("/api/ideas", "POST", { memo: "김장철 → 김치 보관 글감", blog_id: "blog_algokitchen", link: kimjang.link, source: `calendar:${kimjang.id}` })).data;
+  assert.equal((await call("/api/ideas", "POST", { memo: " " })).status, 400);
+  const ideasPage = (await (await fetch(`${BASE}/ideas?open=${idea.id}`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(ideasPage.includes("김장철 → 김치 보관 글감") && ideasPage.includes("할 일 만들기"), "다시 열기(편집 상태로 열림)");
+  await call(`/api/ideas/${idea.id}`, "PUT", { memo: "김장철 → 김치 보관법 글감 (김치냉장고 온도)" });
+  assert.equal((await call(`/api/ideas/${idea.id}`)).data.memo, "김장철 → 김치 보관법 글감 (김치냉장고 온도)");
+  // 할 일 만들기: 아이디어 내용이 할 일 화면에 채워짐 → 레시피 사진 고르기 등록
+  const todoPage = (await (await fetch(`${BASE}/todos?tab=today&title=${encodeURIComponent("레시피 사진 고르기")}&blog=blog_algokitchen&idea=${idea.id}&memo=${encodeURIComponent("참고: " + kimjang.link)}`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(todoPage.includes("아이디어에서 넘어온 내용") && todoPage.includes("레시피 사진 고르기"), "할 일 화면에 채움");
+  const t = (await call("/api/todos", "POST", { title: "레시피 사진 고르기", blog_id: "blog_algokitchen", idea_id: idea.id })).data;
+  assert.equal(t.idea_id, idea.id);
+  // 글 기획으로 보내기: /new 화면만 열고 AI는 부르지 않음
+  const r = await fetch(`${BASE}/new?blog=blog_algokitchen&hint=${encodeURIComponent("김치 보관법")}`);
+  assert.equal(r.status, 200);
+  await new Promise((x) => setTimeout(x, 500));
+  const ai = (await mockLog()).filter((l) => /chat\/completions|\/v1\/messages|generateContent/.test(l.path));
+  assert.equal(ai.length, 0, "아이디어 저장·이동만으로 AI 호출 없음");
+});

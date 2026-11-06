@@ -100,6 +100,13 @@ http
         { logNo: 224000000003, sympathyCnt: 9, commentCnt: 1, readCount: null, titleWithInspectMessage: "김장 준비" },
       ] } });
     }
+    // 한국 공휴일 달력(ICS) — 선거일 포함
+    if (url.pathname === "/kr-holidays.ics") {
+      const y = new Date().getUTCFullYear();
+      const m = String(new Date().getUTCMonth() + 1).padStart(2, "0");
+      res.writeHead(200, { "content-type": "text/calendar; charset=utf-8" });
+      return res.end(`BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${y}${m}10\r\nDTEND;VALUE=DATE:${y}${m}11\r\nSUMMARY:국회의원선거일\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${y}${m}20\r\nDTEND;VALUE=DATE:${y}${m}21\r\nSUMMARY:시험공휴일\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`);
+    }
     // 텔레그램 봇 API (모의 발송 — 실제로 보내지 않음)
     const tg = url.pathname.match(/^\/bottest-tg-token\/(sendMessage|getUpdates)$/);
     if (tg) {

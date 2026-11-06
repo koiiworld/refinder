@@ -219,6 +219,7 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
               blogUrl={b.blog?.url}
               projectId={p.id}
               published={p.stage === "published"}
+              publishDate={(p as unknown as { publish_date?: string | null }).publish_date ?? ""}
               publishedUrl={extras.publishedUrl ?? null}
               publishedAt={extras.publishedAt ?? null}
               disabled={running}
@@ -671,10 +672,11 @@ function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFi
   );
 }
 
-function Publish(props: { ready: Readiness; title: string; html: string; hashtags: string[]; blogUrl?: string; projectId: string; published: boolean; publishedUrl: string | null; publishedAt: string | null; disabled: boolean; copy: (t: string, w: string) => void; act: (p: Record<string, unknown>, m?: string) => Promise<boolean> }) {
+function Publish(props: { ready: Readiness; publishDate: string; title: string; html: string; hashtags: string[]; blogUrl?: string; projectId: string; published: boolean; publishedUrl: string | null; publishedAt: string | null; disabled: boolean; copy: (t: string, w: string) => void; act: (p: Record<string, unknown>, m?: string) => Promise<boolean> }) {
   const [url, setUrl] = useState(props.publishedUrl ?? "");
   const tags = props.hashtags.map((t) => "#" + t).join(" ");
   const base = `/api/projects/${props.projectId}/export`;
+  const [pd, setPd] = useState(props.publishDate);
   const r = props.ready;
   const ok = r.state === "ready" || r.state === "manual" || r.state === "published";
   return (
@@ -685,6 +687,13 @@ function Publish(props: { ready: Readiness; title: string; html: string; hashtag
         {r.unverified.slice(0, 3).map((u, i) => <span key={i} className="tiny">  ↳ 근거 확인: {u.quote ? `"${u.quote.slice(0, 40)}" — ` : ""}{u.comment.slice(0, 80)}</span>)}
         {r.manualPlaceholders.length > 0 && <span className="tiny">블로그에 붙여 넣은 뒤 [이미지 {r.manualPlaceholders.join("], [이미지 ")}] 자리에 직접 사진을 넣으세요.</span>}
       </div>
+      {!props.published && (
+        <label className="small row" style={{ gap: 6, flexWrap: "nowrap" }}>
+          📅 발행 예정일
+          <input className="input" type="date" style={{ maxWidth: 170 }} value={pd} onChange={(e) => setPd(e.target.value)} onBlur={() => pd !== props.publishDate && void props.act({ action: "publish_date", date: pd }, pd ? "발행 예정일을 저장했어요. 마케팅 달력에 표시돼요." : "발행 예정일을 지웠어요.")} aria-label="발행 예정일" />
+          <span className="tiny muted">마케팅 달력에 표시돼요</span>
+        </label>
+      )}
       <div className="row">
         <button className="btn" onClick={() => props.copy(props.title, "제목")}>제목 복사</button>
         <button className="btn" onClick={() => props.copy(props.html, "본문(HTML)")}>본문 복사</button>
