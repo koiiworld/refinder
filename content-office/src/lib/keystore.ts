@@ -51,9 +51,7 @@ function encrypt(value: string): Stored {
   return { enc: enc.toString("base64"), iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), last4: value.slice(-4), at: new Date().toISOString() };
 }
 
-function decrypt(s: Stored): string | null {
-  const k = secret();
-  if (!k) return null;
+function decryptWith(k: Buffer, s: Stored): string | null {
   try {
     const d = createDecipheriv("aes-256-gcm", k, Buffer.from(s.iv, "base64"));
     d.setAuthTag(Buffer.from(s.tag, "base64"));
@@ -61,6 +59,16 @@ function decrypt(s: Stored): string | null {
   } catch {
     return null; // 앱 비밀번호가 바뀌었거나 다른 서버의 비밀번호가 다름
   }
+}
+/** 지금 비밀번호로 풀기 → 안 되면 예전 비밀번호(APP_PASSWORD_OLD)로 풀고 '다시 잠가야 함' 표시 */
+function decrypt(s: Stored): { value: string; rekey: boolean } | null {
+  const k = secret();
+  const v = k ? decryptWith(k, s) : null;
+  if (v) return { value: v, rekey: false };
+  const old = process.env.APP_PASSWORD_OLD?.trim();
+  if (!old || !k) return null;
+  const ov = decryptWith(createHash("sha256").update("content-office-keys:" + old).digest(), s);
+  return ov ? { value: ov, rekey: true } : null;
 }
 
 async function load(): Promise<All> {
@@ -73,7 +81,13 @@ export async function applyStoredKeys() {
   const all = await load();
   for (const f of KEY_FIELDS) {
     const s = all[f.env];
-    const v = s ? decrypt(s) : null;
+    const d = s ? decrypt(s) : null;
+    const v = d?.value ?? null;
+    // 비밀번호를 바꿨으면: 예전 비밀번호로 푼 키를 새 비밀번호로 다시 잠가 저장 (다시 입력할 필요 없음)
+    if (d?.rekey && s) {
+      const re = { ...encrypt(d.value), at: s.at };
+      await q(`UPDATE settings SET value = COALESCE(value, '{}'::jsonb) || jsonb_build_object($1::text, $2::jsonb) WHERE key='api_keys'`, [f.env, j(re)]).catch(() => {});
+    }
     if (v) {
       process.env[f.env] = v;
       applied[f.env] = "app";
