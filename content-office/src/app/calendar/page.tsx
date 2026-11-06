@@ -16,7 +16,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       <div className="page-head">
         <div>
           <h1>📅 캘린더</h1>
-          <p className="sub">연간 시즌 행사, 공휴일·공식 행사, 선거·비정기 행사, 콘텐츠 발행 일정, 업무 일정(할 일)을 한 곳에서 봐요. 일정을 누르면 날짜·참고 링크를 보고 &apos;아이디어로 저장&apos;할 수 있어요.</p>
+          <p className="sub">연간 시즌 행사, 공휴일·공식 행사, 비정기 행사, 콘텐츠 발행 일정, 업무 일정(할 일)을 한 곳에서 봐요. 일정을 누르면 날짜·참고 링크를 보고 &apos;아이디어로 저장&apos;할 수 있어요.</p>
         </div>
         <div className="row" style={{ gap: 6 }}>
           <Link href="/ideas" className="btn btn-sm">💡 아이디어</Link>

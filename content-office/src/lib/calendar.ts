@@ -13,7 +13,7 @@ import { seasonEvents, KIND_LABEL } from "./seasons";
 export type CalCat = "season" | "official" | "irregular" | "publish" | "todo";
 export type CalEvent = { id: string; title: string; start: string; end: string; cat: CalCat; sub: string; link: string; note: string; seeds: string[]; postId?: string; custom?: boolean; todoId?: string; done?: boolean; time?: string | null };
 
-export const CAT_LABEL: Record<CalCat, string> = { season: "연간 시즌 행사", official: "공휴일·공식 행사", irregular: "선거·비정기 행사", publish: "콘텐츠 발행 일정", todo: "업무 일정 (할 일)" };
+export const CAT_LABEL: Record<CalCat, string> = { season: "연간 시즌 행사", official: "공휴일·공식 행사", irregular: "비정기 행사", publish: "콘텐츠 발행 일정", todo: "업무 일정 (할 일)" };
 
 const naverSearch = (s: string) => `https://search.naver.com/search.naver?query=${encodeURIComponent(s)}`;
 const ICS_URL = () => process.env.KR_HOLIDAY_ICS_URL?.trim() || "https://calendar.google.com/calendar/ical/ko.south_korea%23holiday%40group.v.calendar.google.com/public/basic.ics";
@@ -69,7 +69,7 @@ export async function monthEvents(ym: string): Promise<CalEvent[]> {
   for (const h of await krHolidays()) {
     if (!overlaps(h.start, h.end, from, to)) continue;
     const irregular = /선거|임시\s*공휴일|임시공휴일/.test(h.title);
-    out.push({ id: `holiday:${h.start}:${h.title}`, title: h.title, start: h.start, end: h.end, cat: irregular ? "irregular" : "official", sub: irregular ? "선거·임시공휴일" : "공휴일·기념일", link: naverSearch(`${h.start.slice(0, 4)} ${h.title}`), note: "출처: 구글 대한민국 공휴일 달력", seeds: [] });
+    out.push({ id: `holiday:${h.start}:${h.title}`, title: h.title, start: h.start, end: h.end, cat: irregular ? "irregular" : "official", sub: irregular ? "임시공휴일 등" : "공휴일·기념일", link: naverSearch(`${h.start.slice(0, 4)} ${h.title}`), note: "출처: 구글 대한민국 공휴일 달력", seeds: [] });
   }
   // 직접 넣은 행사
   for (const c of await q<{ id: string; title: string; start_date: string; end_date: string; kind: string; link: string; memo: string }>(

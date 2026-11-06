@@ -100,14 +100,14 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
 
       {adding && (
         <section className="card card-pad stack" style={{ gap: 8 }}>
-          <b className="small">행사 직접 추가 (선거·갑작스런 행사·공식 박람회 등)</b>
-          <input className="input" value={nf.title} onChange={(e) => setNf({ ...nf, title: e.target.value })} placeholder="행사 이름 (예: 재보궐선거, 서울 리빙페어)" aria-label="행사 이름" />
+          <b className="small">행사 직접 추가 (비정기 행사·공식 박람회 등)</b>
+          <input className="input" value={nf.title} onChange={(e) => setNf({ ...nf, title: e.target.value })} placeholder="행사 이름 (예: 서울 리빙페어, 팝업스토어 오픈)" aria-label="행사 이름" />
           <div className="todo-fields">
             <label className="small stack" style={{ gap: 2 }}>시작<input className="input" type="date" value={nf.start} onChange={(e) => setNf({ ...nf, start: e.target.value })} /></label>
             <label className="small stack" style={{ gap: 2 }}>끝 (선택)<input className="input" type="date" value={nf.end} onChange={(e) => setNf({ ...nf, end: e.target.value })} /></label>
             <label className="small stack" style={{ gap: 2 }}>종류
               <select className="input" value={nf.kind} onChange={(e) => setNf({ ...nf, kind: e.target.value })}>
-                <option value="irregular">비정기·갑작스런 행사</option>
+                <option value="irregular">비정기 행사</option>
                 <option value="official">공식 일정 확인된 행사</option>
               </select>
             </label>

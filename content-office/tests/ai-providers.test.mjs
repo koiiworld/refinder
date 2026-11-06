@@ -1009,7 +1009,7 @@ test("💡📅 아이디어·달력: 김장철 → 김치 보관 글감 저장 �
   assert.ok(cur.some((e) => e.title === "재보궐선거" && e.cat === "irregular" && e.custom));
   assert.ok(cur.some((e) => e.cat === "publish" && e.postId === post.id && e.start === `${ym}-25`));
   const page = (await (await fetch(`${BASE}/calendar?m=${ym}`)).text()).replace(/<!-- -->/g, "");
-  assert.ok(page.includes("선거·비정기 행사") && page.includes("재보궐선거") && page.includes("업무 일정"), "달력 화면");
+  assert.ok(page.includes("비정기 행사") && page.includes("재보궐선거") && page.includes("업무 일정"), "달력 화면");
   const novPage = (await (await fetch(`${BASE}/calendar?m=${y}-11`)).text()).replace(/<!-- -->/g, "");
   const decPage = (await (await fetch(`${BASE}/calendar?m=${y}-12`)).text()).replace(/<!-- -->/g, "");
   assert.ok(novPage.includes("김장철 시작") && novPage.includes("cal-dot") && decPage.includes("김장철 끝"), "기간 행사: 시작·끝 날만 글자, 사이엔 점");
