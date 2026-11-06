@@ -31,6 +31,7 @@ async function save(v: Stored) {
 async function usedSince(p: BalanceProvider, since: string | null) {
   const from = since ?? "1970-01-01";
   if (p === "higgsfield") {
+    await backfillHiggsfield();
     const r = await q1<{ usd: number; n: number }>(
       "SELECT COALESCE(SUM(cost_usd),0)::float AS usd, COUNT(*)::int AS n FROM media_jobs WHERE provider='higgsfield' AND status NOT IN ('failed','canceled','error','nsfw') AND created_at >= $1",
       [from],
@@ -50,6 +51,21 @@ async function usedSince(p: BalanceProvider, since: string | null) {
     return s + (pr ? (Number(r.input_tokens) * pr.input + Number(r.output_tokens) * pr.output) / 1_000_000 : 0);
   }, 0);
   return { usd, calls: rows.length };
+}
+
+/** 비용 기록 전에 만든 Higgsfield 작업: 저장된 요청으로 견적(무료)을 받아 채움 */
+async function backfillHiggsfield() {
+  const rows = await q<{ id: string; model: string; input: Record<string, unknown> }>("SELECT id, model, input FROM media_jobs WHERE provider='higgsfield' AND cost_usd IS NULL AND status NOT IN ('failed','canceled','error','nsfw') LIMIT 20");
+  if (!rows.length) return;
+  const { HF_MODELS } = await import("./hf-models");
+  const { hfEstimate, hfConnected } = await import("./higgsfield");
+  if (!hfConnected()) return;
+  for (const r of rows) {
+    const def = (HF_MODELS as Record<string, { path: string }>)[r.model];
+    if (!def) continue;
+    const est = await hfEstimate(def.path, r.input ?? {}).catch(() => null);
+    if (est?.usd != null) await q("UPDATE media_jobs SET cost_usd=$2 WHERE id=$1", [r.id, est.usd]);
+  }
 }
 
 export async function balances() {
