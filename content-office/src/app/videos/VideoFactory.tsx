@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/components/client-utils";
 import type { Video } from "@/lib/videos";
 
-const KIND = { download: "받은 영상", edit: "편집본", studio: "스튜디오" } as const;
+const KIND = { download: "받은 영상", edit: "편집본", studio: "스튜디오", upload: "올린 영상", reel: "릴스 편집본" } as const;
 export const dur = (s: number | null) => (s == null ? "" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
 export const mb = (n: number | null) => (n == null ? "" : `${(n / 1048576).toFixed(1)}MB`);
 

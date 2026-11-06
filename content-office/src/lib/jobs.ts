@@ -66,6 +66,7 @@ export function ensureWorker() {
 /** 영상 작업(다운로드·인코딩): 맥이 켜져 있으면 맥이 먼저 맡음 (Render 무료 서버는 CPU가 아주 약함) */
 export const VIDEO_JOBS = ["video_fetch", "video_edit", "studio_plan", "studio_character", "studio_scene", "studio_render"];
 const ON_RENDER = !!process.env.RENDER;
+export const MAC_ONLY_JOBS = ["reel_analyze", "reel_render"];
 const hb = globalThis as unknown as { __macAlive?: { at: number; alive: boolean }; __macBeat?: number };
 /** 맥이 켜져 있고, 영상을 같은 저장소(Supabase)에 넣을 수 있을 때만 맥에 영상 작업을 맡김 */
 async function macAlive() {
@@ -106,6 +107,8 @@ async function tick() {
   void renderStorageBeat();
   // 이 서버가 처리할 수 있는 작업만 가져감 (버전이 다른 서버가 모르는 작업을 '완료'로 처리하는 일 방지)
   let known = Object.keys(HANDLERS);
+  // 맥 전용 작업(받아쓰기·Remotion 내보내기)은 Render가 절대 가져가지 않음 → 맥이 켜지면 처리
+  if (ON_RENDER) known = known.filter((t) => !MAC_ONLY_JOBS.includes(t));
   // 맥에 저장소 키가 없는데 Render는 Supabase를 쓰면, 영상 작업은 Render에 맡김 (영상이 다른 곳에 저장되지 않게)
   if (!ON_RENDER) {
     const { storageKind } = await import("./video-store");
@@ -215,6 +218,15 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
   async video_fetch(job) {
     const { runVideoFetch } = await import("./videos");
     await runVideoFetch(String(job.payload.videoId), job.payload.removeSubs !== false);
+  },
+  // ✂️ 릴스 편집기 (맥 전용: 받아쓰기·Remotion)
+  async reel_analyze(job) {
+    const { runReelAnalyze } = await import("./reels");
+    await runReelAnalyze(String(job.payload.reelId));
+  },
+  async reel_render(job) {
+    const { runReelRender } = await import("./reels");
+    await runReelRender(String(job.payload.reelId));
   },
   async video_edit(job) {
     const { runVideoEdit } = await import("./videos");

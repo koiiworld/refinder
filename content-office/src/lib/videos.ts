@@ -19,7 +19,7 @@ export type Video = {
   id: string;
   source_url: string;
   title: string;
-  kind: "download" | "edit" | "studio";
+  kind: "download" | "edit" | "studio" | "upload" | "reel";
   parent_id: string | null;
   status: "queued" | "running" | "ready" | "error";
   message: string;
@@ -212,7 +212,7 @@ function boxFilter(boxes: Box[], W: number, H: number, mode: "delogo" | "blur", 
 }
 
 /** 50MB 넘으면 화질을 낮춰 다시 인코딩 */
-async function fitSize(dir: string, file: string) {
+export async function fitSize(dir: string, file: string) {
   if (fs.statSync(path.join(dir, file)).size <= MAX_VIDEO_BYTES) return file;
   const out = "small.mp4";
   await ffmpeg(["-i", file, "-vf", "scale='min(720,iw)':-2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", out], dir, "용량 줄이기");

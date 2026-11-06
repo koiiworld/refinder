@@ -1233,3 +1233,60 @@ test("🔀 설정: 기능 켜기·끄기 (인스타 전체 끄기 · 블로그 �
   const car2 = (await (await fetch(`${BASE}/carousels`)).text()).replace(/<!-- -->/g, "");
   assert.ok(!car2.includes("이 기능은 꺼져 있어요"), "다시 켜면 그대로");
 });
+
+test("✂️ 릴스 편집기: 영상 → 받아쓰기로 장면·자막 초안 → 자막·배경 고쳐 저장 → 맥에서 Remotion으로 내보내기 → 영상공장 저장 · 내 영상 올리기", async () => {
+  const fs = await import("node:fs");
+  // 내 영상 올리기
+  const fd = new FormData();
+  fd.append("file", new Blob([fs.readFileSync("sample.mp4")], { type: "video/mp4" }), "내 영상.mp4");
+  const up = await fetch(`${BASE}/api/videos/upload`, { method: "POST", body: fd });
+  const upj = await up.json();
+  assert.equal(up.status, 200, JSON.stringify(upj));
+  const mine = (await call("/api/videos")).data.videos.find((v) => v.id === upj.id);
+  assert.equal(mine.status, "ready");
+  assert.equal(mine.kind, "upload");
+  assert.equal((await fetch(`${BASE}/api/videos/upload`, { method: "POST", body: new FormData() })).status, 400);
+
+  // ① 초안
+  const r = await call("/api/reels", "POST", { videoId: upj.id });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  let reel;
+  for (let i = 0; i < 60; i++) {
+    reel = (await call(`/api/reels/${r.data.id}`)).data;
+    if (reel.status !== "analyzing") break;
+    await new Promise((x) => setTimeout(x, 500));
+  }
+  assert.equal(reel.status, "ready", reel.message);
+  assert.equal(reel.doc.scenes.length, 3, "문장마다 장면");
+  assert.deepEqual(reel.doc.texts.map((t) => t.text), ["첫 문장 훅이에요", "두 번째 설명", "마지막 마무리"]);
+  assert.ok(Math.abs(reel.doc.scenes.reduce((a, s) => a + s.dur, 0) - 3) < 0.2, "장면 길이 합 = 영상 길이");
+  assert.ok(reel.guide.peaks.length > 20, "소리 모양");
+
+  // ②③ 편집 저장: 둘째 장면 오로라 배경, 자막 상자·위치
+  const doc = reel.doc;
+  doc.scenes[1].bg = { type: "aurora", colors: ["#ff7eb3", "#7f7fff", "#ffd166", "#1a0b2e"] };
+  doc.texts[0].style = { ...doc.texts[0].style, box: "#ffd1e8", color: "#2b1630", y: 400 };
+  const saved = await call(`/api/reels/${r.data.id}`, "PUT", { doc, title: "시험 릴스" });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.equal(saved.data.doc.scenes[1].bg.type, "aurora");
+  assert.equal((await call(`/api/reels/${r.data.id}`, "PUT", { doc: { scenes: "x" } })).status, 400);
+  const page = (await (await fetch(`${BASE}/reels/${r.data.id}`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["가이드 (원본)", "편집 화면", "완성 영상", "내 파일", "글자", "장면", "배경", "자르기", "되돌리기", "내보내기"]) assert.ok(page.includes(w), w);
+
+  // ④ 내보내기 (맥: Remotion)
+  assert.equal((await call(`/api/reels/${r.data.id}/render`, "POST")).status, 200);
+  for (let i = 0; i < 240; i++) {
+    reel = (await call(`/api/reels/${r.data.id}`)).data;
+    if (reel.status !== "rendering") break;
+    await new Promise((x) => setTimeout(x, 1000));
+  }
+  assert.equal(reel.status, "ready", reel.message);
+  assert.ok(reel.output_video_id, "완성 영상");
+  const out = (await call("/api/videos")).data.videos.find((v) => v.id === reel.output_video_id);
+  assert.equal(out.kind, "reel");
+  assert.equal(out.width, 1080);
+  assert.equal(out.height, 1920);
+  assert.ok(Math.abs(out.duration - 3) < 0.5, String(out.duration));
+  const list = (await (await fetch(`${BASE}/reels`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(list.includes("시험 릴스") && list.includes("내보냄"), "목록");
+});

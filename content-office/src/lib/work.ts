@@ -106,7 +106,7 @@ export async function workItems(): Promise<WorkItem[]> {
   for (const v of vids) {
     const col: WorkCol = v.posted_at ? "done" : v.status === "ready" ? "ready" : "make";
     out.push({
-      key: `video:${v.id}`, type: "video", id: v.id, title: v.title, sub: v.kind === "edit" ? "편집본" : "받은 영상", color: null, blogId: null,
+      key: `video:${v.id}`, type: "video", id: v.id, title: v.title, sub: v.kind === "edit" ? "편집본" : v.kind === "reel" ? "릴스 편집본" : v.kind === "upload" ? "올린 영상" : "받은 영상", color: null, blogId: null,
       col, steps: V_STEPS, current: v.posted_at ? 5 : v.status === "ready" ? 3 : v.status === "running" ? 2 : 1, error: v.status === "error", running: ["queued", "running"].includes(v.status), stuck: false,
       badge: v.posted_at ? "게시함" : v.status === "ready" ? "게시 대기" : v.status === "error" ? "오류" : "만드는 중",
       note: v.message, href: `/videos/${v.id}`, updated_at: iso(v.updated_at), due: null, posted: !!v.posted_at, postedAt: v.posted_at ? iso(v.posted_at) : null,

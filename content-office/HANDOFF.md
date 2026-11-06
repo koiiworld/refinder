@@ -52,6 +52,7 @@
 - 📊 전체 작업 현황 `/work` (`work.ts`): 블로그·캐러셀·스튜디오·영상공장을 plan/make/review/ready/done 5칸 칸반 + 아래 단계 막대 상세 목록, 카드 누르면 팝업. 캐러셀·영상은 `posted_at`(게시함 버튼 `PostedButton`, `/api/work/posted`)으로 완료. 3일 넘게 그대로거나 오류면 '막힌 것'.
 - 블로그 업로드 `/posts` = 새 글 만들기(키워드 추천) + 진행 목록. `/new`는 `/posts?new=1`로 넘김.
 - 메뉴(`Nav.tsx`): 전체 작업 현황 / 워크스페이스 / 콘텐츠 리서치 / 블로그 관리(업로드·진단·설정) / 영상 제작 / 인스타그램 관리(캐러셀) / 설정·휴지통. 그룹 접기·펼치기(localStorage `nav-open`), 지금 페이지 그룹은 자동 펼침.
+- ✂️ 릴스 편집기 `/reels` (`reels.ts`, `src/remotion/*`, `app/reels/[id]/ReelEditor.tsx`·`ops.ts`): 영상공장 영상/내 영상 올리기(`/api/videos/upload`) → 맥 작업 `reel_analyze`(faster-whisper 받아쓰기 `scripts/transcribe.py` + ffmpeg 화면 전환·소리 모양) → 문장별 장면·자막 초안 → 편집(가이드/편집/완성 3단, 탭 내 파일·글자·장면·배경, 타임라인 자르기·지우기·복제·되돌리기, 자동 저장) → 맥 작업 `reel_render`(`scripts/render-reel.mjs`, Remotion, 결과는 영상공장 kind=reel). 맥 전용 작업(`MAC_ONLY_JOBS`)은 Render가 안 가져감. 맥 도구: `~/.ai-content-office/whisper-venv`(python3.12, faster-whisper), `~/.ai-content-office/remotion-runtime`(@remotion/bundler·renderer 4.0.538), 번들 캐시 `~/.ai-content-office/remotion-cache`. Remotion은 개인·3명 이하 무료.
 - **운영 규칙(사용자 지정, 2026-11-07)**: 운영 데이터 변경·실제 텔레그램 발송·유료 AI 호출·배포(푸시=Render 배포, 맥 앱 재시작=실제 DB 스키마 반영)는 **별도 승인 후**. 단, **사용자가 바꿔 달라고 요청한 변경은 승인 없이 배포**(2026-11-07 사용자 지시). 텔레그램 연결 완료(@Acontentofficebot).
 - 사용자 보류: 역할별 AI 직원(에이전트) 구성. 후속: 쿠팡 반품상품 검색기. 범위 밖: 지인 배포·상용화. 사무실 화면(대시보드 픽셀 오피스) 제안만 함.
 

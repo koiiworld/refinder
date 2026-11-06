@@ -8,7 +8,9 @@ DST=/tmp/co-test
 mkdir -p "$DST"
 rsync -a --delete --exclude node_modules --exclude .next --exclude data --exclude '.env*.local' --exclude '.env' "$SRC/" "$DST/"
 # node_modules 는 복제(APFS 복사 시 공간 거의 안 씀). Turbopack 은 바깥을 가리키는 심볼릭 링크를 거부함
-[ -d "$DST/node_modules" ] || cp -Rc "$SRC/node_modules" "$DST/node_modules"
+# 패키지가 바뀌었으면(package-lock 다름) 다시 복제
+if [ -d "$DST/node_modules" ] && ! cmp -s "$SRC/package-lock.json" "$DST/node_modules/.copied-lock"; then rm -rf "$DST/node_modules"; fi
+[ -d "$DST/node_modules" ] || { cp -Rc "$SRC/node_modules" "$DST/node_modules" && cp "$SRC/package-lock.json" "$DST/node_modules/.copied-lock"; }
 cd "$DST"
 ./node_modules/.bin/next build > build.log 2>&1 || { tail -40 build.log; exit 1; }
 set +e
@@ -25,7 +27,7 @@ env -i PATH="$PATH" HOME="$HOME" PGLITE_DIR=./data/ai \
   NAVER_AD_API_KEY=test-ad-key NAVER_AD_SECRET_KEY=test-ad-secret NAVER_AD_CUSTOMER_ID=12345 NAVER_AD_BASE_URL=http://localhost:4110 \
   NAVER_CLIENT_ID=test-dl-id NAVER_CLIENT_SECRET=test-dl-key NAVER_DATALAB_URL=http://localhost:4110/search-trend/v1/search \
   YOUTUBE_API_KEY=test-yt-key YOUTUBE_BASE_URL=http://localhost:4110 NAVER_BLOG_BASE_URL=http://localhost:4110 NAVER_RSS_BASE_URL=http://localhost:4110 NAVER_MBLOG_BASE_URL=http://localhost:4110 OFFICIAL_IMAGES_ALLOW_LOCAL=1 VIDEO_ALLOW_LOCAL=1 PUBLIC_BASE_URL=https://app.example.test TELEGRAM_BOT_TOKEN=test-tg-token TELEGRAM_CHAT_ID=987654 TELEGRAM_API_BASE=http://localhost:4110 YTDLP_NO_UPDATE=1 KR_HOLIDAY_ICS_URL=http://localhost:4110/kr-holidays.ics \
-  COUPANG_ACCESS_KEY=test-coupang-access COUPANG_SECRET_KEY=test-coupang-secret COUPANG_API_BASE_URL=http://localhost:4110 NAVER_SEARCH_URL=http://localhost:4110/v1/search/blog.json NAVER_SECTION_BASE_URL=http://localhost:4110 GOOGLE_TRENDS_RSS_URL=http://localhost:4110/trending/rss PRICING_SOURCE_URL=http://localhost:4110/model-prices.json KEYS_SECRET=test-keys-secret \
+  COUPANG_ACCESS_KEY=test-coupang-access COUPANG_SECRET_KEY=test-coupang-secret COUPANG_API_BASE_URL=http://localhost:4110 NAVER_SEARCH_URL=http://localhost:4110/v1/search/blog.json NAVER_SECTION_BASE_URL=http://localhost:4110 GOOGLE_TRENDS_RSS_URL=http://localhost:4110/trending/rss PRICING_SOURCE_URL=http://localhost:4110/model-prices.json KEYS_SECRET=test-keys-secret WHISPER_PYTHON=/opt/homebrew/bin/python3 WHISPER_SCRIPT=tests/fake-transcribe.py \
   ./node_modules/.bin/next start -p 3102 > ai.log 2>&1 &
 AI=$!
 for i in {1..40}; do curl -sf localhost:3101/api/health >/dev/null && curl -sf localhost:3102/api/health >/dev/null && break; sleep 1; done

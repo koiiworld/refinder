@@ -438,6 +438,20 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS publish_date TEXT;
 -- 할 일 업무내용(인스타·유튜브·블로그·개인일정)과 연결 대상(캐러셀·영상 등)
 ALTER TABLE todos ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '';
 ALTER TABLE todos ADD COLUMN IF NOT EXISTS ref_id TEXT;
+-- ✂️ 릴스 편집기: 바탕 영상 + 편집 문서(장면·자막·배경) → 맥에서 Remotion으로 내보내기
+CREATE TABLE IF NOT EXISTS reel_projects (
+  id              TEXT PRIMARY KEY,
+  title           TEXT NOT NULL DEFAULT '',
+  base_video_id   TEXT,
+  doc             JSONB NOT NULL DEFAULT '{}'::jsonb,
+  guide           JSONB NOT NULL DEFAULT '{}'::jsonb,   -- 받아쓰기·화면 전환 지점
+  status          TEXT NOT NULL DEFAULT 'analyzing',    -- analyzing | ready | rendering | error
+  message         TEXT NOT NULL DEFAULT '',
+  output_video_id TEXT,
+  posted_at       TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 ALTER TABLE carousels ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;        -- 게시함 (직접 표시)
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;
 ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;

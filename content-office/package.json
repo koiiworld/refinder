@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.14",
+    "@remotion/player": "4.0.538",
     "@tiptap/extension-image": "^3.32.2",
     "@tiptap/extension-table": "^3.32.2",
     "@tiptap/extensions": "^3.32.2",
@@ -23,6 +24,7 @@
     "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "remotion": "4.0.538",
     "server-only": "^0.0.1",
     "turndown": "^7.2.4"
   },
