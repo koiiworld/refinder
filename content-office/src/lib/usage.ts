@@ -18,6 +18,7 @@ const STEP_OF: Record<string, [string, string]> = {
   "blog-hot": ["h1", "📰 블로그 핫이슈"],
   "hot-report": ["h1", "📰 블로그 핫이슈"],
   "video-subtitle": ["v1", "🎬 영상공장"],
+  "studio-plan": ["v2", "🎬 영상 스튜디오"],
   "revenue-capture": ["r1", "수익 캡처 읽기"],
   review: ["6", "⑥ 글·이미지 검수"],
   edit: ["8", "에디터에서 부분 수정"],

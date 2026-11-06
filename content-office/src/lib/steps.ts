@@ -2,7 +2,7 @@
 //  1 키워드 추천(AI) → 2 블로그별 키워드 선택(나) → 3 SEO 제목 추천·선택(AI) → 4 글 작성+해시태그(AI)
 //  → 5 이미지(프롬프트는 AI, 생성은 버튼으로 Higgsfield) → 6 글·이미지 검수(AI) → 7 발행(나)
 
-export type StepKey = "keywords" | "titles" | "writing" | "hashtags" | "review" | "carousel";
+export type StepKey = "keywords" | "titles" | "writing" | "hashtags" | "review" | "carousel" | "studio";
 
 export const STEP_AI_LABEL: Record<StepKey, string> = {
   keywords: "① 키워드 추천",
@@ -11,6 +11,7 @@ export const STEP_AI_LABEL: Record<StepKey, string> = {
   hashtags: "④ 해시태그 (무료 Gemini 추천)",
   review: "⑥ 글·이미지 검수",
   carousel: "📱 인스타 캐러셀 문구 (후킹)",
+  studio: "🎬 영상 스튜디오 기획",
 };
 
 // 기본 배정: 사용자 표 기준 (ChatGPT/Gemini/Claude). 쓸 수 없으면 연결된 다른 AI로 자동 대체
@@ -21,6 +22,7 @@ export const DEFAULT_STEP_AI: Record<StepKey, { provider: "openai" | "anthropic"
   hashtags: { provider: "google", model: "gemini-3.5-flash" }, // 무료 Gemini 키
   review: { provider: "anthropic", model: "claude-sonnet-5-5" },
   carousel: { provider: "openai", model: "gpt-5.4-mini" },
+  studio: { provider: "openai", model: "gpt-5.4-mini" },
 };
 
 export const FALLBACK_MODELS = {

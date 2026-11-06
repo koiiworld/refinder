@@ -781,3 +781,49 @@ test("🔑 대시보드 키워드 TOP 5: 블로그 고르기 ▼ · 그 블로�
   assert.ok(html.includes('aria-label="블로그 고르기"'), "블로그 고르기");
   assert.ok(html.includes("김장 양념") || html.includes("절임배추"), "알고키친 키워드");
 });
+
+test("🎬 영상 스튜디오: 프롬프트 → AI 기획 → 캐릭터(Gemini) → 장면 이미지(캐릭터 참고) → 장면 영상(Higgsfield) → 합치기 → 영상공장", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  const c = await call("/api/studio", "POST", { prompt: "감자 캐릭터가 감튀 만드는 릴스", seconds: 15, style: "3d", imageModel: "google:gemini-3.1-flash-image" });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  const id = c.data.id;
+  let s = (await call(`/api/studio/${id}`)).data;
+  assert.equal(s.scenes.length, 3);
+  assert.equal(s.character.name, "포테");
+  assert.deepEqual(s.plan.hashtags, ["감튀", "에어프라이어"]);
+  assert.match(await stepPrompt("쇼츠 기획 PD"), /장면 3개 \(장면당 5초\)/);
+  // 캐릭터 → 장면 이미지는 캐릭터 그림을 참고로 넣음
+  s = (await call(`/api/studio/${id}`, "POST", { action: "character" })).data;
+  assert.match(s.character.image.url, /^\/api\/img\/img_[0-9a-f]{24}\.jpg$/);
+  await call("/__reset", "POST", undefined, MOCK);
+  s = (await call(`/api/studio/${id}`, "POST", { action: "scene_image", index: 0 })).data;
+  assert.ok(s.scenes[0].image.url);
+  const g = (await mockLog()).find((l) => /generateContent/.test(l.path) && l.body?.generationConfig?.responseModalities?.includes("IMAGE"));
+  assert.ok(g.body.contents[0].parts[0].inlineData, "캐릭터 그림을 참고 이미지로");
+  assert.equal(g.body.generationConfig.imageConfig.aspectRatio, "9:16");
+  // 예상 비용 → 장면 영상(공개 주소로 이미지 전달)
+  const e = (await call(`/api/studio/${id}`, "POST", { action: "estimate" })).data;
+  assert.ok(e.perClip > 0 && e.count === 3, JSON.stringify(e));
+  await call("/__reset", "POST", undefined, MOCK);
+  s = (await call(`/api/studio/${id}`, "POST", { action: "scene_clip", index: 0 })).data;
+  assert.ok(s.scenes[0].video.jobId);
+  const hf = (await mockLog()).find((l) => l.path === "/wan/v2.6/image-to-video");
+  assert.match(hf.body.image_url, /^https:\/\/app\.example\.test\/api\/img\/img_/);
+  assert.equal(hf.body.duration, 5);
+  for (let i = 0; i < 10 && !s.scenes[0].video.url; i++) s = (await call(`/api/studio/${id}`)).data;
+  assert.ok(s.scenes[0].video.url, "영상 완성");
+  // 합치기: 영상 장면 + 이미지만 있는 장면(확대 효과), 이미지 없는 장면은 건너뜀
+  await call(`/api/studio/${id}`, "POST", { action: "scene_image", index: 1 });
+  s = (await call(`/api/studio/${id}`, "POST", { action: "render" })).data;
+  assert.equal(s.status, "rendering");
+  for (let i = 0; i < 120 && s.status === "rendering"; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    s = (await call(`/api/studio/${id}`)).data;
+  }
+  assert.equal(s.status, "done", s.message);
+  const v = (await call(`/api/videos/${s.video_id}`)).data;
+  assert.equal(v.kind, "studio");
+  assert.equal(v.width, 1080);
+  assert.equal(v.height, 1920);
+  assert.ok(Math.abs(v.duration - 8) < 1, String(v.duration)); // 시험 영상 3초 + 사진 장면 5초
+});

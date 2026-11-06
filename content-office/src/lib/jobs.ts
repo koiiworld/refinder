@@ -85,7 +85,7 @@ async function renderStorageBeat() {
   if (!ON_RENDER || (hb.__macBeat && Date.now() - hb.__macBeat < 60_000)) return;
   hb.__macBeat = Date.now();
   const { storageKind } = await import("./video-store");
-  await q(`INSERT INTO settings (key, value) VALUES ('worker_render', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j({ at: new Date().toISOString(), storage: storageKind() })]).catch(() => {});
+  await q(`INSERT INTO settings (key, value) VALUES ('worker_render', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j({ at: new Date().toISOString(), storage: storageKind(), url: process.env.RENDER_EXTERNAL_URL ?? null })]).catch(() => {});
 }
 const hr = globalThis as unknown as { __renderStorage?: { at: number; storage: string | null } };
 async function renderStorage() {
@@ -196,6 +196,11 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     } catch (e) {
       await setDiagnoseState(blogId, { status: "error", error: (e as Error).message, at: new Date().toISOString() });
     }
+  },
+  // 🎬 영상 스튜디오: 장면 합치기
+  async studio_render(job) {
+    const { runStudioRender } = await import("./studio");
+    await runStudioRender(String(job.payload.studioId));
   },
   // 🎬 영상공장: 링크에서 받기 · 편집본 만들기
   async video_fetch(job) {

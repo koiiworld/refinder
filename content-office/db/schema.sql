@@ -369,3 +369,18 @@ CREATE TABLE IF NOT EXISTS view_captures (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (blog_id, kind, day)
 );
+-- 🎬 영상 제작 스튜디오: 기획 → 캐릭터 → 장면 이미지 → 장면 영상 → 합치기
+CREATE TABLE IF NOT EXISTS studio_projects (
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL DEFAULT '',
+  prompt      TEXT NOT NULL DEFAULT '',
+  options     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  plan        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  character   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  scenes      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  video_id    TEXT,
+  status      TEXT NOT NULL DEFAULT 'planned',
+  message     TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

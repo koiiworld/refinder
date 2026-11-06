@@ -36,14 +36,15 @@ async function viaOpenAI(model: string, prompt: string, aspect: string) {
   return { mime: "image/jpeg", data: Buffer.from(b64, "base64"), inputTokens: d.usage?.input_tokens ?? 0, outputTokens: d.usage?.output_tokens ?? 0 };
 }
 
-async function viaGoogle(model: string, prompt: string, aspect: string) {
+async function viaGoogle(model: string, prompt: string, aspect: string, refs: { mime: string; data: Buffer }[] = []) {
   const key = process.env.GOOGLE_AI_API_KEY?.trim();
   if (!key) throw new ImageGenError("Gemini(Google) 키가 없습니다.");
   const res = await fetch(`${googleBase()}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": key, "content-type": "application/json" },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      // 참고 이미지(캐릭터 등)를 먼저 넣고 지시문 → 같은 인물·스타일 유지
+      contents: [{ parts: [...refs.map((r) => ({ inlineData: { mimeType: r.mime, data: r.data.toString("base64") } })), { text: prompt }] }],
       generationConfig: { responseModalities: ["IMAGE", "TEXT"], imageConfig: { aspectRatio: GEMINI_ASPECTS.includes(aspect) ? aspect : "1:1" } },
     }),
     signal: AbortSignal.timeout(180_000),
@@ -60,13 +61,13 @@ async function viaGoogle(model: string, prompt: string, aspect: string) {
 }
 
 /** 생성 → 저장 → 이미지 아이디 */
-export async function generateDirect(input: { modelId: string; prompt: string; aspect: string; projectId: string; blogId?: string | null }) {
+export async function generateDirect(input: { modelId: string; prompt: string; aspect: string; projectId: string; blogId?: string | null; refs?: { mime: string; data: Buffer }[] }) {
   const [provider, model] = input.modelId.split(":");
   if (!input.prompt.trim()) throw new ImageGenError("프롬프트가 비어 있습니다.");
   const started = Date.now();
   let out;
   try {
-    out = provider === "openai" ? await viaOpenAI(model, input.prompt, input.aspect) : provider === "google" ? await viaGoogle(model, input.prompt, input.aspect) : null;
+    out = provider === "openai" ? await viaOpenAI(model, input.prompt, input.aspect) : provider === "google" ? await viaGoogle(model, input.prompt, input.aspect, input.refs ?? []) : null;
   } catch (e) {
     await logRun(input, provider, model, "failed", 0, 0, Date.now() - started, (e as Error).message);
     throw e;

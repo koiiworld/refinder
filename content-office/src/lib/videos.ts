@@ -36,12 +36,19 @@ export type Video = {
 };
 export type EditOptions = { start?: number; end?: number; aspect?: "keep" | "9:16"; mode?: "none" | "delogo" | "blur"; boxes?: Box[]; mute?: boolean; fromOriginal?: boolean };
 
+/** 함께 설치한 ffmpeg(자막 글자·확대 효과 필터 포함)를 먼저, 없으면 시스템 ffmpeg */
 export function ffmpegPath(): string {
   if (process.env.FFMPEG_PATH?.trim()) return process.env.FFMPEG_PATH.trim();
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const p = require("ffmpeg-static") as string;
+    if (p && fs.existsSync(p)) return p;
+  } catch {
+    /* 아래로 */
+  }
   if (fs.existsSync("/opt/homebrew/bin/ffmpeg")) return "/opt/homebrew/bin/ffmpeg";
   if (fs.existsSync("/usr/bin/ffmpeg")) return "/usr/bin/ffmpeg";
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return (require("ffmpeg-static") as string) || "ffmpeg";
+  return "ffmpeg";
 }
 function ytdlpPath(): string {
   return process.env.YTDLP_PATH?.trim() || path.join(process.cwd(), "bin", "yt-dlp");

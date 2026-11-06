@@ -11,9 +11,7 @@ if (!name) {
 }
 if (fs.existsSync(file) && fs.statSync(file).size > 1_000_000 && !process.argv.includes("--force")) {
   console.log("[setup-bin] yt-dlp 이미 있음");
-  process.exit(0);
-}
-try {
+} else try {
   fs.mkdirSync(dir, { recursive: true });
   const res = await fetch(`https://github.com/yt-dlp/yt-dlp/releases/latest/download/${name}`, { redirect: "follow" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -22,4 +20,18 @@ try {
   console.log("[setup-bin] yt-dlp 설치 완료", fs.statSync(file).size);
 } catch (e) {
   console.log("[setup-bin] yt-dlp 설치 실패 (영상공장 다운로드만 안 됨):", e.message);
+}
+
+// 영상 스튜디오 자막용 한글 글꼴 (리눅스 서버에는 한글 글꼴이 없음)
+const font = path.join(dir, "NotoSansKR.ttf");
+if (!fs.existsSync(font) || fs.statSync(font).size < 100_000) {
+  try {
+    const r = await fetch("https://github.com/google/fonts/raw/main/ofl/notosanskr/NotoSansKR%5Bwght%5D.ttf", { redirect: "follow" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(font, Buffer.from(await r.arrayBuffer()));
+    console.log("[setup-bin] 한글 글꼴 설치 완료", fs.statSync(font).size);
+  } catch (e) {
+    console.log("[setup-bin] 한글 글꼴 설치 실패 (영상 자막 없이 진행):", e.message);
+  }
 }

@@ -8,20 +8,20 @@
 | 파일 | 설명 | 내보내는 것 |
 |---|---|---|
 | `api.ts` |  | Ctx, ok, fail, handle, body |
-| `balances.ts` | AI별 잔액 (충전액 − 앱에서 쓴 금액) | BALANCE_PROVIDERS, BalanceProvider, balances, addTopUp, removeTopUp |
+| `balances.ts` | AI별 잔액 (충전액 − 앱에서 쓴 금액) | BALANCE_PROVIDERS, BalanceProvider, balances, addTopUp, setActualUsed, removeTopUp |
 | `benchmark.ts` | 인기 글 분석 → 내 블로그에 적용 | PostStats, statsOf, analyzePopular, lastBenchmark |
 | `blog-hot.ts` | 📰 블로그 핫이슈: 네이버 블로그 홈 '주제별 보기'에 지금 올라오는 글 중 반응(공감·댓글) 많은 글 | HOT_TABS, HotPost, HotTabData, topWords, hotTab |
 | `blog-posts.ts` | 내 블로그의 실제 최근 글 목록 (블로그 RSS) | BlogPostLink, rssUrlOf, parseRss, recentPosts, writtenTitles, PostStat, naverPostStats |
-| `carousel.ts` | 📱 인스타 캐러셀(카드뉴스) | Slide, CarouselImage, CarouselStyle, Carousel, CONTENT_TYPES, ContentTypeId, FORMATS, listCarousels … |
+| `carousel.ts` | 📱 인스타 캐러셀(카드뉴스) | Slide, CarouselImage, TypeVersion, CarouselStyle, Carousel, CONTENT_TYPES, ContentTypeId, FORMATS … |
 | `coupang.ts` | 쿠팡파트너스 Open API: 이번 달 수익·클릭·주문 자동 집계 | coupangConnected, coupangAuth, syncCoupang, lastCoupangSync |
 | `creator.ts` | 네이버 크리에이터 어드바이저 '유입 트렌드' — 공식 API가 없어 사용자가 화면에서 복사해 붙여 넣은 목록을 저장 | CreatorTrend, parseTrendText, saveCreatorTrend, listCreatorTrends, creatorTrendContext |
 | `dashboard.ts` | 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음) | PASS_SCORE, RevenueChannel, RevenueEntry, MonthRevenue, monthKey, getRevenue, saveRevenue, dashboardData … |
 | `db.ts` | 데이터베이스 어댑터 | getDb, q, q1, dbKind, newId, j |
-| `diagnose.ts` | 🩺 블로그 진단 | naverBlogSearch, naverSearch, postKey, blogKey, Check, diagnoseBlog, Diagnosis, lastDiagnosis |
+| `diagnose.ts` | 🩺 블로그 진단 | naverBlogSearch, naverSearch, postKey, blogKey, Check, diagnoseBlog, Diagnosis, DiagnoseState … |
 | `exporter.ts` | 표를 단순 마크다운 표로 변환 | htmlToMarkdown, plainText, buildPackage, packageHtmlFile, escapeHtml |
 | `hf-models.ts` | 공식 문서에서 요청 형식(스키마)을 확인한 모델 | HF_MODELS, HfModelId, HF_IMAGE_MODELS |
 | `higgsfield.ts` | Higgsfield 공식 API (이미지·영상 생성 전용) — https://docs.higgsfield.ai | HF_ENV, hfConnected, HiggsfieldError, hfTest, HfSubmitResult, hfEstimate, hfSubmit, HfStatus … |
-| `hot-report.ts` | 📋 블로그 글감 추천 리포트 | Issue, ReportItem, HotReport, googleTrends, createReport, lastReport, approveItem, skipItem |
+| `hot-report.ts` | 📋 블로그 글감 추천 리포트 | Issue, ReportItem, HotReport, googleTrends, createReport, lastReport, approveItem, restoreItem … |
 | `image-gen.ts` | ChatGPT(OpenAI Images API)·Gemini(이미지 출력) 로 바로 생성 → DB에 저장 → /api/img/<아이디> 로 공개 | ImageGenError, generateDirect, getGeneratedImage |
 | `image-models.ts` | 이미지 생성 모델 목록 (클라이언트·서버 공용) — Higgsfield · ChatGPT(OpenAI) · Gemini(Google) | ImageModel, IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel |
 | `jobs.ts` | 서버 측 작업 큐 | enqueue, ensureWorker, VIDEO_JOBS, jobLabel |
@@ -39,6 +39,7 @@
 | `seed.ts` | 기본 역할 배정: 기획=Gemini, 원고=Claude, 검수=ChatGPT, 부분수정=Claude, 글감추천=Gemini | DEFAULT_MODELS, DEFAULT_ROLES, seedIfEmpty |
 | `settings.ts` | 기본 단가 (USD / 100만 토큰). 설정에서 직접 고치면 그 값이 우선합니다. | AppSettings, DEFAULT_PRICING, getSettings, saveSettings |
 | `steps.ts` | 글(프로젝트) 진행 단계 | StepKey, STEP_AI_LABEL, DEFAULT_STEP_AI, FALLBACK_MODELS, POST_STAGES, STEP_NAMES, stageLabel, stageStep |
+| `studio.ts` | 🎬 영상 제작 스튜디오 (쇼츠·릴스) | StudioImage, StudioClip, StudioScene, StudioPlan, StudioCharacter, StudioOptions, StudioProject, STUDIO_STYLES … |
 | `top-posts.ts` | 블로그별 인기 글 TOP 10 | ViewItem, ViewKind, ViewsBlock, ReactionTop, viewsOf, topPosts, saveViewsFromCapture, lastCaptureDay |
 | `trash.ts` | 휴지통으로 옮기기 (대기 중인 AI 작업은 취소, 키워드는 그대로 '사용됨'으로 둠) | moveToTrash, restoreFromTrash, purge |
 | `trends.ts` | 트렌드 뷰어 탭 | TrendTabDef, TREND_TABS, TrendVideo, TrendTabData, trendTab, TrendScrap, listScraps, addScrap … |
@@ -80,7 +81,7 @@
 | `api/dashboard/revenue/route.ts` | 이번 달 수익 직접 입력 (쿠팡파트너스·애드포스트·애드센스 정산 화면 숫자) | GET, PUT |
 | `api/dashboard/top/route.ts` | 조회수 순위 캡처 → AI가 읽어 저장 | GET, POST |
 | `api/dashboard/visits/route.ts` | 블로그 방문자 수 (?refresh=1 이면 지금 바로 다시 수집) | GET |
-| `api/diagnose/route.ts` | 🩺 블로그 진단 실행 (수십 초 걸릴 수 있음) | GET, POST |
+| `api/diagnose/route.ts` | 🩺 블로그 진단 시작 (서버 작업 큐에서 진행 — 화면을 떠나도 계속) | GET, POST |
 | `api/export/route.ts` | 전체 백업 내보내기 (API 키는 DB에 저장하지 않으므로 포함되지 않음) | GET |
 | `api/health/route.ts` |  | GET |
 | `api/hot/route.ts` | action: report(새 리포트) · approve(승인 → 글 만들기 시작) · skip(넘기기) | GET, POST |
@@ -99,6 +100,8 @@
 | `api/research/creator/image/route.ts` | 크리에이터 어드바이저 캡처 → AI가 화면의 유입 검색어 목록을 읽어 붙여넣기 형식(한 줄에 하나)으로 돌려줌 | POST |
 | `api/research/creator/route.ts` | 크리에이터 어드바이저 유입 트렌드 붙여넣기 저장 | GET, POST, DELETE |
 | `api/settings/route.ts` |  | GET, PUT |
+| `api/studio/[id]/route.ts` | 상태 (진행 중인 장면 영상은 Higgsfield에 확인해 갱신) | GET, PUT, POST, DELETE |
+| `api/studio/route.ts` | ① 프롬프트로 기획 시작 | GET, POST |
 | `api/trash/route.ts` | action: trash(휴지통으로) / restore(되살리기) / purge(완전 삭제) / empty(휴지통 비우기) | GET, POST |
 | `api/trends/route.ts` | ?c=카테고리ID&refresh=1 · ?scraps=1 | GET, POST |
 | `api/videos/[id]/file/route.ts` | 영상·썸네일 파일: Supabase 저장소면 1시간짜리 서명 주소로 보냄, DB 보관이면 직접 전송 (구간 재생 지원) | GET |
@@ -129,6 +132,10 @@
 | `posts/page.tsx` |  | dynamic |
 | `settings/SettingsClient.tsx` | 세부 모델 선택: 추천 목록(가격 표시) + 불러온 모델 + 직접 입력 |  |
 | `settings/page.tsx` |  | dynamic |
+| `studio/NewStudio.tsx` |  |  |
+| `studio/[id]/StudioEditor.tsx` |  |  |
+| `studio/[id]/page.tsx` |  | dynamic |
+| `studio/page.tsx` |  | dynamic |
 | `trash/TrashList.tsx` |  | TrashRow |
 | `trash/page.tsx` |  | dynamic |
 | `trends/TrendGrid.tsx` | 영상 제목 → 키워드 추천 방향 (해시태그·괄호·특수문자 정리) | TrendCardVideo |

@@ -171,7 +171,7 @@ http
         jb.polls++;
         if (jb.polls < 2) return send(res, 200, { status: "in_progress", request_id: m2[1] });
         return send(res, 200, jb.video
-          ? { status: "completed", request_id: m2[1], video: { url: "https://cdn.example.com/out.mp4" }, expires_at: "2026-11-10T00:00:00Z" }
+          ? { status: "completed", request_id: m2[1], video: { url: process.env.SAMPLE_MP4 ? `http://localhost:${PORT}/sample.mp4` : "https://cdn.example.com/out.mp4" }, expires_at: "2026-11-10T00:00:00Z" }
           : { status: "completed", request_id: m2[1], images: [{ url: "https://cdn.example.com/out.png" }], expires_at: "2026-11-10T00:00:00Z" });
       }
       return send(res, 404, { detail: "not found" });
@@ -196,6 +196,7 @@ http
         { issue: "제철 레시피", keyword: "제철 레시피", title: "11월 제철 레시피 모음", why: "뉴스", direction: "목록", hotness: 2, timing: "시즌 미리", sources: ["n3"] },
       ] });
       if (system.includes("블로그 성장 컨설턴트")) return JSON.stringify({ score: 62, summary: "발행은 꾸준하지만 누락 글이 있어요.", good: ["제목 길이 적당"], problems: [{ title: "검색 누락", why: "최근 글 1개가 안 나옴", fix: "비슷한 글 다시 쓰지 말고 새 각도로" }], titleTips: ["깍두기 담그는 법 & 양념 비율 → 깍두기 양념 비율 실패 없는 황금 공식"], next: ["주 3회 발행"] });
+      if (system.includes("쇼츠 기획 PD")) return JSON.stringify({ title: "감자 튀김 비법", concept: "감자 캐릭터가 알려주는 에어프라이어 감튀", hook: "감튀 이렇게 하면 바삭", character: { name: "포테", description: "동그란 감자", prompt: "A cute round potato character with big eyes, tiny chef hat" }, scenes: [{ visual: "potato cuts fries", motion: "camera slowly zooms in", caption: "감튀 이렇게 하면 바삭", narration: "안녕" }, { visual: "air fryer", motion: "steam rises", caption: "180도 15분", narration: "" }, { visual: "finished fries", motion: "potato dances", caption: "저장해두세요", narration: "" }], caption: "바삭 감튀 비법", hashtags: ["#감튀", "에어프라이어"] });
       if (system.includes("표지 카피라이터")) return JSON.stringify({ hooks: ["새 표지 A", "새 표지 B", "새 표지 C"] });
       if (system.includes("블로그 통계 화면")) return JSON.stringify({ period: "최근 7일", items: [{ title: "깍두기 담그는 법", views: "1,204" }, { title: "굴보쌈", views: 3300 }, { title: "", views: 9 }] });
       if (system.includes("광고 수익 화면")) return JSON.stringify({ krw: 12345, usd: null, period: "2026-11-01~2026-11-06", metric: "노출 1,000 · 클릭 20", found: true });
