@@ -46,7 +46,8 @@ export async function saveRevenue(month: string, data: MonthRevenue) {
     if (!e) continue;
     const krw = Math.max(0, Math.round(Number(e.krw) || 0));
     const usd = e.usd == null || e.usd === ("" as unknown) ? null : Math.max(0, Number(e.usd) || 0);
-    if (krw || usd) clean[ch] = { krw, usd, metric: String(e.metric ?? "").slice(0, 120) };
+    // 0원이어도 기록(예: 쿠팡 자동 집계 클릭 수)이 있으면 남김
+    if (krw || usd || String(e.metric ?? "").trim()) clean[ch] = { krw, usd, metric: String(e.metric ?? "").slice(0, 120) };
   }
   all[month] = clean;
   await q(`INSERT INTO settings (key, value) VALUES ('revenue', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j(all)]);

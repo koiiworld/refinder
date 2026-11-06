@@ -251,19 +251,19 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
         ) : (
           !edit && <p className="small muted" style={{ margin: 0 }}>아직 수익이 없습니다. 쿠팡파트너스는 API 키를 연결하면 자동으로, 애드포스트는 수익 화면 캡처를 아래에 올리면 AI가 읽어 채워 줍니다.</p>
         )}
-        {total > 0 && !edit && (
+        {!edit && (
           <div className="table-wrap">
             <table className="tbl">
               <thead><tr><th>채널</th><th style={{ textAlign: "right" }}>이번 달 수익</th><th>메모</th></tr></thead>
               <tbody>
-                {CHANNELS.filter((c) => data[c.id]).map((c) => (
+                {CHANNELS.map((c) => (
                   <tr key={c.id}>
                     <td>{c.name}</td>
-                    <td style={{ textAlign: "right" }}>
-                      {krw(data[c.id]!.krw)}
-                      {data[c.id]!.usd != null && <span className="tiny muted"> (${data[c.id]!.usd})</span>}
+                    <td style={{ textAlign: "right" }} className={data[c.id] ? "" : "muted"}>
+                      {krw(data[c.id]?.krw ?? 0)}
+                      {data[c.id]?.usd != null && <span className="tiny muted"> (${data[c.id]!.usd})</span>}
                     </td>
-                    <td className="tiny muted">{data[c.id]!.metric}</td>
+                    <td className="tiny muted">{data[c.id]?.metric || (c.id === "coupang" ? (coupang?.connected ? "API 자동 집계 대기" : "API 키를 연결하면 자동") : "아직 입력 안 함")}</td>
                   </tr>
                 ))}
               </tbody>
