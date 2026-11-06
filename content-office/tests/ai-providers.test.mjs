@@ -1023,3 +1023,31 @@ test("💡📅 아이디어·달력: 김장철 → 김치 보관 글감 저장 �
   const ai = (await mockLog()).filter((l) => /chat\/completions|\/v1\/messages|generateContent/.test(l.path));
   assert.equal(ai.length, 0, "아이디어 저장·이동만으로 AI 호출 없음");
 });
+
+test("📋 기획안 승인: 제목 → 목차·근거·이미지 계획 → 고쳐서 승인 → 그 기획안대로 글 · 누르기 전 모델·예상 비용", async () => {
+  const add = await call("/api/keywords", "POST", { action: "add", blogId: "blog_algokitchen", keyword: "굴보쌈 레시피" });
+  const c = await call("/api/posts", "POST", { blogId: "blog_algokitchen", pickIds: [add.data.id] });
+  const id = c.data.ids[0];
+  await waitPost(id, (x) => x.project.stage === "titles" && idle(x), "제목 대기");
+  const est = (await call(`/api/posts/${id}`, "POST", { action: "estimate" })).data;
+  assert.equal(est.outline.steps[0].model, "gpt-5.4-mini");
+  assert.deepEqual(est.write.steps.map((s) => s.key), ["write", "hashtags", "review"], "자동으로 이어질 단계");
+  assert.ok(est.write.total > 0);
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "outline", title: "굴보쌈 집에서 만드는 법" });
+  let b = await waitPost(id, (x) => x.project.plan?.outline && idle(x), "기획안");
+  assert.equal(b.project.stage, "titles");
+  assert.equal(b.project.plan.outline.approved, false);
+  assert.equal(b.project.plan.selectedTitle, "굴보쌈 집에서 만드는 법");
+  assert.ok(!(await mockLog()).some((l) => JSON.stringify(l.body ?? {}).includes("전속 작가")), "승인 전엔 글 안 씀");
+  const list = (await (await fetch(`${BASE}/posts`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(list.includes("내 승인 필요"), "진행 목록: 내 승인 필요");
+  // 고쳐서 승인
+  const outline = { ...b.project.plan.outline, sections: [{ heading: "굴 손질부터 보쌈까지", points: ["굴 씻는 법"] }, ...b.project.plan.outline.sections.slice(1)], claims: [{ ...b.project.plan.outline.claims[0], source: "https://www.nifs.go.kr" }] };
+  await call(`/api/posts/${id}`, "POST", { action: "approve_outline", outline });
+  b = await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "글·검수");
+  assert.equal(b.project.plan.outline.approved, true);
+  const wp = await stepPrompt("전속 작가");
+  assert.match(wp, /\[승인된 기획안[\s\S]*1\. 굴 손질부터 보쌈까지/);
+  assert.match(wp, /출처: https:\/\/www\.nifs\.go\.kr/);
+});

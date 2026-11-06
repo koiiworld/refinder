@@ -10,6 +10,7 @@ const STEP_OF: Record<string, [string, string]> = {
   keywords: ["1", "① 키워드 추천"],
   "season-keywords": ["1", "① 키워드 추천"],
   titles: ["3", "③ SEO 제목 뽑기"],
+  outline: ["3b", "③-2 기획안 (목차·근거)"],
   write: ["4", "④ 글 작성 (이미지 프롬프트 포함)"],
   hashtags: ["4h", "④ 해시태그"],
   carousel: ["c1", "📱 인스타 캐러셀"],

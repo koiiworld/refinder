@@ -2,7 +2,7 @@ import { updateProject } from "@/lib/repo";
 import { q } from "@/lib/db";
 import { postBundle } from "@/lib/post-bundle";
 import { ensureWorker } from "@/lib/jobs";
-import { cancelJobs, insertImage, markPublished, rerun, selectTitle, setHashtags, setImage, startWriting, requestFix, requestEdit, saveIssueNotes, WorkflowError } from "@/lib/workflow";
+import { approveOutline, cancelJobs, insertImage, markPublished, requestOutline, rerun, selectTitle, setHashtags, setImage, startWriting, requestFix, requestEdit, saveIssueNotes, WorkflowError } from "@/lib/workflow";
 import { createMediaJob, estimateMedia } from "@/lib/media";
 import { HF_MODELS, HiggsfieldError } from "@/lib/higgsfield";
 import { generateDirect, ImageGenError } from "@/lib/image-gen";
@@ -24,7 +24,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; date?: string }>(req);
+    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; date?: string; outline?: Partial<import("@/lib/posts-types").PostOutline> }>(req);
     switch (b.action) {
       case "rerun":
         if (!b.step) throw new WorkflowError("다시 실행할 단계를 고르세요.");
@@ -41,6 +41,16 @@ export async function POST(req: Request, { params }: Ctx) {
         break;
       case "issue_note":
         await saveIssueNotes(id, { [String(Number(b.index))]: String(b.note ?? "") });
+        break;
+      case "estimate": {
+        const { postEstimates } = await import("@/lib/estimate");
+        return ok(await postEstimates());
+      }
+      case "outline":
+        await requestOutline(id, { index: b.index, title: b.title });
+        break;
+      case "approve_outline":
+        await approveOutline(id, b.outline);
         break;
       case "write":
         await startWriting(id, { index: b.index, title: b.title });

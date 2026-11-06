@@ -5,7 +5,7 @@ import { addEvent, getBlogForAi, getDocument, getProject, updateProject, writeAi
 import { extractJson, runStep, sanitizeHtml } from "./ai/run";
 import { AiError } from "./ai/providers";
 import { reviewTemplate } from "./ai/prompts";
-import { fixPrompt, hashtagsPrompt, postReviewPrompt, titlesPrompt, writePrompt } from "./ai/step-prompts";
+import { fixPrompt, hashtagsPrompt, outlinePrompt, postReviewPrompt, titlesPrompt, writePrompt } from "./ai/step-prompts";
 import { keywordStats, naverAdConnected } from "./searchad";
 import type { PostExtras, PostPlan } from "./posts-types";
 import { recentPosts, writtenTitles } from "./blog-posts";
@@ -175,7 +175,7 @@ async function runJob(job: Job) {
 }
 
 export function jobLabel(type: string) {
-  return ({ titles: "③ SEO 제목 추천", write: "④ 글 작성", review: "⑥ 검수", fix: "⑥ 지적 사항 AI 수정" } as Record<string, string>)[type] ?? type;
+  return ({ titles: "③ SEO 제목 추천", outline: "③-2 기획안", write: "④ 글 작성", review: "⑥ 검수", fix: "⑥ 지적 사항 AI 수정" } as Record<string, string>)[type] ?? type;
 }
 
 async function load(job: Job): Promise<{ project: Project; blog: Blog }> {
@@ -292,6 +292,26 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     await addEvent(project.id, "ai", `③ 제목 후보 ${candidates.length}개 (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""}) · 제목을 고르고 '글 쓰기'를 눌러 주세요`);
   },
 
+  // ③-2 기획안: 목차·핵심 주장·근거·이미지 계획 → 사용자가 승인할 때까지 대기
+  async outline(job) {
+    const { project, blog } = await load(job);
+    const plan = project.plan as unknown as PostPlan | null;
+    if (!plan) throw new Error("제목이 아직 없습니다.");
+    const { system, prompt } = outlinePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, brief: plan.brief });
+    const res = await runStep({ step: "titles", role: "planner", purpose: "outline", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 3000 });
+    const raw = extractJson<{ sections?: { heading?: string; points?: string[] }[]; claims?: { claim?: string; evidence?: string; source?: string; check?: boolean }[]; images?: { n?: number; what?: string }[] }>(res.text);
+    const outline = {
+      sections: arr(raw.sections).map((s: { heading?: string; points?: string[] }) => ({ heading: String(s.heading ?? "").slice(0, 120), points: arr(s.points).map(String).slice(0, 4) })).filter((s) => s.heading).slice(0, 8),
+      claims: arr(raw.claims).map((c: { claim?: string; evidence?: string; source?: string; check?: boolean }) => ({ claim: String(c.claim ?? "").slice(0, 200), evidence: String(c.evidence ?? "").slice(0, 200), source: String(c.source ?? "").slice(0, 200), check: !!c.check })).filter((c) => c.claim).slice(0, 8),
+      images: arr(raw.images).map((m: { n?: number; what?: string }, i: number) => ({ n: Number(m.n) || i + 1, what: String(m.what ?? "").slice(0, 160) })).filter((m) => m.what).slice(0, 5),
+      approved: false,
+      ai: { provider: res.provider, model: res.model },
+    };
+    if (!outline.sections.length) throw new AiError("AI가 기획안을 만들지 못했습니다.", true);
+    await updateProject(project.id, { plan: { ...plan, outline }, stage: "titles", status: "waiting", status_message: "" });
+    await addEvent(project.id, "ai", `③-2 기획안 (${res.provider}/${res.model}) · 목차·근거를 확인하고 승인해 주세요`);
+  },
+
   // ④ 글 작성 (해시태그·이미지 프롬프트 포함)
   async write(job) {
     const { project, blog } = await load(job);
@@ -300,7 +320,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const feedback = job.payload.feedback as string | undefined;
     const doc = await getDocument(project.id);
     const myPosts = await recentPosts(blog);
-    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined, myPosts, titleByUser: !plan.candidates.some((c) => c.title.trim() === plan.selectedTitle.trim()), brief: plan.brief });
+    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined, myPosts, titleByUser: !plan.candidates.some((c) => c.title.trim() === plan.selectedTitle.trim()), brief: plan.brief, outline: plan.outline });
     const res = await runStep({
       step: "writing", role: "writer", purpose: "write", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
       template: () => JSON.stringify({ html: `<p><strong>⚠ AI 미연결: 템플릿 원고입니다.</strong></p><h2>${esc(plan.keyword)}</h2><p>[작성 필요]</p><p>[이미지 1]</p><h2>정리</h2><p>[작성 필요]</p>`, hashtags: [plan.keyword.replace(/\s+/g, "")], images: [{ prompt: plan.keyword, alt: plan.keyword, aspect: "4:3" }] }),

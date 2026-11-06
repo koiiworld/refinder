@@ -34,6 +34,35 @@ export async function startWriting(projectId: string, input: { index?: number; t
   await addEvent(projectId, "approve", `③ 제목 확정 → ④ 글 작성 시작: ${fresh?.title ?? ""}`);
 }
 
+/** ③-2 기획안 만들기 (제목 확정 → 목차·근거 → 승인 대기) */
+export async function requestOutline(projectId: string, input: { index?: number; title?: string } = {}) {
+  const p = await getProject(projectId);
+  if (!p?.plan) throw new WorkflowError("제목 후보가 아직 없습니다.");
+  await noRunningJob(projectId);
+  if (input.index !== undefined || input.title) await selectTitle(projectId, input);
+  await updateProject(projectId, { status: "running", status_message: "" });
+  await enqueue("outline", { projectId });
+  await addEvent(projectId, "approve", `③ 제목 확정 → 기획안 요청`);
+}
+
+/** ③-2 기획안 승인(고친 내용 반영) → ④ 글 작성 시작 */
+export async function approveOutline(projectId: string, edited?: Partial<import("./posts-types").PostOutline>) {
+  const p = await getProject(projectId);
+  const plan = p?.plan as unknown as import("./posts-types").PostPlan | null;
+  if (!plan?.outline) throw new WorkflowError("승인할 기획안이 없습니다.");
+  const o = plan.outline;
+  const outline = {
+    ...o,
+    sections: Array.isArray(edited?.sections) ? edited!.sections.map((s) => ({ heading: String(s.heading ?? "").slice(0, 120), points: (s.points ?? []).map(String).slice(0, 4) })).filter((s) => s.heading).slice(0, 8) : o.sections,
+    claims: Array.isArray(edited?.claims) ? edited!.claims.map((c) => ({ claim: String(c.claim ?? "").slice(0, 200), evidence: String(c.evidence ?? "").slice(0, 200), source: String(c.source ?? "").slice(0, 200), check: !!c.check })).filter((c) => c.claim).slice(0, 8) : o.claims,
+    images: Array.isArray(edited?.images) ? edited!.images.map((m, i) => ({ n: Number(m.n) || i + 1, what: String(m.what ?? "").slice(0, 160) })).filter((m) => m.what).slice(0, 5) : o.images,
+    approved: true,
+  };
+  await updateProject(projectId, { plan: { ...plan, outline } });
+  await addEvent(projectId, "approve", "③-2 기획안 승인");
+  await startWriting(projectId);
+}
+
 async function noRunningJob(projectId: string) {
   const r = await q("SELECT id FROM jobs WHERE project_id=$1 AND status IN ('queued','running')", [projectId]);
   if (r.length) throw new WorkflowError("AI가 작업 중입니다. 끝난 뒤 다시 시도하세요.");

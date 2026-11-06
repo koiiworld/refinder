@@ -55,8 +55,24 @@ best 는 candidates 의 번호(0부터)입니다.`;
   return { system, prompt };
 }
 
+// ───────── ③-2 기획안 (목차·핵심 주장·근거·이미지 계획) ─────────
+export function outlinePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; brief?: import("../posts-types").PostBrief }) {
+  const system = `당신은 "${blog.name}" 블로그의 편집 기획자입니다. 글을 쓰기 전에 목차와 근거를 설계합니다. 확인할 수 없는 사실을 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
+  const prompt = `${blogContext(blog)}
+[제목] ${input.title}
+[메인 키워드] ${input.keyword}
+[함께 넣을 키워드] ${input.subKeywords.join(", ") || "(없음)"}
+${briefText(input.brief)}
+이 제목으로 쓸 글의 기획안을 만드세요.
+- sections: 소제목 4~7개. 각 소제목마다 들어갈 내용 points 2~3개 (짧게)
+- claims: 글의 핵심 주장·사실 3~6개. evidence 에는 근거(경험·공식 발표·일반 상식 등), source 에는 확인할 공식 출처(기관·사이트 이름이나 주소, 모르면 빈 문자열), check 는 블로그 주인이 확인해야 하는 사실(금액·날짜·정책·수치)이면 true
+- images: 넣을 사진 2~4개. n 은 순서, what 은 무엇을 찍은/그린 사진인지
+형식: {"sections": [{"heading": "", "points": [""]}], "claims": [{"claim": "", "evidence": "", "source": "", "check": true}], "images": [{"n": 1, "what": ""}]}`;
+  return { system, prompt };
+}
+
 // ───────── ④ 글 작성 (해시태그·이미지 프롬프트 포함) ─────────
-export function writePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; feedback?: string; previousHtml?: string; myPosts?: { title: string; url: string }[]; titleByUser?: boolean; brief?: import("../posts-types").PostBrief }) {
+export function writePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; feedback?: string; previousHtml?: string; myPosts?: { title: string; url: string }[]; titleByUser?: boolean; brief?: import("../posts-types").PostBrief; outline?: import("../posts-types").PostOutline }) {
   const posts = (input.myPosts ?? []).filter((p) => p.title.trim() !== input.title.trim());
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 블로그 문체를 정확히 따릅니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
   const prompt = `${blogContext(blog)}
@@ -64,7 +80,7 @@ ${styleSamplesText(blog)}
 [제목] ${input.title}${input.titleByUser ? "\n(사용자가 직접 고친 제목입니다. 제목에 나온 제품·모델·주제·각도를 기준으로 본문을 쓰세요. 메인 키워드와 다르면 제목을 따르세요.)" : ""}
 [메인 키워드] ${input.keyword}
 [함께 넣을 키워드] ${input.subKeywords.join(", ") || "(없음)"}
-${input.brief ? `${briefText(input.brief)}- 위 기획의 방향을 따르되, 원출처에서 확인되는 사실만 쓰고 확실하지 않은 숫자·날짜는 [확인 필요]로 두세요. 본문 끝에 참고한 원출처를 '참고:' 로 짧게 밝히세요.\n` : ""}${posts.length ? `\n[내 블로그의 실제 글 목록 - 블로그 RSS에서 가져옴 (제목 | 주소)]\n${posts.map((p) => `- ${p.title} | ${p.url}`).join("\n")}\n` : ""}${input.previousHtml ? `\n[이전 원고]\n${input.previousHtml}\n` : ""}${input.feedback ? `\n[수정 요청 - 반드시 반영]\n${input.feedback}\n` : ""}
+${input.outline?.approved ? `\n[승인된 기획안 - 이 목차·주장 순서대로 쓰고, check 표시된 사실은 출처가 없으면 단정하지 말 것]\n${input.outline.sections.map((s, i) => `${i + 1}. ${s.heading} — ${s.points.join(" / ")}`).join("\n")}\n주장·근거: ${input.outline.claims.map((c) => `${c.claim} (근거: ${c.evidence}${c.source ? ` · 출처: ${c.source}` : ""}${c.check ? " · 확인 필요" : ""})`).join(" / ")}\n이미지 계획: ${input.outline.images.map((m) => `[이미지 ${m.n}] ${m.what}`).join(" / ")}\n` : ""}${input.brief ? `${briefText(input.brief)}- 위 기획의 방향을 따르되, 원출처에서 확인되는 사실만 쓰고 확실하지 않은 숫자·날짜는 [확인 필요]로 두세요. 본문 끝에 참고한 원출처를 '참고:' 로 짧게 밝히세요.\n` : ""}${posts.length ? `\n[내 블로그의 실제 글 목록 - 블로그 RSS에서 가져옴 (제목 | 주소)]\n${posts.map((p) => `- ${p.title} | ${p.url}`).join("\n")}\n` : ""}${input.previousHtml ? `\n[이전 원고]\n${input.previousHtml}\n` : ""}${input.feedback ? `\n[수정 요청 - 반드시 반영]\n${input.feedback}\n` : ""}
 블로그 본문을 작성하세요.
 - html: 본문 HTML 조각 (h2, h3, p, ul, ol, li, strong, table, blockquote, a 만 사용, 제목 h1 은 쓰지 않음)${posts.length ? `
   - 글 끝에서 다른 글을 소개할 때는(블로그 문체의 마무리 규칙이 있으면 그대로 따름) 위 '내 블로그의 실제 글 목록'에서 이 글 주제와 관련 깊은 글 2~3개만 골라 <a href="주소">제목</a> 으로 넣으세요. 목록에 없는 글 제목·주소는 절대 만들지 마세요.` : ""}

@@ -12,6 +12,16 @@ export interface PostPlan {
   userPicked?: boolean;
   /** 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) */
   brief?: PostBrief;
+  /** ③-2 기획안: 목차·핵심 주장·근거·이미지 계획 (승인해야 글을 씀) */
+  outline?: PostOutline;
+}
+
+export interface PostOutline {
+  sections: { heading: string; points: string[] }[];
+  claims: { claim: string; evidence: string; source: string; check: boolean }[];
+  images: { n: number; what: string }[];
+  approved: boolean;
+  ai?: { provider: string; model: string };
 }
 
 export interface PostBrief {

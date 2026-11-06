@@ -115,11 +115,23 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
             <div className="stack" style={{ gap: 12 }}>
               {choosing && <div className="notice small">후보를 누르거나 &apos;선택한 제목&apos; 칸에 원하는 대로 고친 뒤 <b>이 제목으로 글 쓰기</b>를 누르세요. 칸에 적힌 제목 그대로 글을 씁니다.</div>}
               <TitlePicker plan={plan} current={title} draft={titleDraft} setDraft={setTitleDraft} choosing={choosing} disabled={running} onPick={(payload) => act({ action: "select_title", ...payload }, "제목을 저장했습니다.")} />
-              {choosing && (
-                <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} disabled={running || !titleDraft.trim()} onClick={() => act({ action: "write", title: titleDraft.trim() }, "글 작성을 시작합니다.")}>
-                  이 제목으로 글 쓰기 →
-                </button>
+              {choosing && !plan.outline && (
+                <WriteStart
+                  projectId={p.id}
+                  disabled={running || !titleDraft.trim()}
+                  onOutline={() => act({ action: "outline", title: titleDraft.trim() }, "기획안(목차·근거)을 만들고 있어요.")}
+                  onWrite={() => act({ action: "write", title: titleDraft.trim() }, "글 작성을 시작합니다.")}
+                />
               )}
+              {plan.outline && !plan.outline.approved && !running && p.stage === "titles" && (
+                <OutlineCard
+                  projectId={p.id}
+                  outline={plan.outline}
+                  onApprove={(outline) => act({ action: "approve_outline", outline }, "기획안을 승인했어요. 글 작성을 시작합니다.")}
+                  onRedo={() => act({ action: "outline", title: titleDraft.trim() || title }, "기획안을 다시 만들고 있어요.")}
+                />
+              )}
+              {plan.outline?.approved && <div className="tiny muted">✅ 승인한 기획안(목차 {plan.outline.sections.length}개 · 주장 {plan.outline.claims.length}개)대로 글을 써요.</div>}
             </div>
           )}
         </Section>
@@ -784,5 +796,80 @@ function VersionHistory({ projectId, revision, disabled, onRestored }: { project
         </div>
       )}
     </details>
+  );
+}
+
+type Est = { steps: { key: string; label: string; model: string; provider: string; usd: number | null }[]; total: number | null };
+function useEstimates(projectId: string) {
+  const [e, setE] = useState<{ outline: Est; write: Est } | null>(null);
+  useEffect(() => {
+    api<{ outline: Est; write: Est }>(`/api/posts/${projectId}`, "POST", { action: "estimate" }).then(setE).catch(() => {});
+  }, [projectId]);
+  return e;
+}
+const estLine = (e?: Est | null) => (!e ? "" : e.steps.map((s) => `${s.label}: ${s.model}${s.usd != null ? ` ${fmtUsd(s.usd)}` : ""}`).join(" → "));
+
+/** 제목 다음: 기획안(추천) 또는 바로 쓰기 — 누르기 전에 모델·예상 비용·자동으로 이어질 단계를 보여 줌 */
+function WriteStart({ projectId, disabled, onOutline, onWrite }: { projectId: string; disabled: boolean; onOutline: () => void; onWrite: () => void }) {
+  const e = useEstimates(projectId);
+  return (
+    <div className="card card-pad stack" style={{ gap: 8, padding: 12 }}>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn btn-primary" disabled={disabled} onClick={onOutline}>📋 기획안 먼저 보기 (목차·근거·이미지 계획){e?.outline.total != null ? ` · 약 ${fmtUsd(e.outline.total)}` : ""}</button>
+        <button className="btn" disabled={disabled} onClick={() => confirm(`기획안 없이 바로 글을 쓸까요?\n자동으로 이어지는 단계: ${estLine(e?.write)}`) && onWrite()}>기획안 없이 바로 글 쓰기 →</button>
+      </div>
+      <span className="tiny muted">기획안: {estLine(e?.outline) || "불러오는 중…"} · 승인하면 이어서 {estLine(e?.write)}{e?.write.total != null ? ` (합계 약 ${fmtUsd(e.write.total)})` : ""}. 예상치는 토큰 × 단가 추정이에요.</span>
+    </div>
+  );
+}
+
+/** ③-2 기획안 확인·수정 → 승인하면 글 작성 */
+function OutlineCard({ projectId, outline, onApprove, onRedo }: { projectId: string; outline: NonNullable<PostPlan["outline"]>; onApprove: (o: NonNullable<PostPlan["outline"]>) => void; onRedo: () => void }) {
+  const e = useEstimates(projectId);
+  const [o, setO] = useState(outline);
+  useEffect(() => setO(outline), [outline]);
+  const checks = o.claims.filter((c) => c.check && !c.source.trim()).length;
+  return (
+    <div className="card card-pad stack" style={{ gap: 12, borderColor: "var(--accent)" }}>
+      <div className="row between">
+        <b className="small">📋 기획안 확인 · 내 승인 필요{outline.ai ? <span className="tiny muted"> · {outline.ai.provider}/{outline.ai.model}</span> : null}</b>
+        <button className="btn btn-sm btn-ghost" onClick={onRedo}>🔄 다시 만들기</button>
+      </div>
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="label">목차 (소제목 · 들어갈 내용 — 고쳐도 돼요)</span>
+        {o.sections.map((s, i) => (
+          <div key={i} className="stack" style={{ gap: 2 }}>
+            <input className="input" style={{ fontWeight: 700 }} value={s.heading} onChange={(ev) => setO({ ...o, sections: o.sections.map((x, k) => (k === i ? { ...x, heading: ev.target.value } : x)) })} aria-label={`소제목 ${i + 1}`} />
+            <textarea className="textarea" style={{ minHeight: 44, fontSize: 13 }} value={s.points.join("\n")} onChange={(ev) => setO({ ...o, sections: o.sections.map((x, k) => (k === i ? { ...x, points: ev.target.value.split("\n") } : x)) })} aria-label={`소제목 ${i + 1} 내용`} />
+          </div>
+        ))}
+      </div>
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="label">핵심 주장 · 근거 · 출처 (☑ = 내가 확인해야 할 사실)</span>
+        {o.claims.map((c, i) => (
+          <div key={i} className="card card-pad stack" style={{ gap: 4, padding: 8 }}>
+            <input className="input" value={c.claim} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, claim: ev.target.value } : x)) })} aria-label={`주장 ${i + 1}`} />
+            <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+              <input className="input" style={{ fontSize: 13 }} value={c.evidence} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, evidence: ev.target.value } : x)) })} placeholder="근거" aria-label={`근거 ${i + 1}`} />
+              <input className="input" style={{ fontSize: 13 }} value={c.source} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, source: ev.target.value } : x)) })} placeholder="출처 주소 (있으면)" aria-label={`출처 ${i + 1}`} />
+              <label className="tiny row" style={{ gap: 4, flexShrink: 0 }}><input type="checkbox" checked={c.check} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, check: ev.target.checked } : x)) })} />확인 필요</label>
+            </div>
+          </div>
+        ))}
+      </div>
+      {!!o.images.length && (
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="label">이미지 계획</span>
+          {o.images.map((m, i) => (
+            <input key={i} className="input" style={{ fontSize: 13 }} value={m.what} onChange={(ev) => setO({ ...o, images: o.images.map((x, k) => (k === i ? { ...x, what: ev.target.value } : x)) })} aria-label={`이미지 ${m.n}`} />
+          ))}
+        </div>
+      )}
+      {checks > 0 && <div className="notice notice-warn small">출처 없이 &apos;확인 필요&apos;인 사실 {checks}개 — 글에서는 단정하지 않고 [확인 필요]로 남겨요. 출처 주소를 적으면 그대로 근거로 써요.</div>}
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn btn-primary" onClick={() => onApprove({ ...o, sections: o.sections.map((s) => ({ ...s, points: s.points.map((x) => x.trim()).filter(Boolean) })) })}>✅ 승인하고 글 쓰기{e?.write.total != null ? ` · 약 ${fmtUsd(e.write.total)}` : ""}</button>
+      </div>
+      <span className="tiny muted">승인하면 자동으로 이어져요: {estLine(e?.write) || "불러오는 중…"}</span>
+    </div>
   );
 }
