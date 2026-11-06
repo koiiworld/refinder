@@ -574,3 +574,17 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .rp-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
 .rp-item { width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; cursor: pointer; }
 .rp-item.on { background: var(--accent-soft); }
+
+/* 🔁 루틴 */
+.progress-bar { height: 6px; background: var(--panel-2); margin: 0 16px 8px; border-radius: 999px; overflow: hidden; }
+.progress-bar span { display: block; height: 100%; background: var(--ok); transition: width .2s; }
+.routine-row { gap: 10px; flex-wrap: nowrap; align-items: center; }
+.routine-dot { width: 24px; height: 24px; border-radius: 999px; border: 2px solid var(--line); background: var(--panel); display: grid; place-items: center; color: #fff; font-weight: 800; flex-shrink: 0; font-size: 13px; padding: 0; cursor: pointer; }
+.routine-dot.done { background: var(--ok); border-color: var(--ok); }
+.routine-dot.in_progress { border-color: var(--warn); }
+.routine-dot.missed { border-color: var(--bad); }
+.routine-dot:disabled { cursor: default; }
+.routine-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+.routine-item.target { border-color: var(--accent); background: var(--accent-soft); }
+.routine-cap { max-width: 240px; max-height: 180px; border-radius: 8px; border: 1px solid var(--line); }
+.routine-form .seg button { padding: 6px 10px; }

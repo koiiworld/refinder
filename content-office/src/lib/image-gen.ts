@@ -111,5 +111,5 @@ async function logRun(input: { projectId: string; blogId?: string | null }, prov
 }
 
 export async function getGeneratedImage(id: string) {
-  return q1<{ mime: string; data: Buffer | Uint8Array }>("SELECT mime, data FROM generated_images WHERE id=$1", [id]);
+  return q1<{ mime: string; data: Buffer | Uint8Array; provider: string }>("SELECT mime, data, provider FROM generated_images WHERE id=$1", [id]);
 }

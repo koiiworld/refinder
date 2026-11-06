@@ -124,10 +124,25 @@ http
       return res.end(`BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${y}${m}10\r\nDTEND;VALUE=DATE:${y}${m}11\r\nSUMMARY:국회의원선거일\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${y}${m}20\r\nDTEND;VALUE=DATE:${y}${m}21\r\nSUMMARY:시험공휴일\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`);
     }
     // 텔레그램 봇 API (모의 발송 — 실제로 보내지 않음)
-    const tg = url.pathname.match(/^\/bottest-tg-token\/(sendMessage|getUpdates|getMe)$/);
+    // 텔레그램 버튼 누르기 흉내: /__tgpress?data=rd:<run> → 다음 getUpdates(callback_query) 에 실림
+    if (url.pathname === "/__tgpress") {
+      globalThis.__tgPress = globalThis.__tgPress ?? [];
+      globalThis.__tgUid = (globalThis.__tgUid ?? 100) + 1;
+      globalThis.__tgPress.push({ update_id: globalThis.__tgUid, callback_query: { id: `cb${globalThis.__tgUid}`, data: url.searchParams.get("data"), from: { id: 987654 }, message: { message_id: 1, chat: { id: Number(url.searchParams.get("chat") ?? 987654) } } } });
+      return send(res, 200, { ok: true });
+    }
+    const tg = url.pathname.match(/^\/bottest-tg-token\/(sendMessage|getUpdates|getMe|answerCallbackQuery|editMessageReplyMarkup)$/);
     if (tg) {
       if (tg[1] === "getMe") return send(res, 200, { ok: true, result: { username: "test_office_bot", first_name: "시험봇" } });
-      if (tg[1] === "getUpdates") return send(res, 200, { ok: true, result: [{ message: { chat: { id: 987654, first_name: "민" } } }] });
+      if (tg[1] === "answerCallbackQuery" || tg[1] === "editMessageReplyMarkup") return send(res, 200, { ok: true, result: true });
+      if (tg[1] === "getUpdates") {
+        if ((body.allowed_updates ?? []).includes("callback_query")) {
+          const off = Number(body.offset ?? 0);
+          const list = (globalThis.__tgPress ?? []).filter((u) => u.update_id >= off);
+          return send(res, 200, { ok: true, result: list });
+        }
+        return send(res, 200, { ok: true, result: [{ message: { chat: { id: 987654, first_name: "민" } } }] });
+      }
       if (globalThis.__tgFail) {
         globalThis.__tgFail--;
         return send(res, 502, { ok: false, description: "Bad Gateway" });

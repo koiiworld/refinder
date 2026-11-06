@@ -4,6 +4,7 @@ import { listBlogs } from "@/lib/repo";
 import { kstToday, listTodos, telegramConnected } from "@/lib/todos";
 import TodoBoard from "./TodoBoard";
 import TelegramSetup from "./TelegramSetup";
+import { ensureRuns, listRuns } from "@/lib/routines";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,8 @@ export default async function Todos({ searchParams }: { searchParams: Promise<{ 
       "SELECT id, '🎬 ' || title AS title FROM (SELECT id, title, updated_at FROM studio_projects UNION ALL SELECT id, title, updated_at FROM videos WHERE kind <> 'edit') x ORDER BY updated_at DESC LIMIT 60",
     ),
   ]);
+  // 할 일 '오늘'에 당일 루틴도 함께 (루틴 관리와 같은 실행 항목)
+  const routineRuns = tab === "today" ? await ensureRuns().then(() => listRuns({ from: kstToday(), to: kstToday() })).catch(() => []) : [];
   const prefill = sp.title || sp.idea ? { title: sp.title ?? "", blog_id: sp.blog ?? "", memo: sp.memo ?? "", idea_id: sp.idea ?? "", due_date: sp.date ?? "" } : null;
   return (
     <div className="page">
@@ -45,6 +48,20 @@ export default async function Todos({ searchParams }: { searchParams: Promise<{ 
           <Link key={t.id} href={`/todos?tab=${t.id}`} scroll={false} className={`trend-tab ${t.id === tab ? "on" : ""}`}>{t.label}</Link>
         ))}
       </nav>
+      {routineRuns.length > 0 && (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <div className="card-head"><h2 style={{ fontSize: 15 }}>🔁 오늘의 루틴</h2><Link href="/routines" className="tiny" style={{ color: "var(--accent)" }}>루틴 관리 →</Link></div>
+          <div className="list">
+            {routineRuns.map((r) => (
+              <Link key={r.id} href={`/routines/run/${r.id}`} className="list-item routine-row">
+                <span className={`routine-dot ${r.status}`}>{r.status === "done" ? "✓" : ""}</span>
+                <span className="small" style={{ flex: 1 }}>{r.time} · {r.name}</span>
+                <span className={`badge ${r.status === "done" ? "badge-ok" : r.status === "missed" ? "badge-bad" : r.status === "in_progress" ? "badge-warn" : ""}`}>{{ pending: "예정", in_progress: "진행 중", done: "완료", missed: "미수집" }[r.status]}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
       <div style={{ marginBottom: 16 }}><TelegramSetup connected={telegramConnected()} hasToken={!!process.env.TELEGRAM_BOT_TOKEN?.trim()} /></div>
       <TodoBoard
         key={tab}

@@ -495,6 +495,53 @@ CREATE TABLE IF NOT EXISTS repurpose_docs (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- 🔁 루틴 관리: 반복 업무 → 날짜별 실행 → 텔레그램 알림·재알림
+CREATE TABLE IF NOT EXISTS routines (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  category    TEXT NOT NULL DEFAULT 'blog',        -- blog | research | insta | video | etc
+  blog_id     TEXT,
+  link        TEXT NOT NULL DEFAULT '',            -- 바로가기 (앱 화면 경로 또는 외부 주소)
+  schedule    JSONB NOT NULL DEFAULT '{}'::jsonb,  -- {type: daily|weekly|monthly, days: [0-6], day: 1-31}
+  time        TEXT NOT NULL DEFAULT '09:00',       -- 첫 알림 (한국 시간)
+  deadline    TEXT NOT NULL DEFAULT '23:59',       -- 마감 (한국 시간)
+  notify      BOOLEAN NOT NULL DEFAULT TRUE,
+  remind      JSONB NOT NULL DEFAULT '{}'::jsonb,  -- {mode: interval|times|none, minutes, times: ["11:00"], max}
+  completion  TEXT NOT NULL DEFAULT 'button',      -- button | checklist | system
+  checklist   JSONB NOT NULL DEFAULT '[]'::jsonb,  -- [{id, label, kind: capture|check, required}]
+  skip_holidays BOOLEAN NOT NULL DEFAULT FALSE,
+  paused      BOOLEAN NOT NULL DEFAULT FALSE,
+  priority    TEXT NOT NULL DEFAULT 'normal',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS routine_runs (
+  id           TEXT PRIMARY KEY,
+  routine_id   TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+  run_date     TEXT NOT NULL,                      -- 실행일 (한국 날짜)
+  base_date    TEXT NOT NULL DEFAULT '',           -- 자료 기준일 (보통 전날 통계 등, 실행일과 따로)
+  due_at       TIMESTAMPTZ NOT NULL,
+  deadline_at  TIMESTAMPTZ NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending',    -- pending | in_progress | done | missed
+  items        JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{id, done, at, img, note}]
+  completed_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (routine_id, run_date)
+);
+CREATE TABLE IF NOT EXISTS routine_notifications (
+  id        TEXT PRIMARY KEY,
+  run_id    TEXT NOT NULL REFERENCES routine_runs(id) ON DELETE CASCADE,
+  kind      TEXT NOT NULL,                         -- first | remind | snooze
+  round     INTEGER NOT NULL DEFAULT 0,
+  send_at   TIMESTAMPTZ NOT NULL,
+  status    TEXT NOT NULL DEFAULT 'pending',       -- pending | sending | sent | failed | unknown | canceled | skipped
+  attempts  INTEGER NOT NULL DEFAULT 0,
+  error     TEXT,
+  sent_at   TIMESTAMPTZ,
+  message_id BIGINT,
+  UNIQUE (run_id, kind, round)
+);
+CREATE INDEX IF NOT EXISTS routine_notifications_due ON routine_notifications (status, send_at);
 ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image_kit JSONB NOT NULL DEFAULT '{}'::jsonb;  -- 🎨 이미지 컨셉 키트 (레퍼런스·스타일 문구·Soul ID)
 ALTER TABLE carousels ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;        -- 게시함 (직접 표시)
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;

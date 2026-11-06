@@ -1299,7 +1299,7 @@ test("✂️ 릴스 편집기: 영상 → 받아쓰기로 장면·자막 초안 
 
   // ④ 내보내기 (맥: Remotion)
   assert.equal((await call(`/api/reels/${r.data.id}/render`, "POST")).status, 200);
-  for (let i = 0; i < 240; i++) {
+  for (let i = 0; i < 480; i++) {
     reel = (await call(`/api/reels/${r.data.id}`)).data;
     if (reel.status !== "rendering") break;
     await new Promise((x) => setTimeout(x, 1000));
@@ -1470,4 +1470,84 @@ test("📣 블로그 글 → 다른 채널 · 🔍 릴스 분석(받아쓰기·�
   assert.ok(studio.scenes.every((x) => x.visual.startsWith(lock)), "스튜디오 장면마다 같은 캐릭터 문장");
   const page = (await (await fetch(`${BASE}/studio`)).text()).replace(/<!-- -->/g, "");
   assert.ok(page.includes("시리즈로 만들기") && page.includes("나누기를 배우는 이야기"), "스튜디오 화면");
+});
+
+test("🔁 루틴 관리: 반복 등록 → 오늘 실행 자동 생성 → 텔레그램 첫 알림(버튼) → 완료 버튼은 필수 확인 → 30분 뒤 → 캡처 등록(AI 읽기)·체크로 자동 완료·알림 취소 · 마감 지나면 미수집 · 비공개 캡처", async (t) => {
+  const hm = kstTime(0);
+  if (hm < "00:10" || hm > "23:50") return t.skip("자정 근처라 건너뜀");
+  const tick = () => call("/api/routines", "POST", { action: "tick" });
+  const policy0 = (await call("/api/routines/policy")).data.policy;
+  await call("/api/routines/policy", "PUT", { quietOn: false }); // 밤에 돌려도 보내지게
+  assert.equal((await call("/api/routines", "POST", { name: "", time: "09:00" })).status, 400);
+  assert.equal((await call("/api/routines", "POST", { name: "x", time: "10:00", deadline: "09:00" })).status, 400, "마감은 첫 알림보다 늦게");
+  const r = await call("/api/routines", "POST", {
+    name: "알고키친 인기 글 순위 캡처", category: "blog", blog_id: "blog_algokitchen", link: "https://creator-advisor.naver.com",
+    schedule: { type: "daily", baseOffset: -1 }, time: kstTime(-2), deadline: "23:59", notify: true, remind: { mode: "interval", minutes: 30, max: 2 },
+    completion: "checklist", checklist: [{ label: "조회수 순위 TOP 10 캡처 등록", kind: "views", required: true }, { label: "분석 결과 확인 및 저장", kind: "check", required: true }],
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  let today = (await call("/api/routines")).data.today;
+  const run = today.find((x) => x.routine_id === r.data.id);
+  assert.ok(run, "오늘 실행 자동 생성");
+  assert.equal(run.base_date, kstDate(-1), "자료 기준일 = 전날");
+  await call("/__reset", "POST", undefined, MOCK);
+  await tick();
+  await tick(); // 두 번 돌려도 한 번만
+  const sends = (await tgSends()).filter((l) => l.body.text?.includes("알고키친 인기 글 순위 캡처"));
+  assert.equal(sends.length, 1, "첫 알림 한 번");
+  assert.match(sends[0].body.text, /① 조회수 순위 TOP 10 캡처 등록/);
+  const kb = JSON.stringify(sends[0].body.reply_markup);
+  assert.ok(kb.includes(`rd:${run.id}`) && kb.includes(`rs:${run.id}`) && kb.includes(`/routines/run/${run.id}`), kb);
+  // 완료 버튼: 필수 자료가 없으면 완료하지 않고 남은 항목 안내
+  await call(`/__tgpress?data=rd:${run.id}`, "GET", undefined, MOCK);
+  await call(`/__tgpress?data=rd:${run.id}&chat=111`, "GET", undefined, MOCK); // 다른 채팅은 무시
+  await tick();
+  let rn = (await call(`/api/routines/runs/${run.id}`)).data.run;
+  assert.notEqual(rn.status, "done");
+  const log = await mockLog();
+  assert.ok(log.some((l) => l.path.endsWith("/answerCallbackQuery") && /아직 남았어요/.test(l.body.text)), "남은 항목 안내");
+  assert.ok(log.some((l) => l.path.endsWith("/answerCallbackQuery") && /권한이 없어요/.test(l.body.text)), "다른 채팅 거절");
+  // 30분 뒤 알림 (실행 건당 한 건)
+  await call(`/__tgpress?data=rs:${run.id}`, "GET", undefined, MOCK);
+  await tick();
+  let nl = (await call("/api/routines/policy")).data.log.filter((l) => l.name === "알고키친 인기 글 순위 캡처");
+  assert.ok(nl.some((l) => l.kind === "snooze" && l.status === "pending"), JSON.stringify(nl));
+  assert.ok(nl.some((l) => l.kind === "first" && l.status === "sent"));
+  // 캡처 등록 → AI가 조회수 읽어 저장 → 체크 → 자동 완료 → 남은 알림 취소
+  const PIXEL = Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==", "base64");
+  const routine = (await call(`/api/routines/runs/${run.id}`)).data.routine;
+  const fd = new FormData();
+  fd.append("itemId", routine.checklist[0].id);
+  fd.append("file", new Blob([PIXEL], { type: "image/jpeg" }), "cap.jpg");
+  const up = await (await fetch(`${BASE}/api/routines/runs/${run.id}`, { method: "POST", body: fd })).json();
+  const it = up.run.items.find((x) => x.id === routine.checklist[0].id);
+  assert.ok(it.done && it.img && /개 글 저장/.test(it.note), JSON.stringify(it));
+  assert.equal(up.run.status, "in_progress");
+  assert.equal((await fetch(`${BASE}/api/img/${it.img}.jpg`)).status, 404, "캡처는 공개 주소로 안 보임");
+  assert.equal((await fetch(`${BASE}/api/routines/capture/${it.img}.jpg`)).status, 200);
+  rn = (await call(`/api/routines/runs/${run.id}`, "POST", { action: "item", itemId: routine.checklist[1].id, done: true })).data.run;
+  assert.equal(rn.status, "done", "필수 다 채우면 자동 완료");
+  nl = (await call("/api/routines/policy")).data.log.filter((l) => l.name === "알고키친 인기 글 순위 캡처");
+  assert.ok(!nl.some((l) => l.status === "pending"), "완료 후 대기 알림 취소");
+  // 마감 지남 → 미수집, 알림 안 감
+  const late = (await call("/api/routines", "POST", { name: "늦은 루틴", time: kstTime(-3), deadline: kstTime(-1), completion: "button" })).data;
+  await tick();
+  const lr = (await call("/api/routines")).data.today.find((x) => x.routine_id === late.id);
+  assert.equal(lr.status, "missed");
+  assert.ok(!(await tgSends()).some((l) => l.body.text?.includes("늦은 루틴")), "미수집은 알림 안 보냄");
+  // 매주·매월: 오늘 아닌 요일은 안 만듦
+  const dow = new Date(`${kstDate(0)}T00:00:00Z`).getUTCDay();
+  const wk = (await call("/api/routines", "POST", { name: "주간 루틴", time: "23:00", completion: "button", schedule: { type: "weekly", days: [(dow + 1) % 7] } })).data;
+  assert.ok(!(await call("/api/routines")).data.today.some((x) => x.routine_id === wk.id), "다른 요일");
+  // 화면
+  const pg = (await (await fetch(`${BASE}/routines`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["루틴 관리", "오늘의 루틴", "전체 루틴", "실행 기록", "+ 새 루틴", "알고키친 인기 글 순위 캡처"]) assert.ok(pg.includes(w), w);
+  const rp = (await (await fetch(`${BASE}/routines/run/${run.id}`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(rp.includes("조회수 순위 TOP 10 캡처 등록") && rp.includes("완료 조건"), "실행 화면");
+  const td = (await (await fetch(`${BASE}/todos?tab=today`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(td.includes("오늘의 루틴") && td.includes("알고키친 인기 글 순위 캡처"), "할 일에 당일 루틴");
+  const st = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(st.includes("알림 설정 (텔레그램)") && st.includes("방해 금지"), "설정: 알림 설정");
+  for (const id of [r.data.id, late.id, wk.id]) await call(`/api/routines/${id}`, "DELETE");
+  await call("/api/routines/policy", "PUT", policy0);
 });

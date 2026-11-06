@@ -7,6 +7,7 @@ export const MENU_TOP: MenuItem = { href: "/work", label: "전체 작업 현황"
 export const MENU_GROUPS: MenuGroup[] = [
   { id: "workspace", label: "워크스페이스", items: [
     { href: "/todos", label: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림" },
+    { href: "/routines", label: "루틴 관리", sub: "반복 업무 · 매일 알림 · 실행 기록" },
     { href: "/ideas", label: "아이디어 노트", sub: "메모·할 일·글 기획" },
     { href: "/calendar", label: "캘린더", sub: "시즌·행사별 일정" },
   ] },

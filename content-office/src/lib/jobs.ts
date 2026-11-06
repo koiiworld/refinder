@@ -57,6 +57,10 @@ export function ensureWorker() {
   // 블로그 방문자 수: 시작 30초 뒤 한 번, 이후 1시간마다 (맥이 켜져 있는 동안)
   setTimeout(() => void collectVisits().catch(() => {}), 30_000).unref?.();
   setInterval(() => void collectVisits().catch(() => {}), 10 * 60 * 1000).unref?.();
+  // 🔁 루틴: 오늘 실행 만들기 · 마감 처리 · 알림 발송 · 텔레그램 버튼 (1분마다, 브라우저를 닫아도)
+  const rt = () => void import("./routines").then((m) => m.routineTick()).catch(() => {});
+  setTimeout(rt, 15_000).unref?.();
+  setInterval(rt, 60_000).unref?.();
   // 영상 받기 도구: 켜질 때 한 번, 이후 하루마다 확인(실제 업데이트는 일주일에 한 번)
   const yt = () => void import("./videos").then((v) => v.updateYtdlp()).catch(() => {});
   setTimeout(yt, 60_000).unref?.();
