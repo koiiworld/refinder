@@ -873,3 +873,39 @@ test("🎯 매출 목표: 정하면 달성률·남은 금액 · 다음 달은 �
   assert.match(html, /\d+%<\/b> 달성/, "달성률");
   await call("/api/dashboard/revenue", "PUT", { month, goal: 0 });
 });
+
+test("💾 저장 안전성: 직접 수정 → 다시 열기 → 늦게 도착한 저장은 막힘 → 이전 버전 되돌리기 → 재검수 필요", async () => {
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  const id = posts[0].id;
+  const d0 = (await call(`/api/projects/${id}/document`)).data;
+  await call(`/api/projects/${id}/versions`, "POST", { label: "테스트 기준" });
+  // 창 A 저장
+  const a = await call(`/api/projects/${id}/document`, "PUT", { html: "<p>창 A에서 고친 글</p>", title: d0.title, revision: d0.revision });
+  assert.equal(a.status, 200, JSON.stringify(a.data));
+  // 다시 열면 최신
+  const d1 = (await call(`/api/projects/${id}/document`)).data;
+  assert.equal(d1.content_html, "<p>창 A에서 고친 글</p>");
+  assert.equal(d1.revision, d0.revision + 1);
+  // 창 B(옛 revision)의 늦은 저장은 막힘 → 최신 수정본 유지
+  const b = await call(`/api/projects/${id}/document`, "PUT", { html: "<p>창 B 옛 내용</p>", title: d0.title, revision: d0.revision });
+  assert.equal(b.status, 409);
+  assert.equal((await call(`/api/projects/${id}/document`)).data.content_html, "<p>창 A에서 고친 글</p>", "덮어쓰지 않음");
+  // 버전 목록 → 기준 버전으로 되돌리기
+  const vs = (await call(`/api/projects/${id}/versions`)).data;
+  const base = vs.find((v) => v.label === "테스트 기준");
+  assert.ok(base, JSON.stringify(vs.map((v) => v.label)));
+  const r = await call(`/api/projects/${id}/versions/${base.id}`, "POST");
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const d2 = (await call(`/api/projects/${id}/document`)).data;
+  assert.equal(d2.content_html, d0.content_html, "기준 버전 내용으로");
+  assert.ok(d2.revision > d1.revision);
+  const vs2 = (await call(`/api/projects/${id}/versions`)).data;
+  assert.ok(vs2.some((v) => /되돌리기 전/.test(v.label)), "되돌리기 전 원고도 남김");
+  const p = (await call(`/api/posts/${id}`)).data.project;
+  assert.equal(p.needs_rereview, true, "재검수 필요");
+  const html = (await (await fetch(`${BASE}/posts`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(html.includes("재검수 필요"), "진행 목록에 재검수 필요");
+  // 다른 글 버전으로는 못 되돌림
+  const other = (await call("/api/posts")).data.find((x) => x.id !== id && x.blog_id !== "blog_algokitchen");
+  if (other) assert.equal((await call(`/api/projects/${other.id}/versions/${base.id}`, "POST")).status, 400, "다른 글 버전 차단");
+});

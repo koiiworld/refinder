@@ -1,5 +1,14 @@
-import { createVersion, getDocument, getProject, addEvent } from "@/lib/repo";
+import { createVersion, getDocument, getProject, addEvent, listVersions } from "@/lib/repo";
 import { body, Ctx, fail, handle, ok } from "@/lib/api";
+
+/** 원고 버전 목록 (내용 미리보기는 앞부분만) */
+export async function GET(_req: Request, { params }: Ctx) {
+  return handle(async () => {
+    const { id } = await params;
+    const list = await listVersions(id, "draft");
+    return ok(list.map((v) => ({ id: v.id, number: v.number, title: v.title, label: v.label, source: v.source, provider: v.provider, model: v.model, created_at: v.created_at, chars: v.content.replace(/<[^>]+>/g, "").length, preview: v.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160) })));
+  });
+}
 
 /** 현재 원고(또는 기획안)를 수동으로 버전 저장 */
 export async function POST(req: Request, { params }: Ctx) {

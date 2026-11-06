@@ -192,6 +192,25 @@ export async function saveUserDocument(
   return { ok: true, revision, needsRereview };
 }
 
+/** 이전 버전으로 되돌리기: 지금 원고를 먼저 버전으로 남기고, 그 버전 내용을 원고로 (검수 뒤면 재검수 필요) */
+export async function restoreVersion(projectId: string, versionId: string) {
+  const v = await getVersion(versionId);
+  if (!v || v.project_id !== projectId || v.kind !== "draft") throw new Error("되돌릴 원고 버전을 찾을 수 없습니다.");
+  const doc = await getDocument(projectId);
+  if (doc?.content_html && doc.content_html !== v.content) {
+    await createVersion({ projectId, kind: "draft", title: doc.title, content: doc.content_html, source: "user", label: `v${v.number}로 되돌리기 전` });
+  }
+  if (doc) {
+    await q(`UPDATE documents SET content_html=$2, title=$3, last_editor='user', user_edited_at=NOW(), revision=revision+1, updated_at=NOW() WHERE project_id=$1`, [projectId, v.content, v.title || doc.title]);
+  } else {
+    await q(`INSERT INTO documents (project_id, title, content_html, last_editor, user_edited_at, revision) VALUES ($1,$2,$3,'user',NOW(),1)`, [projectId, v.title, v.content]);
+  }
+  const project = await getProject(projectId);
+  if (project?.review && (project.stage === "ready" || project.stage === "published")) await updateProject(projectId, { needs_rereview: true });
+  await addEvent(projectId, "version", `원고 v${v.number}로 되돌림`);
+  return getDocument(projectId);
+}
+
 export async function recordApproval(projectId: string, stage: string, decision: string, comment = "", versionId: string | null = null) {
   await q(
     "INSERT INTO approvals (id, project_id, stage, decision, comment, version_id) VALUES ($1,$2,$3,$4,$5,$6)",

@@ -137,6 +137,7 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
                 connections={b.connections}
                 onSaved={() => void refresh()}
               />
+              <VersionHistory projectId={p.id} revision={doc?.revision ?? 0} disabled={running} onRestored={() => void refresh()} />
               <Hashtags tags={extras.hashtags} disabled={running} onSave={(hashtags) => act({ action: "hashtags", hashtags }, "해시태그를 저장했습니다.")} />
               {doc?.content_html && <EditRequest busy={running} lastEdit={extras.lastEdit ?? null} onRun={(note) => act({ action: "edit_request", note }, "수정 요청사항을 AI가 반영하고 있습니다.")} />}
               {doc?.content_html && !running && <Rewrite onRun={(feedback) => act({ action: "rerun", step: "write", feedback }, "글을 다시 씁니다.")} />}
@@ -730,5 +731,49 @@ function CarouselButton({ projectId }: { projectId: string }) {
     >
       {busy ? <><span className="spinner" /> 캐러셀 만드는 중…</> : "📱 인스타 캐러셀 만들기"}
     </button>
+  );
+}
+
+/** 🕘 원고 버전 기록 · 되돌리기 */
+function VersionHistory({ projectId, revision, disabled, onRestored }: { projectId: string; revision: number; disabled: boolean; onRestored: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<{ id: string; number: number; title: string; label: string; source: string; model: string | null; created_at: string; chars: number; preview: string }[] | null>(null);
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    api<NonNullable<typeof list>>(`/api/projects/${projectId}/versions`).then(setList).catch(() => setList([]));
+  }, [open, projectId, revision]);
+  async function restore(id: string, n: number) {
+    if (!confirm(`원고를 v${n}로 되돌릴까요?\n지금 원고는 '되돌리기 전' 버전으로 남아요. 검수가 끝난 글이면 '재검수 필요'로 바뀌어요.`)) return;
+    setBusy(id);
+    try {
+      await api(`/api/projects/${projectId}/versions/${id}`, "POST");
+      onRestored();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+    setBusy("");
+  }
+  return (
+    <details className="fold" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className="small" style={{ color: "var(--accent)", cursor: "pointer" }}>🕘 원고 버전 기록 · 되돌리기</summary>
+      {!list ? (
+        <div className="small muted" style={{ marginTop: 6 }}><span className="spinner" /> 불러오는 중…</div>
+      ) : !list.length ? (
+        <div className="small muted" style={{ marginTop: 6 }}>아직 저장된 버전이 없어요.</div>
+      ) : (
+        <div className="stack" style={{ gap: 6, marginTop: 8 }}>
+          {list.map((v) => (
+            <div key={v.id} className="row between card card-pad" style={{ padding: 8, flexWrap: "nowrap", gap: 8 }}>
+              <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+                <span className="small"><b>v{v.number}</b> · {v.label || v.source}{v.model ? ` · ${v.model}` : ""} · {fmtDate(v.created_at)} · {v.chars.toLocaleString("ko-KR")}자</span>
+                <span className="tiny muted ellipsis">{v.preview}</span>
+              </div>
+              <button className="btn btn-sm" disabled={disabled || !!busy} onClick={() => restore(v.id, v.number)}>{busy === v.id ? <span className="spinner" /> : "되돌리기"}</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </details>
   );
 }
