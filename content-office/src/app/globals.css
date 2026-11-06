@@ -309,7 +309,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cost-card > summary::-webkit-details-marker { display: none; }
 .cost-card:not([open]) > summary { border-bottom: 0; }
 .cost-arrow { display: inline-block; transition: transform .15s; color: var(--muted); }
-.cost-card[open] .cost-arrow { transform: rotate(90deg); }
+.cost-card[open] .cost-arrow, .new-post[open] > summary .cost-arrow { transform: rotate(90deg); }
+.new-post > summary { list-style: none; cursor: pointer; }
+.new-post > summary::-webkit-details-marker { display: none; }
 
 /* 진행 현황에서 글을 고르면 아래에 뜨는 막대 */
 .selection-bar { position: sticky; bottom: 16px; z-index: 20; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.12); }

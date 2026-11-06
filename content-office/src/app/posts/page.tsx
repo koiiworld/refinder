@@ -8,13 +8,20 @@ import { placeholderNumbers, readiness } from "@/lib/readiness";
 
 const AI_NAMES: Record<string, string> = { openai: "ChatGPT", anthropic: "Claude", google: "Gemini" };
 import AutoRefresh from "./AutoRefresh";
+import { listBlogs } from "@/lib/repo";
+import { connectionStatus } from "@/lib/ai/providers";
+import { naverAdConnected } from "@/lib/searchad";
+import { naverConnected } from "@/lib/research";
+import { youtubeConnected } from "@/lib/youtube";
+import KeywordStep from "../new/KeywordStep";
 import PostGroups, { type PostRow } from "./PostGroups";
 
 export const dynamic = "force-dynamic";
 
 type Row = PostRow;
 
-export default async function Posts() {
+export default async function Posts({ searchParams }: { searchParams: Promise<{ new?: string; hint?: string; blog?: string }> }) {
+  const sp = await searchParams;
   ensureWorker();
   const raw = await q<Row & { review: Parameters<typeof readiness>[0]["review"]; package: { images?: { url?: string | null; manual?: boolean }[] } | null; html: string | null; plan: { outline?: { approved?: boolean } } | null }>(
     `SELECT p.id, p.title, p.topic, p.stage, p.status, p.status_message, p.updated_at, p.needs_rereview, p.review, p.package, p.plan, d.content_html AS html, b.name AS blog_name, b.color AS blog_color
@@ -36,21 +43,33 @@ export default async function Posts() {
   ];
   const working = groups[3][1].length > 0;
   const usage = await todayUsage();
+  const blogs = await listBlogs();
+  const openNew = !!(sp.new || sp.hint || sp.blog) || !rows.length;
 
   return (
     <div className="page">
       {working && <AutoRefresh seconds={4} />}
       <div className="page-head">
         <div>
-          <h1>진행 현황</h1>
-          <p className="sub">AI가 ③ 제목 후보를 뽑으면 직접 고르고 '글 쓰기'를 누르세요. 그 뒤 ④ 글 → ⑥ 검수는 자동으로 진행되고, 이 화면을 닫아도 계속됩니다.</p>
+          <h1>블로그 업로드</h1>
+          <p className="sub">① 키워드 추천 → ② 고르기로 새 글을 시작하고, 아래에서 ③ 제목 → ④ 글 → ⑥ 검수 → ⑦ 발행까지 진행 상황을 봐요. 화면을 닫아도 AI 작업은 계속됩니다.</p>
         </div>
         <div className="row">
           <Link href="/trash" className="btn">🗑 휴지통</Link>
-          <Link href="/new" className="btn btn-primary">+ 키워드 더 고르기</Link>
         </div>
       </div>
       <div className="stack" style={{ gap: 16 }}>
+        <details id="new" className="new-post" open={openNew}>
+          <summary className="card card-head">
+            <h2 style={{ fontSize: 15 }}><span className="cost-arrow">▸</span> ✏️ 새 글 만들기 <span className="small muted">① 키워드 추천 · ② 선택</span></h2>
+          </summary>
+          <div style={{ marginTop: 12 }}>
+            <KeywordStep
+              blogs={blogs.map((b) => ({ id: b.id, name: b.name, color: b.color, category: b.category }))}
+              sources={{ ai: connectionStatus().some((c) => c.connected && !c.media), naverAd: naverAdConnected(), datalab: naverConnected(), youtube: youtubeConnected() }}
+            />
+          </div>
+        </details>
         <details className="card cost-card">
           <summary className="card-head" style={{ flexWrap: "wrap", cursor: "pointer" }}>
             <h2 style={{ fontSize: 15 }}><span className="cost-arrow">▸</span> 오늘 쓴 AI 비용 <span className="small muted">(한국 시간 0시부터 · 눌러서 자세히)</span></h2>
@@ -104,7 +123,7 @@ export default async function Posts() {
         <PostGroups groups={groups} />
         {!rows.length && (
           <div className="card empty">
-            아직 만든 글이 없습니다. <Link href="/new" style={{ color: "var(--accent)" }}>글 만들기</Link>에서 키워드를 골라 주세요.
+            아직 만든 글이 없습니다. 위 &apos;새 글 만들기&apos;에서 키워드를 골라 주세요.
           </div>
         )}
       </div>

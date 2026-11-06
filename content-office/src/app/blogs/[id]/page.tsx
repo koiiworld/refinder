@@ -31,8 +31,7 @@ export default async function BlogDetail({ params }: { params: Promise<{ id: str
           <h1>{blog.name}</h1>
         </div>
         <div className="row">
-          <Link className="btn btn-sm" href="/posts">진행 현황</Link>
-          <Link className="btn btn-sm btn-primary" href="/new">글 만들기</Link>
+          <Link className="btn btn-sm btn-primary" href={`/posts?new=1&blog=${blog.id}#new`}>✏️ 새 글 · 업로드</Link>
         </div>
       </div>
       <div className="stack" style={{ gap: 16 }}>
