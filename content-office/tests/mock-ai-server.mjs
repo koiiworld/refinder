@@ -83,6 +83,14 @@ http
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       return res.end(`)]}',\n` + JSON.stringify({ result: { totalCount: list.length, postList: list } }));
     }
+    // 네이버 모바일 블로그 글 목록 (글별 공감·댓글)
+    if (url.pathname === "/api/blogs/algo_kitchen/post-list") {
+      return send(res, 200, { isSuccess: true, result: { items: [
+        { logNo: 224000000001, sympathyCnt: 3, commentCnt: 0, readCount: null, titleWithInspectMessage: "굴보쌈 황금레시피" },
+        { logNo: 224000000002, sympathyCnt: 40, commentCnt: 5, readCount: null, titleWithInspectMessage: "깍두기 담그는 법 &amp; 양념 비율" },
+        { logNo: 224000000003, sympathyCnt: 9, commentCnt: 1, readCount: null, titleWithInspectMessage: "김장 준비" },
+      ] } });
+    }
     // 영상공장: 직접 받을 수 있는 영상 파일
     if (url.pathname === "/sample.mp4" && process.env.SAMPLE_MP4) {
       const buf = (await import("node:fs")).readFileSync(process.env.SAMPLE_MP4);
@@ -188,6 +196,7 @@ http
         { issue: "제철 레시피", keyword: "제철 레시피", title: "11월 제철 레시피 모음", why: "뉴스", direction: "목록", hotness: 2, timing: "시즌 미리", sources: ["n3"] },
       ] });
       if (system.includes("블로그 성장 컨설턴트")) return JSON.stringify({ score: 62, summary: "발행은 꾸준하지만 누락 글이 있어요.", good: ["제목 길이 적당"], problems: [{ title: "검색 누락", why: "최근 글 1개가 안 나옴", fix: "비슷한 글 다시 쓰지 말고 새 각도로" }], titleTips: ["깍두기 담그는 법 & 양념 비율 → 깍두기 양념 비율 실패 없는 황금 공식"], next: ["주 3회 발행"] });
+      if (system.includes("블로그 통계 화면")) return JSON.stringify({ period: "최근 7일", items: [{ title: "깍두기 담그는 법", views: "1,204" }, { title: "굴보쌈", views: 3300 }, { title: "", views: 9 }] });
       if (system.includes("광고 수익 화면")) return JSON.stringify({ krw: 12345, usd: null, period: "2026-11-01~2026-11-06", metric: "노출 1,000 · 클릭 20", found: true });
       if (system.includes("크리에이터 어드바이저 화면")) return "1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW";
       return "{}";

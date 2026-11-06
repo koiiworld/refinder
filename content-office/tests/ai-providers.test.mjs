@@ -687,3 +687,48 @@ test("🎬 영상공장: 링크 → 받기 → AI가 화면 자막 위치 찾아
   assert.equal(bv.status, "error");
   assert.match(bv.message, /영상을 받지 못했어요/);
 });
+
+test("📱 캐러셀 목록: 블로그 글별 공감·댓글 표시 · 반응 많은 순", async () => {
+  const html = await (await fetch(`${BASE}/carousels?blog=blog_algokitchen`)).text();
+  assert.ok(html.includes("❤️ <!-- -->40") || html.includes("❤️ 40"), "공감 수 표시");
+  const a = html.indexOf("깍두기 담그는 법"), b = html.indexOf("김장 준비"), c = html.indexOf("굴보쌈 황금레시피");
+  assert.ok(a > 0 && b > 0 && c > 0, "글 목록");
+  assert.ok(a < b && b < c, "공감 40 > 9 > 3 순서");
+});
+
+test("🏆 블로그 인기 글 TOP 10: 반응 순위(공개 숫자) · 통계 캡처 → AI가 조회수 순위 읽어 저장", async () => {
+  let t = (await call("/api/dashboard/top?blogId=blog_algokitchen")).data;
+  assert.equal(t.views, null);
+  assert.deepEqual(t.reaction.map((r) => r.likes), [40, 9, 3], "공감·댓글 많은 순");
+  assert.match(t.reaction[0].url, /^https:\/\/blog\.naver\.com\/algo_kitchen\/224000000002$/);
+  await call("/__reset", "POST", undefined, MOCK);
+  const s = await call("/api/dashboard/top", "POST", { blogId: "blog_algokitchen", images: [PIXEL_URL] });
+  assert.equal(s.status, 200, JSON.stringify(s.data));
+  assert.deepEqual(s.data.items.map((i) => [i.rank, i.title, i.views]), [[1, "굴보쌈", 3300], [2, "깍두기 담그는 법", 1204]], "조회수 순 · 빈 제목 제외");
+  t = (await call("/api/dashboard/top?blogId=blog_algokitchen")).data;
+  assert.equal(t.views.period, "최근 7일");
+  assert.match(await stepPrompt("블로그 통계 화면"), /크리에이터 어드바이저/);
+});
+
+test("💳 AI별 잔액: 충전 기록 − 앱에서 쓴 금액 = 남은 잔액 · 사용률", async () => {
+  let b = (await call("/api/dashboard/balances")).data;
+  const oa = b.find((x) => x.id === "openai");
+  assert.equal(oa.charged, null, "충전 기록 없으면 비움");
+  assert.ok(oa.used > 0 && oa.calls > 0, "앱에서 쓴 금액");
+  assert.equal((await call("/api/dashboard/balances", "POST", { provider: "openai", usd: -1 })).status, 400);
+  b = (await call("/api/dashboard/balances", "POST", { provider: "openai", usd: 10, at: "2020-01-01" })).data;
+  const o2 = b.find((x) => x.id === "openai");
+  assert.equal(o2.charged, 10);
+  assert.ok(Math.abs(o2.remaining - (10 - o2.used)) < 1e-9);
+  assert.ok(o2.rate > 0 && o2.rate < 1);
+  const hf = b.find((x) => x.id === "higgsfield");
+  assert.ok(hf.used > 0, "Higgsfield는 생성 때 받은 예상 금액으로");
+  b = (await call("/api/dashboard/balances", "POST", { provider: "openai", remove: 0 })).data;
+  assert.equal(b.find((x) => x.id === "openai").charged, null);
+});
+
+test("🔑 대시보드 키워드 TOP 5: 블로그 고르기 ▼ · 그 블로그 키워드만 · 아직 안 쓴 것도", async () => {
+  const html = await (await fetch(`${BASE}/`)).text();
+  assert.ok(html.includes('aria-label="블로그 고르기"'), "블로그 고르기");
+  assert.ok(html.includes("김장 양념") || html.includes("절임배추"), "알고키친 키워드");
+});

@@ -113,6 +113,28 @@ export async function dashboardData() {
      ORDER BY (k.volume->>'total')::numeric DESC NULLS LAST LIMIT 5`,
   );
 
+  // ── 블로그별 키워드 TOP 5: 그 블로그 주제로 추천·선택된 키워드 중 월간 검색량 높은 순 (아직 안 쓴 것도 포함)
+  const kwRows = await q<{ blog_id: string; keyword: string; volume: number; project_id: string | null; stage: string | null; deleted: boolean | null }>(
+    `SELECT k.blog_id, k.keyword, (k.volume->>'total')::numeric AS volume, p.id AS project_id, p.stage, (p.deleted_at IS NOT NULL) AS deleted
+       FROM keyword_picks k LEFT JOIN projects p ON p.id = k.project_id
+      WHERE k.volume IS NOT NULL AND (k.volume->>'total') IS NOT NULL
+      ORDER BY (k.volume->>'total')::numeric DESC LIMIT 2000`,
+  );
+  const norm = (s: string) => s.replace(/\s+/g, "");
+  const keywordsByBlog = Object.fromEntries(
+    blogs.map((b) => {
+      const seen = new Map<string, { keyword: string; volume: number; project_id: string | null; stage: string | null }>();
+      for (const r of kwRows.filter((x) => x.blog_id === b.id)) {
+        const k = norm(r.keyword);
+        const row = { keyword: r.keyword, volume: Number(r.volume), project_id: r.deleted ? null : r.project_id, stage: r.deleted ? null : r.stage };
+        const prev = seen.get(k);
+        // 같은 키워드면 글로 이어진 쪽을 우선
+        if (!prev || (!prev.project_id && row.project_id)) seen.set(k, row);
+      }
+      return [b.id, [...seen.values()].sort((a, z) => z.volume - a.volume).slice(0, 5)];
+    }),
+  );
+
   // ── 운영 상태
   const ops = await q1<{ ready: number; failed: number; rereview: number; choosing: number }>(
     `SELECT COUNT(*) FILTER (WHERE stage='ready' AND status <> 'running')::int AS ready,
@@ -204,6 +226,7 @@ export async function dashboardData() {
       };
     }),
     trend: { weeks, series: blogs.map((b) => ({ id: b.id, name: b.name, values: weeks.map((w) => weeksRows.find((x) => x.blog_id === b.id && x.wk === w)?.n ?? 0) })) },
+    keywordsByBlog,
     topKeywords: topKeywords.map((k) => ({ ...k, volume: Number(k.volume), blog: blogs.find((b) => b.id === k.blog_id)?.name ?? "" })),
     ops: { ...(ops ?? { ready: 0, failed: 0, rereview: 0, choosing: 0 }), todayCalls: today.models.reduce((s, m) => s + m.calls, 0), todayUsd: today.total },
     cost: { monthUsd, monthCalls, perPost: completedMonth ? monthUsd / completedMonth : null, todayUsd: today.total, todaySteps: today.steps, days },

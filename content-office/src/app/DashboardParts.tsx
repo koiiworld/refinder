@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { api } from "@/components/client-utils";
+import { useEffect, useRef, useState } from "react";
+import { api, Modal } from "@/components/client-utils";
 import { fmtUsd, KRW_PER_USD } from "@/components/ui";
 import type { MonthRevenue, RevenueChannel } from "@/lib/dashboard";
 
@@ -207,6 +207,22 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
     if (fileRef.current) fileRef.current.value = "";
   }
 
+  // 윈도우 캡처(Win+Shift+S)처럼 클립보드에 있는 이미지: 대시보드 어디서든 Ctrl+V
+  const readRef = useRef(readCapture);
+  readRef.current = readCapture;
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      e.preventDefault();
+      void readRef.current(files);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
   return (
     <section className="card">
       <div className="card-head" style={{ flexWrap: "wrap" }}>
@@ -265,10 +281,9 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
           onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); void readCapture(Array.from(e.dataTransfer.files)); }}
-          onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); void readCapture(fs); } }}
           style={{ borderStyle: "dashed", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--panel-2)" }}
         >
-          {reading ? <span className="small"><span className="spinner" /> AI가 캡처에서 애드포스트 수익을 읽는 중…</span> : <span className="small">📷 <b>애드포스트</b> 수익 화면 캡처를 끌어다 놓거나 <b style={{ color: "var(--accent)" }}>눌러서 선택</b></span>}
+          {reading ? <span className="small"><span className="spinner" /> AI가 캡처에서 애드포스트 수익을 읽는 중…</span> : <span className="small">📷 <b>애드포스트</b> 수익 화면 캡처: <b style={{ color: "var(--accent)" }}>눌러서 파일 선택</b> · 끌어다 놓기 · <b>Ctrl+V</b>(맥은 ⌘V)로 붙여넣기</span>}
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => e.target.files && void readCapture(Array.from(e.target.files))} />
         </div>
         {capNote && <div className="notice notice-ok small">{capNote}</div>}
@@ -290,6 +305,269 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
             </div>
           </div>
         )}
+      </div>
+    </section>
+  );
+}
+
+// ───────── 블로그 이름 누르면: 인기 글 TOP 10 팝업 ─────────
+type TopData = { views: { at: string; period: string; items: { rank: number; title: string; views: number }[]; ai?: string } | null; reaction: { title: string; url: string; likes: number; comments: number; views: number | null }[]; platform: string };
+
+export function BlogTopButton({ blogId, name }: { blogId: string; name: string }) {
+  const [open, setOpen] = useState(false);
+  const [d, setD] = useState<TopData | null>(null);
+  const [tab, setTab] = useState<"views" | "reaction">("views");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const load = async () => {
+    setErr("");
+    try {
+      const x = await api<TopData>(`/api/dashboard/top?blogId=${blogId}`);
+      setD(x);
+      setTab(x.views ? "views" : "reaction");
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  async function read(files: File[]) {
+    const imgs = files.filter((f) => f.type.startsWith("image/")).slice(0, 3);
+    if (!imgs.length) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const images = await Promise.all(imgs.map((x) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(x); })));
+      await api(`/api/dashboard/top`, "POST", { blogId, images });
+      await load();
+      setTab("views");
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setBusy(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+  const readRef = useRef(read);
+  readRef.current = read;
+  useEffect(() => {
+    if (!open) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      void readRef.current(files);
+    };
+    window.addEventListener("paste", onPaste, true);
+    return () => window.removeEventListener("paste", onPaste, true);
+  }, [open]);
+
+  return (
+    <>
+      <button type="button" className="linklike" onClick={() => { setOpen(true); void load(); }} style={{ background: "none", border: 0, padding: 0, font: "inherit", color: "var(--accent)", cursor: "pointer", textAlign: "left" }} title="인기 글 TOP 10 보기">
+        {name} <span className="tiny">🏆</span>
+      </button>
+      {open && (
+        <Modal title={`🏆 ${name} 인기 글 TOP 10`} onClose={() => setOpen(false)}>
+          <div className="stack" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 6 }}>
+              <button className={`btn btn-sm ${tab === "views" ? "btn-primary" : ""}`} onClick={() => setTab("views")}>👁 조회수 순위</button>
+              {d?.platform !== "tistory" && <button className={`btn btn-sm ${tab === "reaction" ? "btn-primary" : ""}`} onClick={() => setTab("reaction")}>❤️ 반응 순위</button>}
+            </div>
+            {!d && !err && <div className="small muted"><span className="spinner" /> 불러오는 중…</div>}
+            {err && <div className="notice notice-bad small">{err}</div>}
+            {d && tab === "views" && (
+              <>
+                {d.views ? (
+                  <>
+                    <div className="tiny muted">{d.views.period || "기간 정보 없음"} · {fmtDateShort(d.views.at)} 캡처 기준{d.views.ai ? ` · ${d.views.ai}` : ""}</div>
+                    <ol className="stack" style={{ gap: 4, margin: 0, paddingLeft: 22 }}>
+                      {d.views.items.map((i) => <li key={i.rank} className="small"><span className="ellipsis" style={{ display: "inline-block", maxWidth: "75%", verticalAlign: "bottom" }}>{i.title}</span> <b style={{ float: "right" }}>{i.views.toLocaleString("ko-KR")}회</b></li>)}
+                    </ol>
+                  </>
+                ) : (
+                  <p className="small muted" style={{ margin: 0 }}>{d.platform === "tistory" ? "티스토리" : "네이버"}는 글별 조회수를 밖에서 볼 수 없게 막아 둬서, 통계 화면 캡처를 올리면 AI가 읽어 순위를 만들어요.</p>
+                )}
+                <div
+                  className="card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fileRef.current?.click()}
+                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); void read(Array.from(e.dataTransfer.files)); }}
+                  style={{ borderStyle: "dashed", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--panel-2)" }}
+                >
+                  {busy ? <span className="small"><span className="spinner" /> AI가 조회수 순위를 읽는 중…</span> : <span className="small">📷 {d.platform === "tistory" ? "티스토리 통계 > 인기글" : <>크리에이터 어드바이저 &gt; 콘텐츠 &gt; 조회수 순위</>} 캡처: <b style={{ color: "var(--accent)" }}>눌러서 파일 선택</b> · 끌어다 놓기 · <b>Ctrl+V</b></span>}
+                  <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => e.target.files && void read(Array.from(e.target.files))} />
+                </div>
+                {d.platform !== "tistory" && <a className="tiny" href="https://creator-advisor.naver.com" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>크리에이터 어드바이저 열기 ↗</a>}
+              </>
+            )}
+            {d && tab === "reaction" && (
+              d.reaction.length ? (
+                <>
+                  <div className="tiny muted">최근 글 중 공감·댓글이 많은 순서 (공개된 숫자)</div>
+                  <ol className="stack" style={{ gap: 4, margin: 0, paddingLeft: 22 }}>
+                    {d.reaction.map((r) => (
+                      <li key={r.url} className="small">
+                        <a href={r.url} target="_blank" rel="noreferrer" className="ellipsis" style={{ display: "inline-block", maxWidth: "68%", verticalAlign: "bottom" }}>{r.title}</a>
+                        <span className="tiny muted" style={{ float: "right" }}>{r.views != null && `👁 ${r.views.toLocaleString("ko-KR")} · `}❤️ {r.likes} · 💬 {r.comments}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              ) : (
+                <p className="small muted" style={{ margin: 0 }}>글 목록을 불러오지 못했어요.</p>
+              )
+            )}
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+const fmtDateShort = (iso: string) => new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// ───────── AI별 잔액: 충전액 · 사용액 · 사용률 · 남은 잔액 ─────────
+type BalanceRow = { id: string; name: string; billing: string; topups: { usd: number; at: string; note?: string }[]; charged: number | null; used: number; calls: number; since: string | null; remaining: number | null; rate: number | null };
+
+export function AiBalances() {
+  const [rows, setRows] = useState<BalanceRow[] | null>(null);
+  const [edit, setEdit] = useState<string | null>(null);
+  const [amt, setAmt] = useState("");
+  const [at, setAt] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    api<BalanceRow[]>("/api/dashboard/balances").then(setRows).catch((e) => setErr((e as Error).message));
+  }, []);
+  async function add(provider: string) {
+    setErr("");
+    try {
+      setRows(await api<BalanceRow[]>("/api/dashboard/balances", "POST", { provider, usd: Number(amt.replace(/[^\d.]/g, "")), at: at || undefined }));
+      setAmt("");
+      setAt("");
+      setEdit(null);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+  async function remove(provider: string, index: number) {
+    if (!confirm("이 충전 기록을 지울까요?")) return;
+    setRows(await api<BalanceRow[]>("/api/dashboard/balances", "POST", { provider, remove: index }));
+  }
+  const bar = (r: number | null) => {
+    const pct = r == null ? 0 : Math.min(100, Math.round(r * 100));
+    const color = pct >= 90 ? "var(--bad, #d33)" : pct >= 70 ? "var(--warn, #e8a000)" : "var(--ok, #1a9e5a)";
+    return (
+      <div className="hbar" style={{ minWidth: 60 }} title={`${pct}% 사용`}>
+        <div style={{ width: `${pct}%`, background: color }} />
+      </div>
+    );
+  };
+  return (
+    <div className="stack" style={{ gap: 8, marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+      <div className="row between">
+        <b className="small">💳 AI별 잔액</b>
+        <span className="tiny muted">충전액은 직접 기록 · 사용액은 이 앱에서 쓴 금액(추정)</span>
+      </div>
+      {!rows && !err && <div className="small muted"><span className="spinner" /> 불러오는 중…</div>}
+      {err && <div className="notice notice-bad small">{err}</div>}
+      {rows && (
+        <div className="table-wrap">
+          <table className="tbl">
+            <thead>
+              <tr><th>AI</th><th style={{ textAlign: "right" }}>충전액</th><th style={{ textAlign: "right" }}>사용액</th><th>사용률</th><th style={{ textAlign: "right" }}>남은 잔액</th><th /></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="small">
+                    <a href={r.billing} target="_blank" rel="noreferrer" title="실제 잔액은 이 사이트에서 확인">{r.name} ↗</a>
+                    <div className="tiny muted">{r.since ? `${new Date(r.since).toLocaleDateString("ko-KR")}부터 · ${r.calls}회` : `기록된 사용 ${r.calls}회`}</div>
+                  </td>
+                  <td style={{ textAlign: "right" }} className="small">{r.charged == null ? <span className="muted">-</span> : fmtUsd(r.charged)}</td>
+                  <td style={{ textAlign: "right" }} className="small">{fmtUsd(r.used)}</td>
+                  <td className="small" style={{ minWidth: 110 }}>
+                    {r.rate == null ? <span className="tiny muted">충전액을 넣으면 계산</span> : <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>{bar(r.rate)}<span className="tiny">{Math.round(r.rate * 100)}%</span></div>}
+                  </td>
+                  <td style={{ textAlign: "right" }} className="small"><b style={{ color: r.remaining != null && r.charged ? (r.remaining / r.charged < 0.1 ? "var(--bad, #d33)" : undefined) : undefined }}>{r.remaining == null ? "-" : fmtUsd(r.remaining)}</b></td>
+                  <td><button className="btn btn-sm btn-ghost" onClick={() => setEdit(edit === r.id ? null : r.id)}>{edit === r.id ? "닫기" : "＋ 충전"}</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rows && edit && (() => {
+        const r = rows.find((x) => x.id === edit)!;
+        return (
+          <div className="card card-pad stack" style={{ gap: 6, padding: 10 }}>
+            <b className="small">{r.name} 충전 기록</b>
+            {r.topups.map((t, i) => (
+              <div key={i} className="row between small" style={{ flexWrap: "nowrap" }}>
+                <span>{new Date(t.at).toLocaleDateString("ko-KR")} · {fmtUsd(t.usd)}{t.note ? ` · ${t.note}` : ""}</span>
+                <button className="btn btn-sm btn-ghost" onClick={() => remove(r.id, i)}>지우기</button>
+              </div>
+            ))}
+            <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+              <input className="input" inputMode="decimal" placeholder="충전 금액 (달러, 예: 10)" value={amt} onChange={(e) => setAmt(e.target.value)} aria-label="충전 금액" />
+              <input className="input" type="date" value={at} onChange={(e) => setAt(e.target.value)} aria-label="충전한 날" style={{ maxWidth: 160 }} />
+              <button className="btn btn-sm btn-primary" disabled={!amt.trim()} onClick={() => add(r.id)}>추가</button>
+            </div>
+            <span className="tiny muted">충전한 날부터 이 앱에서 쓴 금액을 빼서 남은 잔액을 보여줘요. 날짜를 비우면 오늘로 기록돼요. 각 사 웹사이트에서 직접 쓴 금액은 빠지니, 가끔 ↗ 링크로 실제 잔액과 맞춰 보세요.</span>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ───────── 검색량 높은 키워드 TOP 5 (블로그 고르기 ▼) ─────────
+const STAGE_LABEL: Record<string, string> = { titles: "제목 고르는 중", writing: "글 쓰는 중", reviewing: "검수 중", ready: "발행 대기", published: "발행 완료" };
+
+export function TopKeywordsCard({ blogs, byBlog }: { blogs: { id: string; name: string }[]; byBlog: Record<string, { keyword: string; volume: number; project_id: string | null; stage: string | null }[]> }) {
+  const [blogId, setBlogId] = useState(blogs.find((b) => byBlog[b.id]?.length)?.id ?? blogs[0]?.id ?? "");
+  const rows = byBlog[blogId] ?? [];
+  const name = blogs.find((b) => b.id === blogId)?.name ?? "";
+  return (
+    <section className="card">
+      <div className="card-head" style={{ flexWrap: "wrap" }}>
+        <h2 style={{ fontSize: 15 }}>검색량 높은 키워드 TOP 5</h2>
+        <span className="tiny muted">그 블로그 주제로 추천·선택한 키워드 · 네이버 월간 검색수 순</span>
+      </div>
+      <div className="table-wrap">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>키워드</th>
+              <th>
+                <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                  <select value={blogId} onChange={(e) => setBlogId(e.target.value)} aria-label="블로그 고르기" style={{ font: "inherit", fontWeight: 600, border: "1px solid var(--line)", borderRadius: 8, padding: "2px 22px 2px 8px", background: "var(--panel)", color: "inherit", cursor: "pointer", appearance: "none" }}>
+                    {blogs.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                  <span aria-hidden style={{ position: "absolute", right: 7, pointerEvents: "none", fontSize: 10 }}>▼</span>
+                </label>
+              </th>
+              <th style={{ textAlign: "right" }}>월간 검색량</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((k, i) => (
+              <tr key={k.keyword}>
+                <td>{i + 1}</td>
+                <td>{k.project_id ? <a href={`/posts/${k.project_id}`} style={{ color: "var(--accent)" }}>{k.keyword}</a> : k.keyword}</td>
+                <td>{name}</td>
+                <td style={{ textAlign: "right" }}>{k.volume.toLocaleString("ko-KR")}</td>
+                <td>{k.stage ? STAGE_LABEL[k.stage] ?? k.stage : <a href={`/new?hint=${encodeURIComponent(k.keyword)}`} style={{ color: "var(--accent)" }}>✍️ 아직 안 씀 · 쓰기</a>}</td>
+              </tr>
+            ))}
+            {!rows.length && <tr><td colSpan={5} className="small muted">이 블로그는 아직 검색량을 잰 키워드가 없어요. 글 만들기에서 키워드 추천을 받아 보세요.</td></tr>}
+          </tbody>
+        </table>
       </div>
     </section>
   );

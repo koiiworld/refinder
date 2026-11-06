@@ -356,3 +356,5 @@ CREATE TABLE IF NOT EXISTS video_blobs (
   data        BYTEA NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Higgsfield 생성 1건 예상 비용 (잔액 계산용)
+ALTER TABLE media_jobs ADD COLUMN IF NOT EXISTS cost_usd NUMERIC;

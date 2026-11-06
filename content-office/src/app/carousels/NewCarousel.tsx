@@ -1,15 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/components/client-utils";
+import { fmtDate } from "@/components/ui";
+
+type Made = { id: string; title: string; blog_id: string | null; slides: number; updated_at: string; fromPost: boolean };
+const score = (p: { likes: number | null; comments: number | null; views: number | null }) => (p.views ?? 0) * 1000 + (p.likes ?? 0) + (p.comments ?? 0) * 3;
 
 type Idea = { topic: string; format: string; hook: string; why: string };
 
-export default function NewCarousel({ posts, published, blogs, formats, defaultFrom }: { posts: { id: string; title: string; blog_id: string; blog_name: string }[]; published: { title: string; url: string; blogId: string; blog_name: string }[]; blogs: { id: string; name: string; category: string }[]; formats: { id: string; label: string }[]; defaultFrom?: string }) {
+export default function NewCarousel({ posts, published, blogs, made, formats, defaultFrom, defaultBlog }: { posts: { id: string; title: string; blog_id: string; blog_name: string }[]; published: { title: string; url: string; blogId: string; blog_name: string; likes: number | null; comments: number | null; views: number | null }[]; made: Made[]; blogs: { id: string; name: string; category: string }[]; formats: { id: string; label: string }[]; defaultFrom?: string; defaultBlog?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"post" | "topic">(defaultFrom === "topic" ? "topic" : "post");
-  const [pickBlog, setPickBlog] = useState(blogs[0]?.id ?? "");
+  const [pickBlog, setPickBlog] = useState(blogs.some((b) => b.id === defaultBlog) ? defaultBlog! : blogs[0]?.id ?? "");
   const [creating, setCreating] = useState("");
   const [postUrl, setPostUrl] = useState("");
 
@@ -48,7 +53,9 @@ export default function NewCarousel({ posts, published, blogs, formats, defaultF
 
   const fmtLabel = (id: string) => formats.find((f) => f.id === id)?.label ?? id;
 
+  const shown = made.filter((c) => (mode === "post" ? c.fromPost && c.blog_id === pickBlog : !c.fromPost));
   return (
+    <>
     <section className="card card-pad stack" style={{ gap: 12 }}>
       <div className="row" style={{ gap: 8 }}>
         <button className={`btn btn-sm ${mode === "post" ? "btn-primary" : ""}`} onClick={() => setMode("post")}>📝 블로그 글에서 만들기</button>
@@ -68,19 +75,22 @@ export default function NewCarousel({ posts, published, blogs, formats, defaultF
             })}
           </nav>
           {(() => {
-            const pub = published.filter((p) => p.blogId === pickBlog);
+            const pub = published.filter((p) => p.blogId === pickBlog).sort((a, b) => score(b) - score(a));
             const mine = posts.filter((p) => p.blog_id === pickBlog && !pub.some((x) => x.title.trim() === p.title.trim()));
-            const row = (key: string, title: string, payload: Record<string, unknown>, tag: string) => (
+            const row = (key: string, title: string, payload: Record<string, unknown>, tag: string, st?: { likes: number | null; comments: number | null; views: number | null }) => (
               <div key={key} className="row" style={{ flexWrap: "nowrap", gap: 8, padding: "8px 10px", borderBottom: "1px solid var(--line)" }}>
                 <span className="tiny muted" style={{ flexShrink: 0, width: 54 }}>{tag}</span>
                 <span className="small ellipsis" style={{ flex: 1 }} title={title}>{title}</span>
+                <span className="tiny muted" style={{ flexShrink: 0, width: 128, textAlign: "right" }} title="조회수는 네이버가 공개한 경우에만 보여요">
+                  {st && st.likes != null ? <>{st.views != null && <>👁 {st.views.toLocaleString("ko-KR")} · </>}❤️ {st.likes.toLocaleString("ko-KR")} · 💬 {(st.comments ?? 0).toLocaleString("ko-KR")}</> : ""}
+                </span>
                 <button className="btn btn-sm btn-primary" disabled={!!busy} onClick={() => create(payload)}>{busy === "create" && creating === key ? <span className="spinner" /> : "만들기"}</button>
               </div>
             );
             if (!pub.length && !mine.length) return <p className="small muted" style={{ margin: 0 }}>이 블로그에는 아직 고를 글이 없어요. 아래에 글 주소를 넣거나 &apos;주제로 따로 만들기&apos;를 써 보세요.</p>;
             return (
               <div className="card" style={{ maxHeight: 360, overflowY: "auto" }}>
-                {pub.map((p) => row(`u:${p.url}`, p.title, { url: p.url, blogId: p.blogId }, "📷 발행"))}
+                {pub.map((p) => row(`u:${p.url}`, p.title, { url: p.url, blogId: p.blogId }, "📷 발행", p))}
                 {mine.map((p) => row(`p:${p.id}`, p.title, { projectId: p.id }, "✍️ 앱 글"))}
               </div>
             );
@@ -89,7 +99,7 @@ export default function NewCarousel({ posts, published, blogs, formats, defaultF
             <input className="input" value={postUrl} onChange={(e) => setPostUrl(e.target.value)} placeholder="또는 블로그 글 주소 붙여넣기 (네이버·티스토리)" aria-label="블로그 글 주소" />
             <button className="btn" disabled={!!busy || !/^https?:\/\//.test(postUrl.trim())} onClick={() => create({ url: postUrl.trim(), blogId: pickBlog || null })}>주소로 만들기</button>
           </div>
-          <p className="tiny muted" style={{ margin: 0 }}>📷 발행 = 블로그에 올린 글 (올린 사진 그대로 사용) · ✍️ 앱 글 = 앱에서 쓰고 아직 안 올린 글</p>
+          <p className="tiny muted" style={{ margin: 0 }}>📷 발행 = 블로그에 올린 글 (올린 사진 그대로 사용) · ✍️ 앱 글 = 앱에서 쓰고 아직 안 올린 글 · 반응(조회수·공감·댓글) 많은 순 · 네이버는 글별 조회수를 공개하지 않아 공감·댓글로 정렬해요 · 캐러셀을 만든 글은 아래 &apos;만든 캐러셀&apos;로 옮겨져요</p>
         </div>
       ) : (
         <div className="stack" style={{ gap: 10 }}>
@@ -128,5 +138,17 @@ export default function NewCarousel({ posts, published, blogs, formats, defaultF
       )}
       {err && <div className="notice notice-bad small">{err}</div>}
     </section>
+    <section className="card">
+      <div className="card-head"><h2 style={{ fontSize: 15 }}>만든 캐러셀 · {mode === "post" ? blogs.find((b) => b.id === pickBlog)?.name ?? "" : "주제로 만든 것"} ({shown.length})</h2></div>
+      <div className="card-pad stack" style={{ gap: 6 }}>
+        {shown.map((c) => (
+          <Link key={c.id} href={`/carousels/${c.id}`} className="row between card card-pad" style={{ padding: 10, flexWrap: "nowrap" }}>
+            <span className="small ellipsis" style={{ flex: 1 }}><b>{c.title}</b> <span className="tiny muted">· {c.slides}장</span></span>
+            <span className="tiny muted">{fmtDate(c.updated_at)}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+    </>
   );
 }

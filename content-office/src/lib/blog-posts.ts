@@ -81,3 +81,49 @@ export async function writtenTitles(blog: Pick<Blog, "id" | "url">, excludeProje
   ]);
   return Array.from(new Set([...rss.map((p) => p.title), ...mine.map((m) => m.title)].map((t) => t.trim()).filter(Boolean))).slice(0, 80);
 }
+
+export type PostStat = { likes: number; comments: number; views: number | null; title?: string; url?: string; date?: string | null };
+const gs = globalThis as unknown as { __postStats?: Map<string, { at: number; stats: Record<string, PostStat> }> };
+const statCache = (gs.__postStats ??= new Map());
+
+/** 네이버 블로그 글별 공감·댓글(공개 숫자)과, 공개된 경우 조회수. 키: 글 번호(logNo). 30분 캐시 */
+export async function naverPostStats(blogUrl: string): Promise<Record<string, PostStat>> {
+  let id: string | undefined;
+  try {
+    const u = new URL(blogUrl);
+    if (!/(^|\.)blog\.naver\.com$/i.test(u.hostname)) return {};
+    id = u.pathname.split("/").filter(Boolean)[0] ?? u.searchParams.get("blogId") ?? undefined;
+  } catch {
+    return {};
+  }
+  if (!id) return {};
+  const hit = statCache.get(id);
+  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.stats;
+  const base = (process.env.NAVER_MBLOG_BASE_URL?.trim() || "https://m.blog.naver.com").replace(/\/$/, "");
+  const stats: Record<string, PostStat> = {};
+  try {
+    for (let page = 1; page <= 3; page++) {
+      const res = await fetch(`${base}/api/blogs/${encodeURIComponent(id)}/post-list?categoryNo=0&itemCount=30&page=${page}`, {
+        headers: { "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", referer: `https://m.blog.naver.com/${id}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) break;
+      const data = (await res.json().catch(() => ({}))) as { result?: { items?: { logNo?: number | string; sympathyCnt?: number; commentCnt?: number; readCount?: number | null; titleWithInspectMessage?: string; addDate?: number }[] } };
+      const items = data.result?.items ?? [];
+      for (const it of items)
+        stats[String(it.logNo)] = {
+          likes: Number(it.sympathyCnt ?? 0) || 0,
+          comments: Number(it.commentCnt ?? 0) || 0,
+          views: it.readCount == null ? null : Number(it.readCount),
+          title: decodeOnce(String(it.titleWithInspectMessage ?? "")).trim(),
+          url: `https://blog.naver.com/${id}/${it.logNo}`,
+          date: it.addDate ? new Date(Number(it.addDate)).toISOString() : null,
+        };
+      if (items.length < 30) break;
+    }
+  } catch {
+    /* 숫자 없이 진행 */
+  }
+  statCache.set(id, { at: Date.now(), stats });
+  return stats;
+}

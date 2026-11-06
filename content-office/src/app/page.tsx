@@ -2,7 +2,7 @@ import Link from "next/link";
 import { dashboardData, PASS_SCORE } from "@/lib/dashboard";
 import { ensureWorker } from "@/lib/jobs";
 import { fmtDate, fmtUsd, KRW_PER_USD } from "@/components/ui";
-import { CostDays, RevenueCard, TrendChart } from "./DashboardParts";
+import { AiBalances, BlogTopButton, CostDays, RevenueCard, TopKeywordsCard, TrendChart } from "./DashboardParts";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +95,7 @@ export default async function Dashboard() {
                 )}
               </div>
             </details>
+            <AiBalances />
           </div>
         </section>
 
@@ -125,7 +126,7 @@ export default async function Dashboard() {
                   <tbody>
                     {d.visits.blogs.map((b) => (
                       <tr key={b.id}>
-                        <td>{b.name}{!b.hasUrl && <div className="tiny muted">블로그 주소를 넣으면 집계</div>}</td>
+                        <td><BlogTopButton blogId={b.id} name={b.name} />{!b.hasUrl && <div className="tiny muted">블로그 주소를 넣으면 집계</div>}</td>
                         <td style={{ textAlign: "right" }}>{num(b.today)}</td>
                         <td style={{ textAlign: "right" }}>{num(b.week)}</td>
                         <td style={{ textAlign: "right" }}>{num(b.month)}</td>
@@ -136,7 +137,7 @@ export default async function Dashboard() {
                 </table>
               </div>
               <p className="tiny muted" style={{ margin: 0 }}>
-                네이버 블로그 정보와 티스토리 방문자 카운터의 공개 숫자입니다. 서버가 1시간마다 기록해서, 기록을 시작한 날({d.visits.blogs.map((b) => b.since).filter(Boolean).sort()[0] ?? "오늘"})부터 쌓입니다. 글별 조회수는 공개되지 않아 표시하지 않습니다.
+                네이버 블로그 정보와 티스토리 방문자 카운터의 공개 숫자입니다. 서버가 1시간마다 기록해서, 기록을 시작한 날({d.visits.blogs.map((b) => b.since).filter(Boolean).sort()[0] ?? "오늘"})부터 쌓입니다. 블로그 이름을 누르면 인기 글 TOP 10을 볼 수 있어요.
               </p>
             </div>
           </section>
@@ -169,34 +170,8 @@ export default async function Dashboard() {
           </div>
         </section>
 
-        {/* 키워드 TOP 5 */}
-        <section className="card">
-          <div className="card-head" style={{ flexWrap: "wrap" }}>
-            <h2 style={{ fontSize: 15 }}>검색량 높은 키워드 TOP 5</h2>
-            <span className="tiny muted">완성한 글의 키워드 · 네이버 월간 검색수 순</span>
-          </div>
-          {d.topKeywords.length ? (
-            <div className="table-wrap">
-              <table className="tbl">
-                <thead><tr><th>#</th><th>키워드</th><th>블로그</th><th style={{ textAlign: "right" }}>월간 검색량</th><th>상태</th></tr></thead>
-                <tbody>
-                  {d.topKeywords.map((k, i) => (
-                    <tr key={k.project_id + k.keyword}>
-                      <td>{i + 1}</td>
-                      <td><Link href={`/posts/${k.project_id}`} style={{ color: "var(--accent)" }}>{k.keyword}</Link></td>
-                      <td>{k.blog}</td>
-                      <td style={{ textAlign: "right" }}>{k.volume.toLocaleString("ko-KR")}</td>
-                      <td>{k.stage === "published" ? "발행 완료" : "발행 대기"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="card-pad small muted">아직 검색량이 기록된 완성 글이 없습니다.</p>
-          )}
-          <p className="card-pad tiny muted" style={{ paddingTop: 0 }}>발행 후 조회수·유입은 네이버·티스토리 통계 연동 전이라 표시하지 않습니다.</p>
-        </section>
+        {/* 키워드 TOP 5 (블로그 고르기) */}
+        <TopKeywordsCard blogs={d.blogs.map((b) => ({ id: b.id, name: b.name }))} byBlog={d.keywordsByBlog} />
 
         {/* 운영 상태 */}
         <div className="row" style={{ gap: 8 }}>

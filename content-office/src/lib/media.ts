@@ -63,11 +63,13 @@ export async function createMediaJob(input: { model: string; promptId?: string |
   const body = buildBody(model, input);
   const id = newId("mj_");
   // 같은 작업을 두 번 청구하지 않도록 작업 ID를 Idempotency-Key 로 사용
+  // 잔액 계산용 예상 비용 (실패해도 생성은 진행)
+  const est = await hfEstimate(def.path, body).catch(() => ({ usd: null as number | null }));
   const r = await hfSubmit(def.path, body, id);
   await q(
-    `INSERT INTO media_jobs (id, prompt_id, project_id, provider, model, media, request_id, status, status_url, cancel_url, input)
-     VALUES ($1,NULL,$2,'higgsfield',$3,$4,$5,$6,$7,$8,$9)`,
-    [id, input.projectId || null, model, def.media, r.request_id, r.status, r.status_url, r.cancel_url, j(body)],
+    `INSERT INTO media_jobs (id, prompt_id, project_id, provider, model, media, request_id, status, status_url, cancel_url, input, cost_usd)
+     VALUES ($1,NULL,$2,'higgsfield',$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [id, input.projectId || null, model, def.media, r.request_id, r.status, r.status_url, r.cancel_url, j(body), est.usd],
   );
   return (await getMediaJob(id))!;
 }
