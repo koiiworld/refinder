@@ -733,3 +733,45 @@ export function HealthButton({ items, features }: { items: HealthItem[]; feature
     </>
   );
 }
+
+type TodayTodo = { id: string; title: string; due_date: string; due_time: string | null; icon: string; label: string };
+/** 🚨오늘할일🚨 버튼 · 누르면 오늘(밀린 것 포함) 할 일만 팝업으로 · 체크하면 완료 */
+export function TodayTodosButton({ items, today }: { items: TodayTodo[]; today: string }) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState(items);
+  const [done, setDone] = useState<Record<string, boolean>>({});
+  const left = list.filter((t) => !done[t.id]).length;
+  async function toggle(t: TodayTodo) {
+    const v = !done[t.id];
+    setDone({ ...done, [t.id]: v });
+    try {
+      await api(`/api/todos/${t.id}`, "PUT", { done: v });
+    } catch (e) {
+      setDone({ ...done, [t.id]: !v });
+      alert((e as Error).message);
+    }
+  }
+  return (
+    <>
+      <button type="button" className="btn btn-danger todo-today-btn" onClick={() => { setList(list.filter((t) => !done[t.id])); setDone({}); setOpen(true); }} aria-label={`오늘 할 일 ${left}개`}>
+        🚨오늘할일🚨{left > 0 && <span className="badge" style={{ marginLeft: 6, background: "rgba(255,255,255,.25)", color: "inherit" }}>{left > 99 ? "99+" : left}</span>}
+      </button>
+      {open && (
+        <Modal title={`🚨 오늘 할 일 ${left}개`} onClose={() => setOpen(false)}>
+          <div className="stack" style={{ gap: 0 }}>
+            {!list.length && <p className="small muted">오늘 할 일이 없어요.</p>}
+            {list.map((t) => (
+              <label key={t.id} className="row" style={{ gap: 10, flexWrap: "nowrap", padding: "9px 0", borderBottom: "1px solid var(--line)", cursor: "pointer" }}>
+                <input type="checkbox" className="todo-check" checked={!!done[t.id]} onChange={() => toggle(t)} aria-label={`${t.title} 완료`} />
+                <span className="small" style={{ flex: 1, fontWeight: 600, textDecoration: done[t.id] ? "line-through" : undefined, color: done[t.id] ? "var(--muted)" : undefined }}>{t.icon} {t.title}</span>
+                <span className="tiny" style={{ whiteSpace: "nowrap", color: t.due_date < today ? "var(--bad)" : "var(--muted)" }}>
+                  {t.due_date < today ? `${Number(t.due_date.slice(5, 7))}/${Number(t.due_date.slice(8))} 밀림` : t.due_time ?? ""}
+                </span>
+              </label>
+            ))}
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}

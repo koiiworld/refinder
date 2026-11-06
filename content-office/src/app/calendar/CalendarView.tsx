@@ -7,6 +7,23 @@ import { api, Modal } from "@/components/client-utils";
 import type { CalCat, CalEvent } from "@/lib/calendar";
 
 const COLOR: Record<CalCat, string> = { season: "var(--series-1)", official: "var(--series-2)", irregular: "var(--bad)", publish: "var(--ok)", todo: "#8b5cf6" };
+/** 연간 시즌 행사는 행사마다 다른 색 (같은 행사는 어느 달에서나 같은 색) */
+const EVENT_PALETTE = ["#2563eb", "#0891b2", "#db2777", "#a16207", "#4f46e5", "#0d9488", "#9d174d", "#475569", "#0369a1", "#b45309"];
+function evColor(e: CalEvent) {
+  if (e.cat !== "season") return COLOR[e.cat];
+  let h = 0;
+  for (const ch of e.title) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return EVENT_PALETTE[h % EVENT_PALETTE.length];
+}
+/** 명절은 기간 내내 글자로 표시 */
+const isHoliday = (e: CalEvent) => /설날|설 연휴|추석|연휴|명절/.test(e.title);
+/** 이 날 칸에 글자로 쓸지(시작·끝·하루짜리), 점만 찍을지 */
+function markOf(e: CalEvent, d: string): { text: string } | null {
+  if (e.start === e.end || isHoliday(e)) return { text: e.title };
+  if (d === e.start) return { text: `${e.title} 시작` };
+  if (d === e.end) return { text: `${e.title} 끝` };
+  return null;
+}
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
 
@@ -76,7 +93,7 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
       <div className="row" style={{ gap: 6 }}>
         {(Object.keys(labels) as CalCat[]).map((c) => (
           <button key={c} className={`btn btn-sm ${show[c] ? "" : "btn-ghost"}`} style={{ opacity: show[c] ? 1 : 0.5 }} onClick={() => setShow({ ...show, [c]: !show[c] })} aria-pressed={show[c]}>
-            <span className="dot" style={{ background: COLOR[c] }} /> {labels[c]}
+            <span className="dot" style={{ background: c === "season" ? `conic-gradient(${EVENT_PALETTE.slice(0, 4).join(",")})` : COLOR[c] }} /> {labels[c]}
           </button>
         ))}
       </div>
@@ -107,10 +124,22 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
           d ? (
             <button key={d} className={`cal-cell ${d === today ? "today" : ""} ${d === day ? "sel" : ""}`} onClick={() => setDay(d === day ? null : d)} aria-label={`${md(d)} 일정 ${on(d).length}개`}>
               <span className="cal-num" style={{ color: i % 7 === 0 || on(d).some((e) => e.cat === "official" && /공휴|날|절|설날|추석|크리스마스/.test(e.title)) ? "var(--bad)" : undefined }}>{Number(d.slice(8))}</span>
-              <span className="cal-marks">
-                {on(d).slice(0, 3).map((e) => <span key={e.id} className="cal-mark" style={{ background: COLOR[e.cat], opacity: e.done ? 0.45 : 1, textDecoration: e.done ? "line-through" : undefined }}>{e.title}</span>)}
-                {on(d).length > 3 && <span className="tiny muted">+{on(d).length - 3}</span>}
-              </span>
+              {(() => {
+                const evs = on(d);
+                const named = evs.filter((e) => markOf(e, d));
+                const dots = evs.filter((e) => !markOf(e, d));
+                return (
+                  <span className="cal-marks">
+                    {!!dots.length && (
+                      <span className="cal-dots">
+                        {dots.map((e) => <span key={e.id} className="cal-dot" style={{ background: evColor(e) }} title={e.title} />)}
+                      </span>
+                    )}
+                    {named.slice(0, 3).map((e) => <span key={e.id} className="cal-mark" style={{ background: evColor(e), opacity: e.done ? 0.45 : 1, textDecoration: e.done ? "line-through" : undefined }}>{markOf(e, d)!.text}</span>)}
+                    {named.length > 3 && <span className="tiny muted">+{named.length - 3}</span>}
+                  </span>
+                );
+              })()}
             </button>
           ) : (
             <div key={i} className="cal-cell empty" />
@@ -127,7 +156,7 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
           {!list.length && <div className="list-item small muted">일정이 없어요.</div>}
           {list.map((e) => (
             <button key={e.id} className="list-item" style={{ width: "100%", textAlign: "left", background: "none", border: 0, borderBottom: "1px solid var(--line)", cursor: "pointer", gap: 10, flexWrap: "nowrap" }} onClick={() => setOpen(e)}>
-              <span className="dot" style={{ background: COLOR[e.cat], flexShrink: 0 }} />
+              <span className="dot" style={{ background: evColor(e), flexShrink: 0 }} />
               <span className="small" style={{ flexShrink: 0, width: 78 }}>{md(e.start)}{e.end !== e.start ? `~${md(e.end)}` : ""}</span>
               <span className="small ellipsis" style={{ flex: 1 }}><b>{e.title}</b> <span className="tiny muted">· {labels[e.cat]}{e.sub ? ` · ${e.sub}` : ""}</span></span>
             </button>
@@ -138,7 +167,7 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
       {open && (
         <Modal title={open.title} onClose={() => { setOpen(null); setBusy(""); }}>
           <div className="stack" style={{ gap: 10 }}>
-            <div className="small"><span className="dot" style={{ background: COLOR[open.cat] }} /> {labels[open.cat]}{open.sub ? ` · ${open.sub}` : ""}</div>
+            <div className="small"><span className="dot" style={{ background: evColor(open) }} /> {labels[open.cat]}{open.sub ? ` · ${open.sub}` : ""}</div>
             <div className="small"><b>날짜</b> · {open.start}{open.end !== open.start ? ` ~ ${open.end}` : ""}</div>
             {open.note && <div className="tiny muted">{open.note}</div>}
             {open.link && <a className="small" href={open.link} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>🔗 참고 링크 열기</a>}

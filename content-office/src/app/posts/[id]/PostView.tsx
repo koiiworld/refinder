@@ -702,8 +702,8 @@ function Publish(props: { ready: Readiness; publishDate: string; title: string; 
       {!props.published && (
         <label className="small row" style={{ gap: 6, flexWrap: "nowrap" }}>
           📅 발행 예정일
-          <input className="input" type="date" style={{ maxWidth: 170 }} value={pd} onChange={(e) => setPd(e.target.value)} onBlur={() => pd !== props.publishDate && void props.act({ action: "publish_date", date: pd }, pd ? "발행 예정일을 저장했어요. 마케팅 달력에 표시돼요." : "발행 예정일을 지웠어요.")} aria-label="발행 예정일" />
-          <span className="tiny muted">마케팅 달력에 표시돼요</span>
+          <input className="input" type="date" style={{ maxWidth: 170 }} value={pd} onChange={(e) => setPd(e.target.value)} onBlur={() => pd !== props.publishDate && void props.act({ action: "publish_date", date: pd }, pd ? "발행 예정일을 저장했어요. 캘린더에 표시돼요." : "발행 예정일을 지웠어요.")} aria-label="발행 예정일" />
+          <span className="tiny muted">캘린더에 표시돼요</span>
         </label>
       )}
       <div className="row">

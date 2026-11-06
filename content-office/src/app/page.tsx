@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { dashboardData, PASS_SCORE } from "@/lib/dashboard";
-import { todayCount } from "@/lib/todos";
+import { categoryOf, kstToday, listTodos, TODO_CATEGORIES } from "@/lib/todos";
 import { ensureWorker } from "@/lib/jobs";
 import { FEATURES } from "@/lib/health";
 import { fmtDate, fmtUsd, KRW_PER_USD } from "@/components/ui";
-import { AiBalances, BlogTopButton, CostDays, HealthButton, RevenueCard, TopKeywordsCard, TrendChart } from "./DashboardParts";
+import { AiBalances, BlogTopButton, CostDays, HealthButton, RevenueCard, TodayTodosButton, TopKeywordsCard, TrendChart } from "./DashboardParts";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,11 @@ const pct = (v: number | null) => (v == null ? "-" : `${Math.round(v * 100)}%`);
 const num = (v: number | null) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
 
 export default async function Dashboard() {
-  const todoN = await todayCount().catch(() => 0);
+  const todayStr = kstToday();
+  const todos = (await listTodos("today").catch(() => [])).map((t) => {
+    const c = TODO_CATEGORIES.find((x) => x.id === categoryOf(t))!;
+    return { id: t.id, title: t.title, due_date: t.due_date, due_time: t.due_time ?? null, icon: c.icon, label: c.label };
+  });
   ensureWorker();
   const d = await dashboardData();
   const [y, m] = d.month.split("-").map(Number);
@@ -29,7 +33,7 @@ export default async function Dashboard() {
           </p>
         </div>
         <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
-          <Link href="/todos?tab=today" className="btn btn-danger todo-today-btn" aria-label={`오늘 할 일 ${todoN}개`}>🚨오늘할일🚨{todoN > 0 && <span className="badge" style={{ marginLeft: 6, background: "rgba(255,255,255,.25)", color: "inherit" }}>{todoN > 99 ? "99+" : todoN}</span>}</Link>
+          <TodayTodosButton items={todos} today={todayStr} />
           <HealthButton items={d.health} features={Object.entries(FEATURES).map(([id, f]) => ({ id, label: f.label, fix: f.fix, hint: f.hint }))} />
         </div>
       </div>

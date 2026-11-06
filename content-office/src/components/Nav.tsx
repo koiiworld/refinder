@@ -30,10 +30,9 @@ function Icon({ d }: { d: string }) {
 }
 
 const ITEMS = [
-  { href: "/", label: "대시보드", short: "홈", sub: "성과·비용·운영 상태", icon: P.home },
   { href: "/todos", label: "할 일", short: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림", icon: P.check, desktopOnly: true },
   { href: "/ideas", label: "아이디어 노트", short: "아이디어", sub: "한 줄 메모 · 할 일·글 기획으로", icon: P.bulb, desktopOnly: true },
-  { href: "/calendar", label: "마케팅 달력", short: "달력", sub: "시즌·행사·발행 예정일", icon: P.cal, desktopOnly: true },
+  { href: "/calendar", label: "캘린더", short: "캘린더", sub: "시즌·행사·발행·업무 일정", icon: P.cal, desktopOnly: true },
   { href: "/trends", label: "트렌드 뷰어", short: "트렌드", sub: "유튜브 급상승·스크랩", icon: P.trend },
   { href: "/hot", label: "블로그 핫이슈", short: "핫이슈", sub: "네이버 블로그 주제별 반응 많은 글", icon: P.fire, desktopOnly: true },
   { href: "/new", label: "글 만들기", short: "글쓰기", sub: "① 키워드 추천 · ② 선택", icon: P.pen },
@@ -57,9 +56,9 @@ export default function Nav({ pending }: { pending: number }) {
   return (
     <>
       <aside className="side">
-        <div className="brand">
+        <Link href="/" className={`brand${path === "/" ? " on" : ""}`} title="대시보드로" aria-label="콘텐츠 오피스 대시보드">
           <span className="brand-mark">AI</span> 콘텐츠 오피스
-        </div>
+        </Link>
         {ITEMS.map((it) => (
           <Link key={it.href} href={it.href} className={`nav-link ${isOn(path, it.href) ? "on" : ""}`} style={{ alignItems: "flex-start" }}>
             <Icon d={it.icon} />

@@ -13,7 +13,7 @@ import { seasonEvents, KIND_LABEL } from "./seasons";
 export type CalCat = "season" | "official" | "irregular" | "publish" | "todo";
 export type CalEvent = { id: string; title: string; start: string; end: string; cat: CalCat; sub: string; link: string; note: string; seeds: string[]; postId?: string; custom?: boolean; todoId?: string; done?: boolean; time?: string | null };
 
-export const CAT_LABEL: Record<CalCat, string> = { season: "매년 시즌", official: "공식 일정", irregular: "비정기·갑작스런 행사", publish: "내 발행", todo: "내 할 일" };
+export const CAT_LABEL: Record<CalCat, string> = { season: "연간 시즌 행사", official: "공휴일·공식 행사", irregular: "선거·비정기 행사", publish: "콘텐츠 발행 일정", todo: "업무 일정 (할 일)" };
 
 const naverSearch = (s: string) => `https://search.naver.com/search.naver?query=${encodeURIComponent(s)}`;
 const ICS_URL = () => process.env.KR_HOLIDAY_ICS_URL?.trim() || "https://calendar.google.com/calendar/ical/ko.south_korea%23holiday%40group.v.calendar.google.com/public/basic.ics";

@@ -920,7 +920,7 @@ const tgSends = async () => (await mockLog()).filter((l) => l.path === "/bottest
 
 test("✅ 할 일: 대시보드 🚨오늘할일🚨 → 오늘 탭 · 추가·다시 열기·예정·완료·수정·삭제 (한국 날짜)", async () => {
   const home = (await (await fetch(`${BASE}/`)).text()).replace(/<!-- -->/g, "");
-  assert.ok(home.includes('href="/todos?tab=today"') && home.includes("🚨오늘할일🚨"), "대시보드 버튼");
+  assert.ok(home.includes("🚨오늘할일🚨") && !home.includes('href="/todos?tab=today"'), "대시보드 버튼 (팝업)");
   const t1 = await call("/api/todos", "POST", { title: "김장 레시피 사진 고르기", due_date: kstDate(0), blog_id: "blog_algokitchen" });
   assert.equal(t1.status, 200, JSON.stringify(t1.data));
   const t2 = (await call("/api/todos", "POST", { title: "다음 주 글감 정리", due_date: kstDate(3) })).data;
@@ -933,6 +933,8 @@ test("✅ 할 일: 대시보드 🚨오늘할일🚨 → 오늘 탭 · 추가·�
   assert.ok((await call("/api/todos?tab=upcoming")).data.some((t) => t.id === t2.id));
   const page = (await (await fetch(`${BASE}/todos?tab=today`)).text()).replace(/<!-- -->/g, "");
   assert.ok(page.includes("김장 레시피 사진 고르기"), "오늘 탭 화면");
+  const home2 = (await (await fetch(`${BASE}/`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(home2.includes("오늘 할 일 1개") && home2.includes("김장 레시피 사진 고르기"), "대시보드 팝업용 오늘 할 일 목록");
   // 완료 → 완료 탭, 되돌리기
   await call(`/api/todos/${t1.data.id}`, "PUT", { done: true });
   assert.ok((await call("/api/todos?tab=done")).data.some((t) => t.id === t1.data.id));
@@ -1007,7 +1009,10 @@ test("💡📅 아이디어·달력: 김장철 → 김치 보관 글감 저장 �
   assert.ok(cur.some((e) => e.title === "재보궐선거" && e.cat === "irregular" && e.custom));
   assert.ok(cur.some((e) => e.cat === "publish" && e.postId === post.id && e.start === `${ym}-25`));
   const page = (await (await fetch(`${BASE}/calendar?m=${ym}`)).text()).replace(/<!-- -->/g, "");
-  assert.ok(page.includes("비정기·갑작스런 행사") && page.includes("재보궐선거"), "달력 화면");
+  assert.ok(page.includes("선거·비정기 행사") && page.includes("재보궐선거") && page.includes("업무 일정"), "달력 화면");
+  const novPage = (await (await fetch(`${BASE}/calendar?m=${y}-11`)).text()).replace(/<!-- -->/g, "");
+  const decPage = (await (await fetch(`${BASE}/calendar?m=${y}-12`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(novPage.includes("김장철 시작") && novPage.includes("cal-dot") && decPage.includes("김장철 끝"), "기간 행사: 시작·끝 날만 글자, 사이엔 점");
   // 김장철 → 김치 보관 글감으로 저장 (달력에서 누르는 것과 같은 요청)
   const idea = (await call("/api/ideas", "POST", { memo: "김장철 → 김치 보관 글감", blog_id: "blog_algokitchen", link: kimjang.link, source: `calendar:${kimjang.id}` })).data;
   assert.equal((await call("/api/ideas", "POST", { memo: " " })).status, 400);
