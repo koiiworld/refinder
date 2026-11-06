@@ -53,7 +53,7 @@ export default async function Dashboard() {
         </div>
 
         {/* 수익 (직접 입력) */}
-        <RevenueCard month={d.month} data={d.revenue.data} total={d.revenue.total} prevTotal={d.revenue.prevTotal} aiKrw={d.cost.monthUsd * KRW_PER_USD} />
+        <RevenueCard month={d.month} data={d.revenue.data} total={d.revenue.total} prevTotal={d.revenue.prevTotal} aiKrw={d.cost.monthUsd * KRW_PER_USD} coupang={d.revenue.coupang} />
 
         {/* AI 비용 */}
         <section className="card">
@@ -101,7 +101,7 @@ export default async function Dashboard() {
         {/* 방문자 비교(위, 넓게) → 완성 글 추이(아래) */}
           <section className="card">
             <div className="card-head" style={{ flexWrap: "wrap" }}>
-              <h2 style={{ fontSize: 15 }}>블로그별 방문자 비교</h2>
+              <h2 style={{ fontSize: 15 }}>블로그별 방문자 비교 <a href="/diagnose" className="tiny" style={{ color: "var(--accent)", fontWeight: 500, marginLeft: 6 }}>🩺 블로그 진단 →</a></h2>
               <span className="tiny muted">{d.visits.updatedAt ? `${fmtDate(d.visits.updatedAt)} 수집 · 1시간마다 갱신` : "아직 수집 전"}</span>
             </div>
             <div className="card-pad stack" style={{ gap: 10 }}>

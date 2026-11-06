@@ -366,3 +366,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .chip:hover { color: var(--text); }
 .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .trend-group { position: absolute; left: 8px; bottom: 8px; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 700; background: rgba(255,255,255,.92); color: #16181d; }
+
+/* 📱 캐러셀 */
+.carousel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.carousel-ideas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+@media (max-width: 640px) { .carousel-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -313,3 +313,19 @@ CREATE TABLE IF NOT EXISTS generated_images (
   prompt      TEXT NOT NULL DEFAULT '',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- 인스타 캐러셀(카드뉴스): 블로그 글에서 만들거나 주제로 따로 만듦
+CREATE TABLE IF NOT EXISTS carousels (
+  id          TEXT PRIMARY KEY,
+  blog_id     TEXT REFERENCES blogs(id) ON DELETE SET NULL,
+  project_id  TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  title       TEXT NOT NULL DEFAULT '',
+  topic       TEXT NOT NULL DEFAULT '',
+  slides      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  caption     TEXT NOT NULL DEFAULT '',
+  hashtags    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  images      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  style       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ai          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

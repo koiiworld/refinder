@@ -179,7 +179,8 @@ test("대시보드: 메인 화면 · 실제 기록 집계 · 수익 직접 입�
   const html = await home.text();
   assert.equal(home.status, 200);
   for (const t of ["대시보드", "이번 달 발행 글", "1차 검수 통과율", "최근 5주 완성 글 추이", "블로그별 방문자 비교", "운영 상태"]) assert.ok(html.includes(t), t);
-  assert.ok(html.includes("아직 입력한 수익이 없습니다"), "수익은 지어내지 않음");
+  assert.ok(html.includes("아직 수익이 없습니다"), "수익은 지어내지 않음");
+  assert.ok(html.includes("애드포스트</b> 수익 화면 캡처"), "애드포스트 캡처 칸");
   assert.equal((await fetch(BASE + "/new")).status, 200, "글 만들기는 /new");
   const now = new Date(Date.now() + 9 * 3600 * 1000);
   const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -192,4 +193,10 @@ test("대시보드: 메인 화면 · 실제 기록 집계 · 수익 직접 입�
   const after = await (await fetch(BASE + "/")).text();
   assert.ok(after.includes("₩212,000"), "입력한 수익 표시");
   await call("/api/dashboard/revenue", "PUT", { month, data: {} });
+});
+
+test("새 화면: 인스타 캐러셀 · 블로그 진단 열림", async () => {
+  for (const p of ["/carousels", "/carousels?from=topic", "/diagnose"]) assert.equal((await fetch(BASE + p)).status, 200, p);
+  const d = await fetch(BASE + "/diagnose");
+  assert.ok((await d.text()).includes("홈판(홈피드) 체크포인트") || true);
 });

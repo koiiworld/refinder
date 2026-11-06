@@ -23,6 +23,7 @@ env -i PATH="$PATH" HOME="$HOME" PGLITE_DIR=./data/ai \
   NAVER_AD_API_KEY=test-ad-key NAVER_AD_SECRET_KEY=test-ad-secret NAVER_AD_CUSTOMER_ID=12345 NAVER_AD_BASE_URL=http://localhost:4110 \
   NAVER_CLIENT_ID=test-dl-id NAVER_CLIENT_SECRET=test-dl-key NAVER_DATALAB_URL=http://localhost:4110/search-trend/v1/search \
   YOUTUBE_API_KEY=test-yt-key YOUTUBE_BASE_URL=http://localhost:4110 NAVER_BLOG_BASE_URL=http://localhost:4110 NAVER_RSS_BASE_URL=http://localhost:4110 NAVER_MBLOG_BASE_URL=http://localhost:4110 OFFICIAL_IMAGES_ALLOW_LOCAL=1 \
+  COUPANG_ACCESS_KEY=test-coupang-access COUPANG_SECRET_KEY=test-coupang-secret COUPANG_API_BASE_URL=http://localhost:4110 NAVER_SEARCH_URL=http://localhost:4110/v1/search/blog.json \
   ./node_modules/.bin/next start -p 3102 > ai.log 2>&1 &
 AI=$!
 for i in {1..40}; do curl -sf localhost:3101/api/health >/dev/null && curl -sf localhost:3102/api/health >/dev/null && break; sleep 1; done

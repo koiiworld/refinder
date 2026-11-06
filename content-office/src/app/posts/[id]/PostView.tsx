@@ -675,6 +675,7 @@ function Publish(props: { title: string; html: string; hashtags: string[]; blogU
         <a className="btn" href={`${base}?format=html`}>HTML 다운로드</a>
         <a className="btn" href={`${base}?format=md`}>마크다운 다운로드</a>
         {props.blogUrl && <a className="btn" href={props.blogUrl} target="_blank" rel="noreferrer">내 블로그 열기 ↗</a>}
+        <CarouselButton projectId={props.projectId} />
       </div>
       <p className="tiny muted">네이버 블로그·티스토리는 자동 발행 API가 없어 직접 붙여 넣어 발행합니다. 본문 복사 후 블로그 글쓰기 화면에 붙여 넣으세요.</p>
       {props.published ? (
@@ -689,5 +690,29 @@ function Publish(props: { title: string; html: string; hashtags: string[]; blogU
         </div>
       )}
     </div>
+  );
+}
+
+/** 📱 이 글로 인스타 캐러셀 만들기 → 캐러셀 편집 화면으로 */
+function CarouselButton({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className="btn"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const r = await api<{ id: string }>("/api/carousels", "POST", { projectId });
+          router.push(`/carousels/${r.id}`);
+        } catch (e) {
+          alert((e as Error).message);
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <><span className="spinner" /> 캐러셀 만드는 중…</> : "📱 인스타 캐러셀 만들기"}
+    </button>
   );
 }

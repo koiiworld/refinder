@@ -10,6 +10,8 @@ const P = {
   list: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
   blog: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h5",
   trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6",
+  phone: "M7 2h10v20H7zM11 18h2",
+  pulse: "M3 12h4l2-6 4 12 2-6h6",
   gear: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.6 4.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5.3z",
 };
 
@@ -26,6 +28,8 @@ const ITEMS = [
   { href: "/trends", label: "트렌드 뷰어", short: "트렌드", sub: "유튜브 급상승·스크랩", icon: P.trend },
   { href: "/new", label: "글 만들기", short: "글쓰기", sub: "① 키워드 추천 · ② 선택", icon: P.pen },
   { href: "/posts", label: "진행 현황", short: "진행", sub: "③~⑦ 제목·글·이미지·검수·발행", icon: P.list, badge: true },
+  { href: "/carousels", label: "인스타 캐러셀", short: "캐러셀", sub: "블로그 글·주제로 카드뉴스", icon: P.phone },
+  { href: "/diagnose", label: "블로그 진단", short: "진단", sub: "노출·제목·누락 점검", icon: P.pulse, desktopOnly: true },
   { href: "/blogs", label: "블로그 설정", short: "블로그", sub: "말투 예시·문체", icon: P.blog },
   { href: "/settings", label: "설정", short: "설정", sub: "AI 연결·단계별 AI", icon: P.gear },
   { href: "/trash", label: "휴지통", short: "휴지통", sub: "삭제한 글 되살리기·완전 삭제", icon: P.trash, desktopOnly: true },

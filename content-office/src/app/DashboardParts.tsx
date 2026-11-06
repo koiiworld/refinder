@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/components/client-utils";
 import { fmtUsd, KRW_PER_USD } from "@/components/ui";
 import type { MonthRevenue, RevenueChannel } from "@/lib/dashboard";
@@ -139,7 +139,7 @@ const CHANNELS: { id: RevenueChannel; name: string; metricHint: string; usd?: bo
   { id: "adsense", name: "애드센스", metricHint: "예: 페이지뷰 9,400 · RPM $1.98", usd: true },
 ];
 
-export function RevenueCard({ month, data, total, prevTotal, aiKrw }: { month: string; data: MonthRevenue; total: number; prevTotal: number | null; aiKrw: number }) {
+export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: { month: string; data: MonthRevenue; total: number; prevTotal: number | null; aiKrw: number; coupang?: { connected: boolean; at: string | null; error: string } }) {
   const router = useRouter();
   const [edit, setEdit] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -148,6 +148,10 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw }: { month: s
     Object.fromEntries(CHANNELS.map((c) => [c.id, { krw: data[c.id]?.krw ? String(data[c.id]!.krw) : "", usd: data[c.id]?.usd != null ? String(data[c.id]!.usd) : "", metric: data[c.id]?.metric ?? "" }])) as Record<RevenueChannel, { krw: string; usd: string; metric: string }>,
   );
   const [, m] = month.split("-").map(Number);
+  const [syncing, setSyncing] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [capNote, setCapNote] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
   const delta = prevTotal ? (total - prevTotal) / prevTotal : null;
 
   async function save() {
@@ -163,6 +167,7 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw }: { month: s
       );
       await api("/api/dashboard/revenue", "PUT", { month, data: payload });
       setEdit(false);
+      setCapNote("");
       router.refresh();
     } catch (e) {
       setMsg((e as Error).message);
@@ -170,12 +175,44 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw }: { month: s
     setBusy(false);
   }
 
+  async function syncCoupang() {
+    setSyncing(true);
+    setMsg("");
+    try {
+      await api("/api/dashboard/revenue/coupang", "POST");
+      router.refresh();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+    setSyncing(false);
+  }
+
+  // 애드포스트 수익 캡처 → AI가 숫자를 읽어 입력칸에 채움 (저장은 직접)
+  async function readCapture(files: File[]) {
+    const imgs = files.filter((x) => x.type.startsWith("image/")).slice(0, 3);
+    if (!imgs.length) return;
+    setReading(true);
+    setMsg("");
+    setCapNote("");
+    try {
+      const images = await Promise.all(imgs.map((x) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(x); })));
+      const r = await api<{ krw: number; period: string; metric: string; provider: string; model: string }>("/api/dashboard/revenue/capture", "POST", { channel: "adpost", month, images });
+      setF((cur) => ({ ...cur, adpost: { ...cur.adpost, krw: String(r.krw), metric: [r.metric, r.period && `기간 ${r.period}`].filter(Boolean).join(" · ") || cur.adpost.metric } }));
+      setEdit(true);
+      setCapNote(`캡처에서 애드포스트 ${krw(r.krw)}을 읽었어요 (${r.provider}/${r.model}). 숫자가 맞는지 확인하고 '저장'을 누르세요.`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+    setReading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   return (
     <section className="card">
       <div className="card-head" style={{ flexWrap: "wrap" }}>
         <h2 style={{ fontSize: 15 }}>수익 ({m}월)</h2>
         <div className="row">
-          <span className="tiny muted">직접 입력한 정산 숫자 · 달러는 $1 = ₩{KRW_PER_USD.toLocaleString()} 환산</span>
+          <span className="tiny muted">쿠팡 자동 · 나머지는 직접 입력/캡처 · 달러는 $1 = ₩{KRW_PER_USD.toLocaleString()} 환산</span>
           <button className="btn btn-sm" onClick={() => setEdit(!edit)}>{edit ? "닫기" : total ? "수정" : "이번 달 수익 입력"}</button>
         </div>
       </div>
@@ -194,7 +231,7 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw }: { month: s
             </div>
           </div>
         ) : (
-          !edit && <p className="small muted" style={{ margin: 0 }}>아직 입력한 수익이 없습니다. 쿠팡파트너스·애드포스트·애드센스는 앱에서 자동으로 가져올 수 없어, 각 정산 화면의 이번 달 숫자를 입력하면 AI 비용과 비교해 보여 줍니다.</p>
+          !edit && <p className="small muted" style={{ margin: 0 }}>아직 수익이 없습니다. 쿠팡파트너스는 API 키를 연결하면 자동으로, 애드포스트는 수익 화면 캡처를 아래에 올리면 AI가 읽어 채워 줍니다.</p>
         )}
         {total > 0 && !edit && (
           <div className="table-wrap">
@@ -215,6 +252,27 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw }: { month: s
             </table>
           </div>
         )}
+        <div className="row" style={{ gap: 8 }}>
+          <span className="small"><b>쿠팡파트너스</b> · {coupang?.connected ? (coupang.at ? `API 자동 집계 · ${new Date(coupang.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 기준` : "API 연결됨") : "API 키를 연결하면 자동 집계"}</span>
+          {coupang?.connected && <button className="btn btn-sm" disabled={syncing} onClick={syncCoupang}>{syncing ? <><span className="spinner" /> 불러오는 중…</> : "🔄 지금 불러오기"}</button>}
+          {coupang?.error && <span className="tiny" style={{ color: "var(--bad)" }}>{coupang.error}</span>}
+        </div>
+        <div
+          className="card"
+          role="button"
+          tabIndex={0}
+          onClick={() => fileRef.current?.click()}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); void readCapture(Array.from(e.dataTransfer.files)); }}
+          onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); void readCapture(fs); } }}
+          style={{ borderStyle: "dashed", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--panel-2)" }}
+        >
+          {reading ? <span className="small"><span className="spinner" /> AI가 캡처에서 애드포스트 수익을 읽는 중…</span> : <span className="small">📷 <b>애드포스트</b> 수익 화면 캡처를 끌어다 놓거나 <b style={{ color: "var(--accent)" }}>눌러서 선택</b></span>}
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => e.target.files && void readCapture(Array.from(e.target.files))} />
+        </div>
+        {capNote && <div className="notice notice-ok small">{capNote}</div>}
+        {!edit && msg && <div className="notice notice-bad small">{msg}</div>}
         {edit && (
           <div className="stack" style={{ gap: 10 }}>
             {CHANNELS.map((c) => (

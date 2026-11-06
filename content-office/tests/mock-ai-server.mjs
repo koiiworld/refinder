@@ -64,12 +64,35 @@ http
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       return res.end(`<html><body><div class="visitor"><span>방문자수</span>Total<p class="total">1,229</p><ul><li>Today : 12</li><li>Yesterday : 31</li></ul></div><script>var Today = 999;</script></body></html>`);
     }
+    // 쿠팡파트너스 리포트 (HMAC 서명 확인)
+    const cp = url.pathname.match(/^\/v2\/providers\/affiliate_open_api\/apis\/openapi\/v1\/reports\/(commission|clicks|orders)$/);
+    if (cp) {
+      const m = /CEA algorithm=HmacSHA256, access-key=test-coupang-access, signed-date=(\d{6}T\d{6}Z), signature=([0-9a-f]+)/.exec(req.headers.authorization ?? "");
+      const expect = m && crypto.createHmac("sha256", "test-coupang-secret").update(m[1] + "GET" + url.pathname + url.search.slice(1)).digest("hex");
+      if (!m || m[2] !== expect) return send(res, 401, { rCode: "401", rMessage: "invalid signature" });
+      if (!/^\d{8}$/.test(url.searchParams.get("startDate") ?? "") || !/^\d{8}$/.test(url.searchParams.get("endDate") ?? "")) return send(res, 400, { rCode: "400", rMessage: "bad date" });
+      const data = cp[1] === "commission" ? [{ date: "20261101", commission: 1200 }, { date: "20261102", commission: 3400 }] : cp[1] === "clicks" ? [{ date: "20261101", click: 50 }, { date: "20261102", click: 70 }] : [{ date: "20261102", quantity: 3 }];
+      return send(res, 200, { rCode: "0", rMessage: "", data });
+    }
+    // 네이버 블로그 검색 API
+    if (url.pathname === "/v1/search/blog.json") {
+      if (req.headers["x-naver-client-id"] !== "test-dl-id") return send(res, 401, { errorMessage: "auth" });
+      const qy = url.searchParams.get("query") ?? "";
+      const other = (n) => Array.from({ length: n }, (_, i) => ({ title: `<b>다른 글</b> ${i}`, link: `https://blog.naver.com/other${i}/22300000${i}`, bloggerlink: `blog.naver.com/other${i}`, postdate: "20261101" }));
+      const mine = (logNo) => ({ title: "내 글", link: `https://blog.naver.com/algo_kitchen/${logNo}`, bloggerlink: "blog.naver.com/algo_kitchen", postdate: "20261101" });
+      if (qy.startsWith("굴보쌈 황금레시피")) return send(res, 200, { total: 3, items: [...other(1), mine("224000000001")] });
+      if (qy.startsWith("깍두기")) return send(res, 200, { total: 30, items: other(10) });
+      if (qy.startsWith("김장 준비")) return send(res, 200, { total: 5, items: [mine("224000000003")] });
+      const items = other(100);
+      items.splice(4, 0, mine("224000000009"));
+      return send(res, 200, { total: 52000, items: items.slice(0, Number(url.searchParams.get("display") ?? 10)) });
+    }
     // 네이버 블로그 RSS
     if (url.pathname === "/algo_kitchen.xml") {
       res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8" });
       return res.end(`<?xml version="1.0"?><rss><channel><title>알고키친</title>
-        <item><title><![CDATA[굴보쌈 황금레시피｜집에서 만드는 법]]></title><link>https://blog.naver.com/algo_kitchen/224000000001?fromRss=true</link></item>
-        <item><title><![CDATA[깍두기 담그는 법 & 양념 비율]]></title><link>https://blog.naver.com/algo_kitchen/224000000002</link></item>
+        <item><title><![CDATA[굴보쌈 황금레시피｜집에서 만드는 법]]></title><link>https://blog.naver.com/algo_kitchen/224000000001?fromRss=true</link><pubDate>${new Date(Date.now() - 2 * 86400000).toUTCString()}</pubDate></item>
+        <item><title><![CDATA[깍두기 담그는 법 & 양념 비율]]></title><link>https://blog.naver.com/algo_kitchen/224000000002</link><pubDate>${new Date(Date.now() - 9 * 86400000).toUTCString()}</pubDate></item>
         <item><title>김장 준비 &amp;middot; 절임배추 &amp;ndash; 정리</title><link>https://blog.naver.com/algo_kitchen/224000000003</link></item>
         <item><title>개인정보처리방침</title><link>https://blog.naver.com/algo_kitchen/1</link></item>
       </channel></rss>`);
@@ -125,6 +148,10 @@ http
       if (system.includes("편집장이자 팩트체커")) return JSON.stringify({ summary: "모의 검수", score: 88, issues: [{ type: "fact", severity: "low", quote: "본문", comment: "확인", suggestion: "" }], factChecks: [], ruleChecks: [], imageChecks: [{ index: 1, ok: true, note: "좋음" }] });
       if (system.includes("교정")) return "AI가 다듬은 문장입니다.";
       if (system.includes("콘텐츠 전략가")) return JSON.stringify({ posts: [{ title: "양배추 두부전", titlePattern: "메뉴명 + 만들기 + 효익", hook: "인사 후 공감 질문", structure: "재료→순서→팁", whyPopular: "검색 의도에 바로 답함", keywords: ["양배추두부전"] }], common: ["재료를 목록으로"], apply: { titleIdeas: [{ title: "굴보쌈 집에서 만들기｜실패 없는 황금 비율", keyword: "굴보쌈", reason: "제철" }], keywords: [{ keyword: "굴보쌈", reason: "제철" }, { keyword: "깍두기", reason: "김장철" }], tips: ["사진 8장 이상"] } });
+      if (system.includes("카드뉴스) 카피라이터")) return JSON.stringify({ slides: [{ kind: "cover", headline: "김밥 옆구리\\n안 터지는 법", body: "저장 필수", image: 0 }, { kind: "content", headline: "밥은 식혀서", body: "뜨거운 밥은 김을 찢어요", image: 7 }, { kind: "content", headline: "재료 준비", body: "단무지·햄·계란", image: null }, { kind: "cta", headline: "김밥 좋아하는 친구 태그 🍙", body: "저장해두고 주말에", image: null }], hooks: ["10분 김밥집 맛", "이렇게 하면 다 터져요", "저장 안 하면 후회"], caption: "김밥 안 터지는 비법 🍙\n\n밥은 식혀서!", hashtags: ["#김밥", "김밥 만들기", "도시락"] });
+      if (system.includes("인스타그램 성장 전략가")) return JSON.stringify({ ideas: [{ topic: "자취생 냉장고 정리 7가지", format: "save", hook: "이것만 알면 냉장고가 2배", why: "나중에 다시 볼 정보" }, { topic: "택배 반품 실수 TOP5", format: "mistake", hook: "이러면 반품비 다 내요", why: "친구에게 공유" }, { topic: "", format: "save", hook: "", why: "" }] });
+      if (system.includes("블로그 성장 컨설턴트")) return JSON.stringify({ score: 62, summary: "발행은 꾸준하지만 누락 글이 있어요.", good: ["제목 길이 적당"], problems: [{ title: "검색 누락", why: "최근 글 1개가 안 나옴", fix: "비슷한 글 다시 쓰지 말고 새 각도로" }], titleTips: ["깍두기 담그는 법 & 양념 비율 → 깍두기 양념 비율 실패 없는 황금 공식"], next: ["주 3회 발행"] });
+      if (system.includes("광고 수익 화면")) return JSON.stringify({ krw: 12345, usd: null, period: "2026-11-01~2026-11-06", metric: "노출 1,000 · 클릭 20", found: true });
       if (system.includes("크리에이터 어드바이저 화면")) return "1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW";
       return "{}";
     };

@@ -3,6 +3,7 @@ import { q, q1, j } from "./db";
 import { todayUsage } from "./usage";
 import { getSettings } from "./settings";
 import { collectVisits, visitDaily, visitSummary } from "./visits";
+import { coupangConnected, lastCoupangSync, syncCoupang } from "./coupang";
 
 /**
  * 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음)
@@ -162,6 +163,10 @@ export async function dashboardData() {
   const visitDays = await visitDaily(30);
   const blogUrls = await q<{ id: string; url: string }>("SELECT id, url FROM blogs");
 
+  // 쿠팡파트너스: 키가 있으면 3시간에 한 번 이번 달 수익 자동 집계
+  let coupangError = "";
+  if (coupangConnected()) await syncCoupang().catch((e) => { coupangError = (e as Error).message; });
+  const coupangSync = coupangConnected() ? await lastCoupangSync() : null;
   const revenueAll = await getRevenue();
   const month = monthKey();
   const revenue = revenueAll[month] ?? {};
@@ -202,7 +207,7 @@ export async function dashboardData() {
     topKeywords: topKeywords.map((k) => ({ ...k, volume: Number(k.volume), blog: blogs.find((b) => b.id === k.blog_id)?.name ?? "" })),
     ops: { ...(ops ?? { ready: 0, failed: 0, rereview: 0, choosing: 0 }), todayCalls: today.models.reduce((s, m) => s + m.calls, 0), todayUsd: today.total },
     cost: { monthUsd, monthCalls, perPost: completedMonth ? monthUsd / completedMonth : null, todayUsd: today.total, todaySteps: today.steps, days },
-    revenue: { month, data: revenue, total: revTotal(revenue), prevTotal: prevRevenue ? revTotal(prevRevenue) : null },
+    revenue: { month, data: revenue, total: revTotal(revenue), prevTotal: prevRevenue ? revTotal(prevRevenue) : null, coupang: { connected: coupangConnected(), at: coupangSync?.at ?? null, error: coupangError } },
   };
 }
 

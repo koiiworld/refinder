@@ -465,3 +465,98 @@ test("모델 목록 · Higgsfield 연결 확인", async () => {
   assert.deepEqual((await call("/api/ai/models?provider=openai")).data.models, ["gpt-mock-1", "gpt-mock-2"]);
   assert.match((await call("/api/ai/models?provider=higgsfield")).data.note, /인증 성공/);
 });
+
+const PIXEL_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==";
+
+test("📱 캐러셀: 블로그 글에서 만들기 → 장면·후킹·캡션 · 편집 저장 · 내 사진 올리기 · AI 다시 만들기", async () => {
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  await call("/__reset", "POST", undefined, MOCK);
+  const r = await call("/api/carousels", "POST", { projectId: posts[0].id });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  let c = (await call(`/api/carousels/${r.data.id}`)).data;
+  assert.equal(c.slides[0].kind, "cover");
+  assert.equal(c.slides[0].headline, "김밥 옆구리\n안 터지는 법", "줄바꿈 표시 정리");
+  assert.equal(c.slides[c.slides.length - 1].kind, "cta");
+  assert.equal(c.slides[1].image, null, "없는 사진 번호는 비움");
+  assert.deepEqual(c.hashtags, ["김밥", "김밥만들기", "도시락"]);
+  assert.equal(c.style.hooks.length, 3, "표지 대안 문구");
+  const cp = await stepPrompt("카드뉴스) 카피라이터");
+  assert.match(cp, /\[원본 블로그 글/);
+  assert.match(cp, /친구 태그/);
+  // 편집 저장
+  const slides = c.slides.map((s, i) => (i === 0 ? { ...s, headline: "내가 고친 표지" } : s));
+  c = (await call(`/api/carousels/${c.id}`, "PUT", { slides, style: { template: "clean", accent: "#123456", handle: "algo" } })).data;
+  assert.equal(c.slides[0].headline, "내가 고친 표지");
+  assert.equal(c.style.template, "clean");
+  assert.equal(c.style.accent, "#123456");
+  // 내 사진 올리기 → 이 사이트 주소로 공개 · 캐러셀 사진 주소로 열림
+  const up = await call(`/api/carousels/${c.id}`, "POST", { action: "upload", dataUrl: PIXEL_URL });
+  assert.equal(up.status, 200, JSON.stringify(up.data));
+  const img = up.data.carousel.images[up.data.index];
+  assert.match(img.url, /^\/api\/img\/img_[0-9a-f]{24}\.jpg$/);
+  const res = await fetch(`${BASE}/api/carousels/${c.id}/img/${up.data.index}`, { redirect: "follow" });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type") ?? "", /^image\//);
+  // AI 다시 만들기 (수정 요청 반영)
+  await call("/__reset", "POST", undefined, MOCK);
+  const re = await call(`/api/carousels/${c.id}`, "POST", { action: "regenerate", feedback: "7장으로 줄여줘" });
+  assert.equal(re.status, 200, JSON.stringify(re.data));
+  assert.match(await stepPrompt("카드뉴스) 카피라이터"), /수정 요청 - 반드시 반영\]\n7장으로 줄여줘/);
+  assert.equal(re.data.style.template, "clean", "디자인은 유지");
+});
+
+test("📱 캐러셀: 블로그와 별개로 — 저장 잘 되는 주제 추천 → 주제로 만들기", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  const i = await call("/api/carousels/ideas", "POST", { niche: "자취 꿀팁" });
+  assert.equal(i.status, 200, JSON.stringify(i.data));
+  assert.equal(i.data.ideas.length, 2, "빈 주제는 뺌");
+  assert.match(await stepPrompt("인스타그램 성장 전략가"), /\[계정 분야\] 자취 꿀팁/);
+  const r = await call("/api/carousels", "POST", { topic: i.data.ideas[1].topic, format: i.data.ideas[1].format, niche: "자취 꿀팁" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const c = (await call(`/api/carousels/${r.data.id}`)).data;
+  assert.equal(c.project_id, null);
+  assert.equal(c.style.template, "bold", "사진 없는 주제형은 컬러 배경");
+  assert.match(await stepPrompt("카드뉴스) 카피라이터"), /\[형식\] ❌⭕ 실수 교정/);
+  assert.ok((await call("/api/carousels")).data.length >= 2);
+  assert.equal((await call("/api/carousels", "POST", { topic: " " })).status, 400);
+});
+
+test("💰 쿠팡파트너스 API 자동 집계 · 애드포스트 캡처 → AI가 수익 읽기", async () => {
+  const s = await call("/api/dashboard/revenue/coupang", "POST");
+  assert.equal(s.status, 200, JSON.stringify(s.data));
+  assert.equal(s.data.krw, 4600, "수익 합계");
+  assert.equal(s.data.click, 120);
+  assert.equal(s.data.order, 3);
+  const rev = (await call("/api/dashboard/revenue")).data;
+  const month = Object.keys(rev).sort().pop();
+  assert.equal(rev[month].coupang.krw, 4600);
+  assert.match(rev[month].coupang.metric, /API 자동 · 클릭 120 · 주문 3/);
+  await call("/__reset", "POST", undefined, MOCK);
+  const cap = await call("/api/dashboard/revenue/capture", "POST", { channel: "adpost", month, images: [PIXEL_URL] });
+  assert.equal(cap.status, 200, JSON.stringify(cap.data));
+  assert.equal(cap.data.krw, 12345);
+  assert.match(cap.data.metric, /노출/);
+  assert.match(await stepPrompt("광고 수익 화면"), /네이버 애드포스트 수익 화면/);
+  assert.equal((await call("/api/dashboard/revenue/capture", "POST", { images: [] })).status, 400);
+});
+
+test("🩺 블로그 진단: 발행 리듬·제목·검색 누락·키워드 순위 + AI 종합 진단, 마지막 결과 저장", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  const r = await call("/api/diagnose", "POST", { blogId: "blog_algokitchen" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const d = r.data;
+  const idx = Object.fromEntries(d.metrics.indexed.map((x) => [x.title.slice(0, 3), x]));
+  assert.equal(idx["굴보쌈"].found, true);
+  assert.equal(idx["굴보쌈"].rank, 2);
+  assert.equal(idx["깍두기"].found, false, "검색 누락");
+  const check = (label) => d.checks.find((c) => c.label.startsWith(label));
+  assert.equal(check("검색 누락").status, "warn");
+  assert.match(check("발행 빈도").detail, /최근 30일 2개/);
+  assert.ok(d.metrics.ranks.length >= 1, "앱에서 쓴 글 키워드 순위");
+  assert.equal(d.metrics.ranks[0].rank, 5);
+  assert.equal(d.metrics.ranks[0].docs, 52000);
+  assert.equal(d.ai.score, 62);
+  assert.match(await stepPrompt("블로그 성장 컨설턴트"), /\[점검표\]/);
+  const last = (await call("/api/diagnose?blogId=blog_algokitchen")).data;
+  assert.equal(last.at, d.at, "마지막 진단 저장");
+});

@@ -8,7 +8,7 @@ import type { Blog } from "./types";
  * - 6시간 캐시, 실패하면 빈 목록 (글쓰기는 계속 진행)
  */
 
-export type BlogPostLink = { title: string; url: string };
+export type BlogPostLink = { title: string; url: string; date?: string | null };
 
 const TTL = 6 * 60 * 60 * 1000;
 const g = globalThis as unknown as { __blogPosts?: Map<string, { at: number; posts: BlogPostLink[] }> };
@@ -46,7 +46,9 @@ export function parseRss(xml: string): BlogPostLink[] {
     const item = m[0];
     const title = text(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(item)?.[1] ?? "");
     const link = text(/<link[^>]*>([\s\S]*?)<\/link>/i.exec(item)?.[1] ?? "").split("?")[0];
-    if (title && !NOT_POST.test(title) && /^https?:\/\//.test(link)) out.push({ title, url: link });
+    const pub = text(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i.exec(item)?.[1] ?? "");
+    const t = pub ? new Date(pub) : null;
+    if (title && !NOT_POST.test(title) && /^https?:\/\//.test(link)) out.push({ title, url: link, date: t && !isNaN(t.getTime()) ? t.toISOString() : null });
   }
   return out;
 }
