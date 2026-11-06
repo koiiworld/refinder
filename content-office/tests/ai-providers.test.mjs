@@ -1290,3 +1290,87 @@ test("✂️ 릴스 편집기: 영상 → 받아쓰기로 장면·자막 초안 
   const list = (await (await fetch(`${BASE}/reels`)).text()).replace(/<!-- -->/g, "");
   assert.ok(list.includes("시험 릴스") && list.includes("내보냄"), "목록");
 });
+
+test("🎨 이미지 레퍼런스: 컨셉 키트·이번만 레퍼런스 → Gemini·ChatGPT(편집)·Higgsfield(주소·Soul ID) · 한국어→영어 · ✏️ 프롬프트 수정 · 🤖 모델 추천 · 이미지 비용 집계", async () => {
+  const PIXEL = Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==", "base64");
+  // 레퍼런스 올리기
+  const fd = new FormData();
+  fd.append("files", new Blob([PIXEL], { type: "image/jpeg" }), "ref.jpg");
+  const up = await (await fetch(`${BASE}/api/refs`, { method: "POST", body: fd })).json();
+  const kitRef = up.ids[0];
+  assert.match(kitRef, /^img_[0-9a-f]{24}$/);
+  const bad = new FormData();
+  bad.append("files", new Blob(["x"], { type: "text/plain" }), "a.txt");
+  assert.equal((await fetch(`${BASE}/api/refs`, { method: "POST", body: bad })).status, 400, "사진만");
+  // 컨셉 키트
+  const kit = (await call("/api/blogs/blog_algokitchen/kit", "PUT", { refs: [kitRef], style: "파스텔 수채화" })).data;
+  assert.deepEqual(kit.refs, [kitRef]);
+  assert.equal(kit.on, true);
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  const id = posts[0].id;
+  // 한국어 프롬프트 → 영어로 저장
+  let b = (await call(`/api/posts/${id}`, "POST", { action: "image_prompt", index: 0, prompt: "작은 몸집에 큰 머리 토끼 건축가" })).data;
+  assert.equal(b.project.package.images[0].prompt, "A cute rabbit architect with a big head, small body");
+  assert.match(b.notice, /영어로/);
+  // ✏️ 프롬프트 수정
+  b = (await call(`/api/posts/${id}`, "POST", { action: "prompt_edit", index: 0, request: "배경을 밤 도시로" })).data;
+  assert.equal(b.project.package.images[0].prompt, "A cute rabbit architect at night in a neon city");
+  assert.match(b.notice, /밤 도시/);
+  // 🤖 모델 추천 (목록에 없는 모델은 뺌)
+  const rec = (await call(`/api/posts/${id}`, "POST", { action: "recommend_model", index: 0 })).data;
+  assert.deepEqual(rec.picks.map((p) => p.id), ["google:gemini-3.1-flash-image", "soul-standard"]);
+  // 이번만 레퍼런스: 만든 이미지에서 고르기
+  const own = await call("/api/refs", "POST", { url: `${BASE}/api/img/${kitRef}.jpg` });
+  assert.equal(own.data.ids[0], kitRef, "이 앱 이미지는 그대로 재사용");
+  const fd2 = new FormData();
+  fd2.append("files", new Blob([PIXEL], { type: "image/jpeg" }), "one.jpg");
+  const once = (await (await fetch(`${BASE}/api/refs`, { method: "POST", body: fd2 })).json()).ids[0];
+  b = (await call(`/api/posts/${id}`, "POST", { action: "image_refs", index: 0, refIds: [once, "nope"] })).data;
+  assert.deepEqual(b.project.package.images[0].refIds, [once]);
+  // Gemini: 키트 + 이번만 = 사진 2장 함께, 스타일도 영어로
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "google:gemini-3.1-flash-image" });
+  const g = (await mockLog()).find((l) => l.path.includes("gemini-3.1-flash-image:generateContent"));
+  const parts = g.body.contents[0].parts;
+  assert.equal(parts.filter((x) => x.inlineData).length, 2, "레퍼런스 2장");
+  assert.ok(!/[가-힣]/.test(parts.at(-1).text) && parts.at(-1).text.includes("reference"), parts.at(-1).text);
+  // ChatGPT: 레퍼런스가 있으면 편집 주소로
+  await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "openai:gpt-image-2" });
+  const e = (await mockLog()).find((l) => l.path === "/v1/images/edits");
+  assert.ok(e && e.body.images === 2, JSON.stringify(e?.body));
+  const est = (await call(`/api/posts/${id}`, "POST", { action: "estimate_image", index: 0, model: "openai:gpt-image-2" })).data;
+  assert.match(est.note, /레퍼런스 2장/);
+  // 키트 끄기 → 이번만 1장
+  await call(`/api/posts/${id}`, "POST", { action: "image_refs", index: 0, useKit: false });
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "google:gemini-3.1-flash-image" });
+  assert.equal((await mockLog()).find((l) => l.path.includes(":generateContent") && l.body.generationConfig?.responseModalities).body.contents[0].parts.filter((x) => x.inlineData).length, 1);
+  // Soul ID 만들기 (확인 없으면 거절)
+  assert.equal((await call("/api/souls", "POST", { name: "모찌", refIds: [kitRef] })).status, 400);
+  const souls = (await call("/api/souls", "POST", { name: "모찌", version: "v1", refIds: [kitRef], confirm: true })).data;
+  assert.equal(souls[0].id, "soul-mock-1");
+  const created = (await mockLog()).find((l) => l.path === "/v1/custom-references");
+  assert.equal(created.body.input_images[0].image_url, `https://app.example.test/api/img/${kitRef}.jpg`);
+  assert.equal((await call("/api/souls")).data[0].status, "completed", "학습 상태 새로고침");
+  // Higgsfield SOUL: 레퍼런스 주소 + Soul ID / Qwen: 편집 주소
+  await call(`/api/posts/${id}`, "POST", { action: "image_refs", index: 0, soulId: "soul-mock-1" });
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "soul-standard" });
+  const soul = (await mockLog()).find((l) => l.path === "/higgsfield-ai/soul/standard" && l.method === "POST");
+  assert.equal(soul.body.image_reference_url, `https://app.example.test/api/img/${once}.jpg`);
+  assert.equal(soul.body.custom_reference_id, "soul-mock-1");
+  await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "qwen-image-3" });
+  const qw = (await mockLog()).find((l) => l.path === "/alibaba/qwen-image-3/edit");
+  assert.deepEqual(qw.body.image_urls, [`https://app.example.test/api/img/${once}.jpg`]);
+  // 화면
+  const page = (await (await fetch(`${BASE}/posts/${id}`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["✏️ 프롬프트 수정", "🤖 모델 추천", "레퍼런스 · 컨셉", "블로그 컨셉 키트 쓰기", "레퍼런스 사진을 3장까지"]) assert.ok(page.includes(w), w);
+  const bp = (await (await fetch(`${BASE}/blogs/blog_algokitchen`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(bp.includes("이미지 컨셉 키트") && bp.includes("모찌"), "블로그 설정 키트");
+  const sp = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(sp.includes("내 캐릭터 (Higgsfield Soul ID)") && sp.includes("google:gemini-3.1-flash-image"), "설정: Soul ID · 이미지 모델 단가");
+  // 💰 Gemini 이미지 비용이 0원이 아니게 기록됨
+  const bal = (await call("/api/dashboard/balances")).data.find((x) => x.id === "google-image");
+  assert.ok(bal.used > 0.05, String(bal.used));
+  await call("/api/blogs/blog_algokitchen/kit", "PUT", { refs: [], style: "", on: true });
+});

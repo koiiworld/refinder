@@ -156,10 +156,33 @@ export async function makeCharacter(id: string) {
   const s = await getStudio(id);
   if (!s) throw new Error("프로젝트를 찾을 수 없습니다.");
   const style = STUDIO_STYLES.find((x) => x.id === s.options.style) ?? STUDIO_STYLES[1];
+  // 한국어로 고쳤으면 영어로 바꿔 저장한 뒤 그리기
+  const { toEnglishPrompt } = await import("./image-prompt");
+  const en = await toEnglishPrompt(s.character.prompt, id);
+  if (en.translated) s.character = { ...s.character, prompt: en.prompt };
   const prompt = `${s.character.prompt}. Full body character reference sheet, single character standing, plain light background, ${style.prompt}. No text.`;
   const imgId = await generateDirect({ modelId: s.options.imageModel, prompt, aspect: "9:16", projectId: id });
   await save(id, { character: { ...s.character, image: { id: imgId, url: `/api/img/${imgId}.jpg`, model: s.options.imageModel, status: "done" } } });
   return getStudio(id);
+}
+
+/** ✏️ 프롬프트 수정: 캐릭터(target='character') 또는 장면 n번의 그림 설명을 한국어 요청대로 고침 */
+export async function editStudioPrompt(id: string, target: "character" | number, request: string) {
+  const s = await getStudio(id);
+  if (!s) throw new Error("프로젝트를 찾을 수 없습니다.");
+  const { editPrompt } = await import("./image-prompt");
+  if (target === "character") {
+    const r = await editPrompt(s.character.prompt, request, id);
+    await save(id, { character: { ...s.character, prompt: r.prompt } });
+    return { studio: await getStudio(id), changed: r.changed };
+  }
+  const sc = s.scenes[target];
+  if (!sc) throw new Error("장면을 찾을 수 없습니다.");
+  const r = await editPrompt(sc.visual, request, id);
+  const scenes = s.scenes.slice();
+  scenes[target] = { ...sc, visual: r.prompt };
+  await save(id, { scenes });
+  return { studio: await getStudio(id), changed: r.changed };
 }
 
 /** ③ 장면 이미지 (버튼) — 캐릭터 이미지를 참고로 */
@@ -168,10 +191,13 @@ export async function makeSceneImage(id: string, index: number) {
   const sc = s?.scenes[index];
   if (!s || !sc) throw new Error("장면을 찾을 수 없습니다.");
   const style = STUDIO_STYLES.find((x) => x.id === s.options.style) ?? STUDIO_STYLES[1];
+  const { toEnglishPrompt } = await import("./image-prompt");
+  const en = await toEnglishPrompt(sc.visual, id);
+  if (en.translated) sc.visual = en.prompt;
   const ref = s.character.image?.id ? await getGeneratedImage(s.character.image.id) : null;
   const refs = ref ? [{ mime: ref.mime, data: Buffer.from(ref.data) }] : [];
   const prompt = `${refs.length ? "Use the attached image as the exact reference for the main character (same face, hair, outfit, colors, proportions). " : `Main character: ${s.character.prompt}. `}Scene: ${sc.visual}. ${style.prompt}. Vertical 9:16 composition. No text, no captions, no watermark.`;
-  const imgId = await generateDirect({ modelId: s.options.imageModel, prompt, aspect: "9:16", projectId: id, refs: s.options.imageModel.startsWith("google:") ? refs : [] });
+  const imgId = await generateDirect({ modelId: s.options.imageModel, prompt, aspect: "9:16", projectId: id, refs });
   const scenes = s.scenes.slice();
   scenes[index] = { ...sc, image: { id: imgId, url: `/api/img/${imgId}.jpg`, model: s.options.imageModel, status: "done" }, video: {} };
   await save(id, { scenes });

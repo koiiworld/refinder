@@ -17,7 +17,9 @@ http
   .createServer(async (req, res) => {
     let raw = "";
     for await (const c of req) raw += c;
-    const body = raw ? JSON.parse(raw) : {};
+    // 사진 파일과 함께 오는 요청(multipart)은 몇 장인지만 기록
+    const multipart = /multipart\/form-data/.test(req.headers["content-type"] ?? "");
+    const body = multipart ? { multipart: true, images: (raw.match(/name="image\[\]"/g) ?? []).length, prompt: (/name="prompt"\r\n\r\n([\s\S]*?)\r\n--/.exec(raw) ?? [])[1] ?? "" } : raw ? JSON.parse(raw) : {};
     const url = new URL(req.url, "http://x");
     log.push({ method: req.method, path: url.pathname, headers: req.headers, body });
 
@@ -200,11 +202,13 @@ http
     }
 
     // Higgsfield (이미지·영상)
-    if (/^\/(v1\/text2image|higgsfield-ai\/|higgsfield\/|wan\/|requests\/|alibaba\/|ideogram\/|z-image\/|recraft\/|xai\/|marketing-studio\/|estimate\/)/.test(url.pathname)) {
+    if (/^\/(v1\/text2image|v1\/custom-references|higgsfield-ai\/|higgsfield\/|wan\/|requests\/|alibaba\/|ideogram\/|z-image\/|recraft\/|xai\/|marketing-studio\/|estimate\/)/.test(url.pathname)) {
       if (req.headers.authorization !== "Key test-id:test-secret") return send(res, 401, { detail: "Invalid credentials" });
       if (url.pathname === "/v1/text2image/soul-styles") return send(res, 200, [{ id: "s1", name: "Mock style" }]);
+      if (url.pathname === "/v1/custom-references" && req.method === "POST") return send(res, 200, { id: "soul-mock-1", status: "queued" });
+      if (url.pathname.startsWith("/v1/custom-references/")) return send(res, 200, { id: url.pathname.split("/").pop(), status: "completed" });
       if (url.pathname.startsWith("/estimate/")) return send(res, 200, { type: "estimate", credits: "0.090", usd: url.pathname.includes("soul/standard") ? "0.188" : "0.006", discount: null });
-      if (req.method === "POST" && (["/higgsfield-ai/soul/standard", "/higgsfield-ai/soul/v2/standard", "/higgsfield-ai/soul/cinema", "/alibaba/qwen-image-3/text-to-image", "/ideogram/v4.0", "/z-image/turbo", "/wan/v2.6/image-to-video", "/xai/grok-imagine-image-2.0", "/higgsfield/ads-studio/v1.0"].includes(url.pathname) || /^\/(recraft|marketing-studio)\//.test(url.pathname))) {
+      if (req.method === "POST" && (["/higgsfield-ai/soul/standard", "/higgsfield-ai/soul/v2/standard", "/higgsfield-ai/soul/cinema", "/alibaba/qwen-image-3/text-to-image", "/alibaba/qwen-image-3/edit", "/ideogram/v4.0", "/z-image/turbo", "/wan/v2.6/image-to-video", "/xai/grok-imagine-image-2.0", "/higgsfield/ads-studio/v1.0"].includes(url.pathname) || /^\/(recraft|marketing-studio)\//.test(url.pathname))) {
         const id = "req" + (hfJobs.size + 1);
         hfJobs.set(id, { polls: 0, video: url.pathname.startsWith("/wan/"), body, path: url.pathname, idem: req.headers["idempotency-key"] });
         return send(res, 200, { status: "queued", request_id: id, status_url: `http://localhost:${PORT}/requests/${id}/status`, cancel_url: `http://localhost:${PORT}/requests/${id}/cancel` });
@@ -224,6 +228,11 @@ http
 
     // ── 텍스트 AI 3사: 시스템 프롬프트 내용으로 단계별 응답 ──
     const answer = (system, prompt) => {
+      if (system.includes("prompt writer for AI image generators")) {
+        if (prompt.includes("Pick the 3 best models")) return JSON.stringify({ picks: [{ id: "google:gemini-3.1-flash-image", reason: "레퍼런스를 잘 따라요" }, { id: "no-such-model", reason: "x" }, { id: "soul-standard", reason: "사람 사진에 강해요" }] });
+        if (prompt.includes("change request")) return JSON.stringify({ prompt: "A cute rabbit architect at night in a neon city", changed: "배경을 밤 도시로 바꿨어요" });
+        return JSON.stringify({ prompt: "A cute rabbit architect with a big head, small body" });
+      }
       if (system.includes("SEO 키워드 전문가")) return JSON.stringify({ keywords: [{ keyword: "김장 양념", reason: "김장철", season: "김장철" }, { keyword: "절임배추", reason: "수요 큼", season: "김장철" }, { keyword: "굴보쌈", reason: "제철", season: "" }] });
       if (system.includes("SEO 제목 전문가")) return JSON.stringify({ candidates: [{ title: "절임배추 20kg 김장 양념 황금비율", reason: "검색량 큰 연관어" }, { title: "초보 김장 가이드", reason: "입문자" }], best: 0, bestReason: "메인 키워드 앞배치", subKeywords: ["김장양념", "절임배추20kg"] });
       if (system.includes("해시태그 담당자")) return JSON.stringify({ hashtags: ["#김장", "절임배추", "김장 양념"] });
@@ -258,6 +267,11 @@ http
       if (req.headers.authorization !== "Bearer test-openai") return send(res, 401, { error: { message: "bad key" } });
       if (!["1024x1024", "1536x1024", "1024x1536"].includes(body.size)) return send(res, 400, { error: { message: "bad size" } });
       return send(res, 200, { data: [{ b64_json: PIXEL }], usage: { input_tokens: 20, output_tokens: 400 } });
+    }
+    if (url.pathname === "/v1/images/edits") {
+      if (req.headers.authorization !== "Bearer test-openai") return send(res, 401, { error: { message: "bad key" } });
+      if (!body.images) return send(res, 400, { error: { message: "image required" } });
+      return send(res, 200, { data: [{ b64_json: PIXEL }], usage: { input_tokens: 600, output_tokens: 400 } });
     }
     const gimg = url.pathname.match(/^\/v1beta\/models\/(.+):generateContent$/);
     if (gimg && body.generationConfig?.responseModalities?.includes("IMAGE")) {

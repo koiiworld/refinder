@@ -15,6 +15,8 @@ export default function StudioEditor({ initial, styles, imageModels }: { initial
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [feedback, setFeedback] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [charReq, setCharReq] = useState("");
+  const [recs, setRecs] = useState<{ id: string; reason: string }[] | null>(null);
   const [est, setEst] = useState<{ perClip: number | null; total: number | null; count: number } | null>(null);
 
   const running = s.scenes.some(CLIP_RUNNING) || s.status === "rendering";
@@ -38,9 +40,10 @@ export default function StudioEditor({ initial, styles, imageModels }: { initial
     setMsg(null);
     try {
       if (dirty) await saveEdits(true);
-      const x = await api<StudioProject>(`/api/studio/${s.id}`, "POST", body);
+      const x = await api<StudioProject & { notice?: string }>(`/api/studio/${s.id}`, "POST", body);
       setS(x);
-      if (okText) setMsg({ ok: true, text: okText });
+      if (x.notice) setMsg({ ok: true, text: x.notice });
+      else if (okText) setMsg({ ok: true, text: okText });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     }
@@ -110,7 +113,39 @@ export default function StudioEditor({ initial, styles, imageModels }: { initial
                 {imageModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
               <button className="btn btn-sm btn-primary" disabled={!!busy} onClick={() => act("char", { action: "character" }, "캐릭터를 만들었어요.")}>{busy === "char" ? <><span className="spinner" /> 그리는 중…</> : s.character.image?.url ? "🎨 다시 그리기" : "🎨 캐릭터 만들기"}</button>
+              <button
+                className="btn btn-sm"
+                disabled={!!busy}
+                title="프롬프트를 보고 어울리는 모델 추천 (무료 Gemini)"
+                onClick={async () => {
+                  setBusy("rec");
+                  try {
+                    setRecs((await api<{ picks: { id: string; reason: string }[] }>(`/api/studio/${s.id}`, "POST", { action: "recommend_model", target: "character" })).picks);
+                  } catch (e) {
+                    setMsg({ ok: false, text: (e as Error).message });
+                  }
+                  setBusy("");
+                }}
+              >
+                {busy === "rec" ? <span className="spinner" /> : "🤖 모델 추천"}
+              </button>
             </div>
+            {s.character.image?.url && <span className="tiny muted">지금 그림: {imageModels.find((m) => m.id === s.character.image?.model)?.label ?? s.character.image?.model}{s.character.image?.model === s.options.imageModel ? " · 같은 모델·같은 프롬프트면 비슷하게 나와요. ✏️ 프롬프트 수정으로 바꿔 보세요." : ""}</span>}
+            {recs && (
+              <div className="stack" style={{ gap: 4 }}>
+                {recs.map((r, k) => (
+                  <button key={r.id} type="button" className={`rec-pick${s.options.imageModel === r.id ? " on" : ""}`} onClick={() => { setS({ ...s, options: { ...s.options, imageModel: r.id } }); setDirty(true); }}>
+                    <b className="small">{k + 1}. {imageModels.find((m) => m.id === r.id)?.label ?? r.id}</b>
+                    <span className="tiny">{r.reason}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="row" style={{ flexWrap: "nowrap", gap: 6 }}>
+              <input className="input" value={charReq} placeholder="✏️ 프롬프트 수정: 예) 더 통통하게, 모자 씌우기, 배경 빼기 (한국어 OK)" onChange={(e) => setCharReq(e.target.value)} aria-label="캐릭터 프롬프트 수정 요청" />
+              <button className="btn btn-sm" disabled={!!busy || !charReq.trim()} onClick={async () => { await act("cedit", { action: "prompt_edit", target: "character", request: charReq }); setCharReq(""); }}>{busy === "cedit" ? <span className="spinner" /> : "고치기"}</button>
+            </div>
+            <span className="tiny muted">프롬프트를 한국어로 직접 고쳐도 돼요. 그릴 때 영어로 바꿔서 보내요.</span>
           </div>
         </div>
       </section>
@@ -149,6 +184,7 @@ export default function StudioEditor({ initial, styles, imageModels }: { initial
               </details>
               {sc.video?.error && !sc.video.url && <div className="tiny" style={{ color: "var(--bad)" }}>{sc.video.error}</div>}
               <div className="row" style={{ gap: 4 }}>
+                <button className="btn btn-sm btn-ghost" disabled={!!busy} title="이 장면 그림 설명을 한국어로 고쳐 달라고 하기" onClick={() => { const r = window.prompt("이 장면을 어떻게 바꿀까요? (예: 밤으로, 더 가까이)"); if (r?.trim()) void act(`edit${i}`, { action: "prompt_edit", index: i, request: r }); }}>{busy === `edit${i}` ? <span className="spinner" /> : "✏️"}</button>
                 <button className="btn btn-sm" disabled={!!busy} onClick={() => act(`img${i}`, { action: "scene_image", index: i })}>{busy === `img${i}` ? <span className="spinner" /> : sc.image?.url ? "🖼 다시" : "🖼 이미지"}</button>
                 <button className="btn btn-sm" disabled={!!busy || !sc.image?.url || CLIP_RUNNING(sc)} onClick={() => act(`clip${i}`, { action: "scene_clip", index: i })}>{busy === `clip${i}` ? <span className="spinner" /> : sc.video?.url ? "🎞 다시" : "🎞 영상"}</button>
               </div>

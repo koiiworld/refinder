@@ -5,6 +5,8 @@ import { connectionStatus } from "@/lib/ai/providers";
 import BlogForm from "@/components/BlogForm";
 import StyleSamples from "@/components/StyleSamples";
 import BackButton from "@/components/BackButton";
+import KitCard from "@/components/KitCard";
+import { getKit, listSouls } from "@/lib/image-refs";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,7 @@ export default async function BlogDetail({ params }: { params: Promise<{ id: str
       <div className="stack" style={{ gap: 16 }}>
         <StyleSamples blogId={blog.id} />
         <BlogForm blog={JSON.parse(JSON.stringify(blog))} connections={connections} />
+        <KitCard blogId={blog.id} initial={await getKit(blog.id)} souls={(await listSouls().catch(() => [])).filter((x) => x.status === "completed").map((x) => ({ id: x.id, name: x.name, version: x.version }))} />
       </div>
     </div>
   );

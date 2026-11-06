@@ -7,11 +7,16 @@ import { createMediaJob, estimateMedia } from "@/lib/media";
 import { HF_MODELS, HiggsfieldError } from "@/lib/higgsfield";
 import { generateDirect, ImageGenError } from "@/lib/image-gen";
 import { imageModel } from "@/lib/image-models";
+import { loadRefs, prepareImage } from "@/lib/image-refs";
+import { editPrompt, hasHangul, recommendModels, toEnglishPrompt } from "@/lib/image-prompt";
+import { hfConnected } from "@/lib/higgsfield";
 import { getProject } from "@/lib/repo";
 import { moveToTrash } from "@/lib/trash";
 import { checkImageUrl, findOfficialImages } from "@/lib/official-images";
 import type { PostExtras } from "@/lib/posts-types";
 import { body, Ctx, fail, handle, ok } from "@/lib/api";
+
+const fmtUsdKrw = (usd: number) => `$${usd.toFixed(3)} (₩${Math.round(usd * 1500).toLocaleString("ko-KR")})`;
 
 export async function GET(_req: Request, { params }: Ctx) {
   return handle(async () => {
@@ -24,7 +29,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; date?: string; outline?: Partial<import("@/lib/posts-types").PostOutline> }>(req);
+    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; refIds?: string[]; useKit?: boolean; soulId?: string | null; request?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; date?: string; outline?: Partial<import("@/lib/posts-types").PostOutline> }>(req);
     switch (b.action) {
       case "rerun":
         if (!b.step) throw new WorkflowError("다시 실행할 단계를 고르세요.");
@@ -58,19 +63,67 @@ export async function POST(req: Request, { params }: Ctx) {
       case "hashtags":
         await setHashtags(id, b.hashtags ?? []);
         break;
-      case "image_prompt":
-        await setImage(id, Number(b.index), { ...(b.prompt !== undefined ? { prompt: b.prompt } : {}), ...(b.aspect ? { aspect: b.aspect } : {}) });
+      case "image_prompt": {
+        // 한국어로 적었으면 영어로 바꿔 저장 (이미지 AI는 영어를 더 잘 따름)
+        let prompt = b.prompt;
+        let translated = false;
+        if (prompt !== undefined && hasHangul(prompt)) {
+          const en = await toEnglishPrompt(prompt, id);
+          prompt = en.prompt;
+          translated = en.translated;
+        }
+        await setImage(id, Number(b.index), { ...(prompt !== undefined ? { prompt } : {}), ...(b.aspect ? { aspect: b.aspect } : {}) });
+        if (translated) return ok({ ...(await postBundle(id)), notice: "한국어 프롬프트를 영어로 바꿔 저장했어요." });
         break;
+      }
+      case "image_refs":
+        // 🎨 이번만 레퍼런스 · 컨셉 키트 쓰기 · Soul ID
+        await setImage(id, Number(b.index), {
+          ...(b.refIds !== undefined ? { refIds: (b.refIds ?? []).filter((x) => /^img_[0-9a-f]{24}$/.test(x)).slice(0, 5) } : {}),
+          ...(b.useKit !== undefined ? { useKit: !!b.useKit } : {}),
+          ...(b.soulId !== undefined ? { soulId: b.soulId } : {}),
+        });
+        break;
+      case "prompt_edit": {
+        // ✏️ 프롬프트 수정: 한국어 요청 → 고친 영어 프롬프트 저장 (이미지는 만들지 않음)
+        const p = await getProject(id);
+        const im = (p?.package as unknown as PostExtras | null)?.images?.[Number(b.index)];
+        if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
+        try {
+          const r = await editPrompt(im.prompt, String(b.request ?? ""), id);
+          await setImage(id, Number(b.index), { prompt: r.prompt });
+          return ok({ ...(await postBundle(id)), notice: r.changed ? `프롬프트를 고쳤어요: ${r.changed}` : "프롬프트를 고쳤어요." });
+        } catch (e) {
+          return fail((e as Error).message, 400);
+        }
+      }
+      case "recommend_model": {
+        // 🤖 모델 추천 (무료 Gemini, 이미지는 만들지 않음)
+        const p = await getProject(id);
+        const im = (p?.package as unknown as PostExtras | null)?.images?.[Number(b.index)];
+        if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
+        const { resolveRefs } = await import("@/lib/image-refs");
+        const r = await resolveRefs({ blogId: p?.blog_id, refIds: im.refIds, useKit: im.useKit });
+        const providers = { higgsfield: hfConnected(), openai: !!process.env.OPENAI_API_KEY?.trim(), google: !!process.env.GOOGLE_AI_API_KEY?.trim() };
+        try {
+          return ok({ picks: await recommendModels({ prompt: im.prompt, refs: r.refIds.length, providers, projectId: id }) });
+        } catch (e) {
+          return fail((e as Error).message, 400);
+        }
+      }
       case "generate_image": {
         // ⑤ 사용자가 누를 때만 Higgsfield 생성 (크레딧 차감)
         const p = await getProject(id);
         const im = (p?.package as unknown as PostExtras | null)?.images?.[Number(b.index)];
         if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
         const chosen = String(b.model ?? im.model ?? "soul-standard");
+        // 한국어 → 영어, 컨셉 키트·레퍼런스·Soul ID·스타일 문구
+        const prep = await prepareImage({ modelId: chosen, prompt: im.prompt, blogId: p?.blog_id, refIds: im.refIds, useKit: im.useKit, soulId: im.soulId, projectId: id });
+        if (prep.translated) await setImage(id, Number(b.index), { prompt: prep.basePrompt });
         // ChatGPT·Gemini: 바로 만들어 DB에 저장하고 이 사이트 주소로 보여 줌
         if (imageModel(chosen) && imageModel(chosen)!.provider !== "higgsfield") {
           try {
-            const imgId = await generateDirect({ modelId: chosen, prompt: im.prompt, aspect: im.aspect, projectId: id, blogId: p?.blog_id });
+            const imgId = await generateDirect({ modelId: chosen, prompt: prep.prompt, aspect: im.aspect, projectId: id, blogId: p?.blog_id, refs: await loadRefs(prep.refIds) });
             const h = req.headers;
             const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
             await setImage(id, Number(b.index), { mediaJobId: null, url: `${origin}/api/img/${imgId}.jpg`, inserted: false, model: chosen });
@@ -82,7 +135,7 @@ export async function POST(req: Request, { params }: Ctx) {
         }
         try {
           const model = chosen in HF_MODELS && HF_MODELS[chosen as keyof typeof HF_MODELS].media === "image" ? chosen : "soul-standard";
-          const job = await createMediaJob({ model, projectId: id, prompt: im.prompt, aspect_ratio: im.aspect, resolution: "1080p" });
+          const job = await createMediaJob({ model, projectId: id, prompt: prep.prompt, aspect_ratio: im.aspect, resolution: "1080p", ref_urls: prep.refUrls, soul_id: prep.soulId });
           await setImage(id, Number(b.index), { mediaJobId: job.id, url: null, inserted: false, model });
         } catch (e) {
           if (e instanceof HiggsfieldError) return fail(e.message, 502);
@@ -131,9 +184,18 @@ export async function POST(req: Request, { params }: Ctx) {
         const p = await getProject(id);
         const im = (p?.package as unknown as PostExtras | null)?.images?.[Number(b.index)];
         if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
-        if (imageModel(String(b.model)) && imageModel(String(b.model))!.provider !== "higgsfield") return ok({ usd: null, credits: null, note: "만든 뒤 각 사 사용량 페이지에서 확인 (토큰 과금)" });
+        const { resolveRefs, publicBase, refUrl } = await import("@/lib/image-refs");
+        const info = imageModel(String(b.model));
+        const rr = await resolveRefs({ blogId: p?.blog_id, refIds: im.refIds, useKit: im.useKit, soulId: im.soulId });
+        const nRefs = Math.min(rr.refIds.length, info?.refs ?? 0);
+        if (info && info.provider !== "higgsfield") {
+          // 레퍼런스 1장: Gemini 약 $0.001, ChatGPT 약 $0.016 (각 사 가격표 기준 추정)
+          const per = info.provider === "google" ? 0.001 : 0.016;
+          return ok({ usd: null, credits: null, refs: nRefs, note: `만든 뒤 각 사 사용량 페이지에서 확인 (토큰 과금)${nRefs ? ` · 레퍼런스 ${nRefs}장 최대 약 ${fmtUsdKrw(per * nRefs)} 추가` : ""}` });
+        }
+        const base = nRefs ? await publicBase() : null;
         try {
-          return ok(await estimateMedia({ model: String(b.model ?? "soul-standard"), prompt: im.prompt, aspect_ratio: im.aspect, resolution: "1080p" }));
+          return ok({ ...(await estimateMedia({ model: String(b.model ?? "soul-standard"), prompt: im.prompt, aspect_ratio: im.aspect, resolution: "1080p", ref_urls: base ? rr.refIds.slice(0, nRefs).map((x) => refUrl(base, x)) : [], soul_id: info?.soul ? rr.soulId : null })), refs: base ? nRefs : 0 });
         } catch (e) {
           if (e instanceof HiggsfieldError) return fail(e.message, 502);
           throw e;

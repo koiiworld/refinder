@@ -49,6 +49,12 @@ export interface PostImage {
   /** official: 공식 페이지에서 찾은 이미지 후보 */
   candidates?: string[];
   mediaJobId?: string | null;
+  /** 🎨 이번만 레퍼런스 사진 (이미지 아이디) */
+  refIds?: string[];
+  /** 블로그 컨셉 키트 같이 쓰기 (기본 켬) */
+  useKit?: boolean;
+  /** Higgsfield Soul ID ('' = 안 씀, 없으면 키트 기본) */
+  soulId?: string | null;
   /** 마지막으로 고른 Higgsfield 모델 */
   model?: string;
   url?: string | null;

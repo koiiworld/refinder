@@ -25,8 +25,23 @@ export const MODEL_CATALOG: Record<"openai" | "anthropic" | "google", CatalogMod
   ],
 };
 
+/** 이미지 모델 단가 (USD / 100만 토큰, 각 사 가격표 2026-11 확인) — 이미지 출력 토큰이 비용 대부분 */
+export const IMAGE_PRICING: Record<string, { input: number; output: number }> = {
+  "google:gemini-3.1-flash-image": { input: 0.5, output: 60 },
+  "google:gemini-3-pro-image": { input: 2, output: 120 },
+  "google:gemini-3.1-flash-lite-image": { input: 0.25, output: 30 },
+  "google:gemini-2.5-flash-image": { input: 0.3, output: 30 },
+  "openai:gpt-image-2.6-flare": { input: 5, output: 30 },
+  "openai:gpt-image-2.6-sunburst": { input: 5, output: 30 },
+  "openai:gpt-image-2.5-flare": { input: 5, output: 30 },
+  "openai:gpt-image-2.5-sunburst": { input: 5, output: 30 },
+  "openai:gpt-image-2": { input: 5, output: 30 },
+  "openai:gpt-image-1.5": { input: 5, output: 32 },
+  "openai:gpt-image-1-mini": { input: 2, output: 8 },
+};
+
 export function catalogPricing() {
-  const out: Record<string, { input: number; output: number }> = {};
+  const out: Record<string, { input: number; output: number }> = { ...IMAGE_PRICING };
   for (const [provider, list] of Object.entries(MODEL_CATALOG)) for (const m of list) out[`${provider}:${m.id}`] = { input: m.input, output: m.output };
   return out;
 }

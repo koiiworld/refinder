@@ -28,15 +28,21 @@ export function buildBody(model: HfModelId, i: Record<string, unknown>) {
   const prompt = String(i.prompt ?? "").trim();
   if (!prompt) throw new WorkflowError("프롬프트가 비어 있습니다.");
   const aspect = ASPECTS.includes(String(i.aspect_ratio)) ? String(i.aspect_ratio) : "1:1";
+  // 레퍼런스(공개 https 주소)·Soul ID — 모델이 받는 만큼만 (docs.higgsfield.ai, 2026-11 확인)
+  const refs = (Array.isArray(i.ref_urls) ? (i.ref_urls as string[]) : []).filter((u) => /^https:\/\//.test(u));
+  const soul = typeof i.soul_id === "string" && i.soul_id ? i.soul_id : null;
   if (model === "soul-standard" || model === "soul-v2" || model === "soul-cinema") {
     const resolution = i.resolution === "720p" ? "720p" : "1080p";
-    return { prompt, aspect_ratio: aspect, resolution, batch_size: 1, enhance_prompt: false };
+    const body: Record<string, unknown> = { prompt, aspect_ratio: aspect, resolution, batch_size: 1, enhance_prompt: false };
+    if (model === "soul-standard" && refs[0]) body.image_reference_url = refs[0];
+    if (soul) body.custom_reference_id = soul;
+    return body;
   }
-  if (model === "qwen-image-3") return { prompt, aspect_ratio: aspect, resolution: "2k", prompt_extend: false };
+  if (model === "qwen-image-3") return refs.length ? { prompt, image_urls: refs.slice(0, 3), aspect_ratio: aspect, resolution: "2k", prompt_extend: false } : { prompt, aspect_ratio: aspect, resolution: "2k", prompt_extend: false };
   if (model === "z-image-turbo") return { prompt: prompt.slice(0, 800), aspect_ratio: aspect, resolution: "2k", prompt_extend: false };
-  if (model === "ideogram-4") return { prompt: prompt.slice(0, 2048), aspect_ratio: aspect, rendering_speed: "DEFAULT" };
+  if (model === "ideogram-4") return { prompt: prompt.slice(0, 2048), aspect_ratio: aspect, rendering_speed: "DEFAULT", ...(refs[0] ? { image_url: refs[0] } : {}) };
   if (model.startsWith("recraft-")) return { prompt: prompt.slice(0, 10000), aspect_ratio: aspect, resolution: model.endsWith("-pro") ? "2k" : "1k", output_format: "jpg" };
-  if (model === "grok-image-2") return { prompt, aspect_ratio: aspect, resolution: "2k", quality: "medium" };
+  if (model === "grok-image-2") return { prompt, aspect_ratio: aspect, resolution: "2k", quality: "medium", ...(refs.length ? { image_urls: refs.slice(0, 10) } : {}) };
   if (model.startsWith("marketing-image")) return { prompt: prompt.slice(0, 5000), aspect_ratio: aspect, resolution: "2k", quality: "high", enhance_prompt: false };
   if (model === "ads-studio") return { prompt: prompt.slice(0, 8000), aspect_ratio: aspect, batch_size: 1, language: "ko" };
   // wan-2.6-i2v
@@ -49,11 +55,18 @@ export function buildBody(model: HfModelId, i: Record<string, unknown>) {
   return body;
 }
 
+/** 레퍼런스가 있으면 편집 주소를 쓰는 모델 (Qwen Image 3) */
+export function pathFor(model: HfModelId, body: Record<string, unknown>) {
+  if (model === "qwen-image-3" && Array.isArray(body.image_urls)) return "alibaba/qwen-image-3/edit";
+  return HF_MODELS[model].path;
+}
+
 /** 예상 비용 (생성하지 않음) */
 export async function estimateMedia(input: { model: string } & Record<string, unknown>) {
   if (!(input.model in HF_MODELS)) throw new WorkflowError("지원하지 않는 모델입니다.");
   const model = input.model as HfModelId;
-  return hfEstimate(HF_MODELS[model].path, buildBody(model, input));
+  const body = buildBody(model, input);
+  return hfEstimate(pathFor(model, body), body);
 }
 
 export async function createMediaJob(input: { model: string; promptId?: string | null; projectId?: string | null } & Record<string, unknown>): Promise<MediaJob> {
@@ -64,8 +77,9 @@ export async function createMediaJob(input: { model: string; promptId?: string |
   const id = newId("mj_");
   // 같은 작업을 두 번 청구하지 않도록 작업 ID를 Idempotency-Key 로 사용
   // 잔액 계산용 예상 비용 (실패해도 생성은 진행)
-  const est = await hfEstimate(def.path, body).catch(() => ({ usd: null as number | null }));
-  const r = await hfSubmit(def.path, body, id);
+  const path = pathFor(model, body);
+  const est = await hfEstimate(path, body).catch(() => ({ usd: null as number | null }));
+  const r = await hfSubmit(path, body, id);
   await q(
     `INSERT INTO media_jobs (id, prompt_id, project_id, provider, model, media, request_id, status, status_url, cancel_url, input, cost_usd)
      VALUES ($1,NULL,$2,'higgsfield',$3,$4,$5,$6,$7,$8,$9,$10)`,

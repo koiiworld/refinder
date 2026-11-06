@@ -12,6 +12,7 @@ import { BlogTag, fmtDate, fmtUsd, Steps } from "@/components/ui";
 import DocEditor from "@/components/DocEditor";
 import BackButton from "@/components/BackButton";
 import { IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel } from "@/lib/image-models";
+import RefPicker from "@/components/RefPicker";
 
 type Review = {
   summary: string;
@@ -27,7 +28,10 @@ type Review = {
   imagesSeen?: number;
 };
 
-export default function PostView({ initial, higgsfield }: { initial: PostBundle; higgsfield: boolean }) {
+type KitInfo = { refs: string[]; style: string; soulId: string | null; on: boolean };
+type SoulInfo = { id: string; name: string; version: string };
+
+export default function PostView({ initial, higgsfield, kit, souls = [] }: { initial: PostBundle; higgsfield: boolean; kit?: KitInfo; souls?: SoulInfo[] }) {
   const router = useRouter();
   const [b, setB] = useState<PostBundle>(initial);
   const [toast, setToast] = useToast();
@@ -66,8 +70,10 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
 
   async function act(payload: Record<string, unknown>, msg?: string) {
     try {
-      setB(await api<PostBundle>(`/api/posts/${p.id}`, "POST", payload));
-      if (msg) setToast(msg);
+      const r = await api<PostBundle & { notice?: string }>(`/api/posts/${p.id}`, "POST", payload);
+      setB(r);
+      if (r.notice) setToast(r.notice);
+      else if (msg) setToast(msg);
       return true;
     } catch (e) {
       setToast((e as Error).message);
@@ -186,7 +192,7 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
                   ) : im.kind === "official" ? (
                     <OfficialImageCard index={i} im={im} disabled={running} act={act} />
                   ) : (
-                    <ImageCard projectId={p.id} index={i} im={im} providers={imageProviders} disabled={running} act={act} copy={copy} />
+                    <ImageCard projectId={p.id} blogId={p.blog_id} index={i} im={im} providers={imageProviders} disabled={running} act={act} copy={copy} kit={kit} souls={souls} others={extras.images.flatMap((x, k) => (k !== i && x.url ? [{ url: x.url, label: `이미지 ${k + 1}` }] : []))} />
                   )}
                 </div>
               ))}
@@ -382,7 +388,14 @@ function Rewrite({ onRun }: { onRun: (feedback: string) => void }) {
   );
 }
 
-function ImageCard({ projectId, index, im, providers, disabled, act, copy }: { projectId: string; index: number; im: PostExtras["images"][number]; providers: Record<string, boolean>; disabled: boolean; act: (p: Record<string, unknown>, m?: string) => Promise<boolean>; copy: (t: string, w: string) => void }) {
+function ImageCard({ projectId, blogId, index, im, providers, disabled, act, copy, kit, souls, others }: { projectId: string; blogId: string; index: number; im: PostExtras["images"][number]; providers: Record<string, boolean>; disabled: boolean; act: (p: Record<string, unknown>, m?: string) => Promise<boolean>; copy: (t: string, w: string) => void; kit?: KitInfo; souls: SoulInfo[]; others: { url: string; label: string }[] }) {
+  const [editing, setEditing] = useState(false);
+  const [request, setRequest] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [recs, setRecs] = useState<{ id: string; reason: string }[] | null>(null);
+  const [recBusy, setRecBusy] = useState(false);
+  const kitHas = !!kit && (kit.refs.length > 0 || !!kit.style.trim() || !!kit.soulId);
+  const useKit = im.useKit !== false;
   const [prompt, setPrompt] = useState(im.prompt);
   useEffect(() => setPrompt(im.prompt), [im.prompt]);
   const [making, setMaking] = useState(false);
@@ -400,18 +413,18 @@ function ImageCard({ projectId, index, im, providers, disabled, act, copy }: { p
     return usable[0]?.id ?? "soul-standard";
   });
   const info = imageModel(model);
-  const [price, setPrice] = useState<{ model: string; aspect: string; usd: number | null; note?: string } | null>(null);
+  const [price, setPrice] = useState<{ model: string; aspect: string; usd: number | null; note?: string; refs?: number } | null>(null);
   useEffect(() => {
     if (!usable.length) return;
     let alive = true;
-    api<{ usd: number | null; note?: string }>(`/api/posts/${projectId}`, "POST", { action: "estimate_image", index, model })
-      .then((r) => alive && setPrice({ model, aspect: im.aspect, usd: r.usd, note: r.note }))
+    api<{ usd: number | null; note?: string; refs?: number }>(`/api/posts/${projectId}`, "POST", { action: "estimate_image", index, model })
+      .then((r) => alive && setPrice({ model, aspect: im.aspect, usd: r.usd, note: r.note, refs: r.refs }))
       .catch(() => alive && setPrice({ model, aspect: im.aspect, usd: null }));
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, im.aspect, index, projectId]);
+  }, [model, im.aspect, index, projectId, (im.refIds ?? []).join(), im.useKit, im.soulId]);
   const pickModel = (m: string) => {
     setModel(m);
     try {
@@ -440,9 +453,46 @@ function ImageCard({ projectId, index, im, providers, disabled, act, copy }: { p
         </div>
       </div>
       <textarea className="textarea mono" style={{ minHeight: 64, fontSize: 12 }} value={prompt} disabled={disabled || generating} onChange={(e) => setPrompt(e.target.value)} aria-label="이미지 프롬프트" />
+      <span className="tiny muted">한국어로 적어도 돼요. 저장하거나 만들 때 영어로 바꿔서 보내요.</span>
+      {editing && (
+        <div className="row" style={{ flexWrap: "nowrap", gap: 6 }}>
+          <input className="input" value={request} autoFocus placeholder="어떻게 바꿀까요? 예: 배경을 밤 도시로, 더 귀엽게, 글자 빼기" onChange={(e) => setRequest(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && request.trim() && document.getElementById(`pe-${index}`)?.click()} aria-label="프롬프트 수정 요청" />
+          <button
+            id={`pe-${index}`}
+            className="btn btn-sm btn-primary"
+            disabled={editBusy || !request.trim()}
+            onClick={async () => {
+              setEditBusy(true);
+              if (await act({ action: "prompt_edit", index, request })) { setRequest(""); setEditing(false); }
+              setEditBusy(false);
+            }}
+          >
+            {editBusy ? <span className="spinner" /> : "고치기"}
+          </button>
+        </div>
+      )}
       <div className="row">
         {prompt !== im.prompt && <button className="btn btn-sm" onClick={() => act({ action: "image_prompt", index, prompt }, "프롬프트를 저장했습니다.")}>프롬프트 저장</button>}
+        <button className="btn btn-sm" disabled={disabled || generating || prompt !== im.prompt} onClick={() => setEditing(!editing)} title="한국어로 바꿀 점을 적으면 AI가 프롬프트를 고쳐요 (무료 Gemini)">✏️ 프롬프트 수정</button>
         <button className="btn btn-sm" onClick={() => copy(prompt, "프롬프트")}>프롬프트 복사</button>
+        {usable.length > 0 && (
+          <button
+            className="btn btn-sm"
+            disabled={recBusy || prompt !== im.prompt}
+            title="프롬프트·레퍼런스를 보고 연결된 모델 중 3개 추천 (무료 Gemini)"
+            onClick={async () => {
+              setRecBusy(true);
+              try {
+                setRecs((await api<{ picks: { id: string; reason: string }[] }>(`/api/posts/${projectId}`, "POST", { action: "recommend_model", index })).picks);
+              } catch {
+                setRecs([]);
+              }
+              setRecBusy(false);
+            }}
+          >
+            {recBusy ? <span className="spinner" /> : "🤖 모델 추천"}
+          </button>
+        )}
         {usable.length > 0 && (
           <select className="select" style={{ width: 270, maxWidth: "100%" }} value={model} disabled={disabled || generating} onChange={(e) => pickModel(e.target.value)} aria-label="이미지 모델">
             {(["higgsfield", "openai", "google"] as const).map((pv) => {
@@ -464,9 +514,49 @@ function ImageCard({ projectId, index, im, providers, disabled, act, copy }: { p
         )}
         {im.url && <button className="btn btn-sm btn-ok" disabled={disabled || generating} onClick={() => act({ action: "insert_image", index }, "본문에 넣었습니다.")}>{im.inserted ? "다시 넣기" : "본문에 넣기"}</button>}
       </div>
+      {recs && (
+        <div className="stack" style={{ gap: 4 }}>
+          {!recs.length && <span className="tiny muted">추천을 받지 못했어요.</span>}
+          {recs.map((r, k) => {
+            const m = imageModel(r.id);
+            return (
+              <button key={r.id} type="button" className={`rec-pick${model === r.id ? " on" : ""}`} onClick={() => pickModel(r.id)}>
+                <b className="small">{k + 1}. {m?.label ?? r.id}</b> <span className="tiny muted">{m ? IMAGE_PROVIDER_NAMES[m.provider] : ""}</span>
+                <span className="tiny">{r.reason}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <details className="ref-box" open={!!(im.refIds?.length || (kitHas && useKit))}>
+        <summary className="small strong">🎨 레퍼런스 · 컨셉 {im.refIds?.length || (kitHas && useKit) ? `(${(im.refIds?.length ?? 0) + (kitHas && useKit ? kit!.refs.length : 0)}장)` : ""}</summary>
+        <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+          <span className="tiny muted">{info ? (info.refs ? `이 모델은 레퍼런스 사진을 ${info.refs}장까지 써요.` : "이 모델은 레퍼런스 사진을 못 써요 (스타일 문구만 반영). 🤖 모델 추천을 눌러 보세요.") : ""}</span>
+          {kitHas ? (
+            <label className="row small" style={{ gap: 6 }}>
+              <input type="checkbox" checked={useKit} disabled={disabled || generating} onChange={(e) => act({ action: "image_refs", index, useKit: e.target.checked })} />
+              블로그 컨셉 키트 쓰기 <span className="tiny muted">(사진 {kit!.refs.length}장{kit!.style.trim() ? ` · 스타일: ${kit!.style.slice(0, 40)}` : ""})</span>
+            </label>
+          ) : (
+            <a className="tiny" href={`/blogs/${blogId}#kit`} style={{ color: "var(--accent)" }}>블로그 설정에서 컨셉 키트 만들기 → 매번 같은 그림체로</a>
+          )}
+          <RefPicker ids={im.refIds ?? []} max={5} disabled={disabled || generating} candidates={others} onChange={async (ids) => { await act({ action: "image_refs", index, refIds: ids }); }} />
+          {info?.soul && (
+            <label className="row small" style={{ gap: 6 }}>
+              내 캐릭터(Soul ID)
+              <select className="select" style={{ maxWidth: 220 }} value={im.soulId === "" ? "__none" : im.soulId ?? "__kit"} disabled={disabled || generating} onChange={(e) => act({ action: "image_refs", index, soulId: e.target.value === "__kit" ? null : e.target.value === "__none" ? "" : e.target.value })}>
+                <option value="__kit">키트 기본값{kit?.soulId ? "" : " (없음)"}</option>
+                <option value="__none">안 씀</option>
+                {souls.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.version})</option>)}
+              </select>
+              {!souls.length && <a className="tiny" href="/settings#souls" style={{ color: "var(--accent)" }}>캐릭터 만들기</a>}
+            </label>
+          )}
+        </div>
+      </details>
       {usable.length > 0 && (
         <div className="tiny muted">
-          {price?.model === model ? (price.usd != null ? `예상 비용 ${fmtUsd(price.usd)} / 1장 (Higgsfield 견적, ${im.aspect})` : price.note ?? "예상 비용을 불러오지 못했습니다") : "예상 비용 확인 중…"}
+          {price?.model === model ? (price.usd != null ? `예상 비용 ${fmtUsd(price.usd)} / 1장 (Higgsfield 견적, ${im.aspect}${price.refs ? ` · 레퍼런스 ${price.refs}장 포함` : ""})` : price.note ?? "예상 비용을 불러오지 못했습니다") : "예상 비용 확인 중…"}
           {im.url && im.model && ` · 지금 이미지: ${imageModel(im.model)?.label ?? im.model}`}
         </div>
       )}

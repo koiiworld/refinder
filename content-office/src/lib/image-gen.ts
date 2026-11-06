@@ -20,15 +20,29 @@ function openaiSize(aspect: string) {
 }
 const GEMINI_ASPECTS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
 
-async function viaOpenAI(model: string, prompt: string, aspect: string) {
+async function viaOpenAI(model: string, prompt: string, aspect: string, refs: { mime: string; data: Buffer }[] = []) {
   const key = process.env.OPENAI_API_KEY?.trim();
   if (!key) throw new ImageGenError("ChatGPT(OpenAI) 키가 없습니다.");
-  const res = await fetch(`${openaiBase()}/v1/images/generations`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ model, prompt, size: openaiSize(aspect), quality: "medium", output_format: "jpeg", output_compression: 88, n: 1 }),
-    signal: AbortSignal.timeout(180_000),
-  });
+  let res: Response;
+  if (refs.length) {
+    // 레퍼런스가 있으면 편집(edits) 주소로 사진과 함께 보냄
+    const fd = new FormData();
+    fd.append("model", model);
+    fd.append("prompt", prompt);
+    fd.append("size", openaiSize(aspect));
+    fd.append("quality", "medium");
+    fd.append("output_format", "jpeg");
+    fd.append("n", "1");
+    refs.forEach((r, i) => fd.append("image[]", new Blob([new Uint8Array(r.data)], { type: r.mime }), `ref${i + 1}.${r.mime.split("/")[1] || "png"}`));
+    res = await fetch(`${openaiBase()}/v1/images/edits`, { method: "POST", headers: { authorization: `Bearer ${key}` }, body: fd, signal: AbortSignal.timeout(180_000) });
+  } else {
+    res = await fetch(`${openaiBase()}/v1/images/generations`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ model, prompt, size: openaiSize(aspect), quality: "medium", output_format: "jpeg", output_compression: 88, n: 1 }),
+      signal: AbortSignal.timeout(180_000),
+    });
+  }
   const d = (await res.json().catch(() => ({}))) as { data?: { b64_json?: string }[]; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string } };
   if (!res.ok || d.error) throw new ImageGenError(`ChatGPT 이미지 오류: ${d.error?.message ?? res.status}`);
   const b64 = d.data?.[0]?.b64_json;
@@ -67,7 +81,7 @@ export async function generateDirect(input: { modelId: string; prompt: string; a
   const started = Date.now();
   let out;
   try {
-    out = provider === "openai" ? await viaOpenAI(model, input.prompt, input.aspect) : provider === "google" ? await viaGoogle(model, input.prompt, input.aspect, input.refs ?? []) : null;
+    out = provider === "openai" ? await viaOpenAI(model, input.prompt, input.aspect, input.refs ?? []) : provider === "google" ? await viaGoogle(model, input.prompt, input.aspect, input.refs ?? []) : null;
   } catch (e) {
     await logRun(input, provider, model, "failed", 0, 0, Date.now() - started, (e as Error).message);
     throw e;
@@ -82,10 +96,14 @@ export async function generateDirect(input: { modelId: string; prompt: string; a
 
 async function logRun(input: { projectId: string; blogId?: string | null }, provider: string, model: string, status: string, inT: number, outT: number, ms: number, error: string | null) {
   try {
+    // 비용 = 토큰 × 단가 (설정의 단가표, 이미지 모델 기본값 포함) — 예전엔 0으로 기록돼 사용량에 안 잡혔음
+    const { getSettings } = await import("./settings");
+    const pr = (await getSettings()).pricing[`${provider}:${model}`];
+    const cost = pr && status === "succeeded" ? (inT * pr.input + outT * pr.output) / 1_000_000 : 0;
     await q(
       `INSERT INTO ai_runs (id, project_id, blog_id, purpose, provider, model, status, attempt, input_tokens, output_tokens, cost_usd, duration_ms, error)
-       VALUES ($1,$2,$3,'image',$4,$5,$6,1,$7,$8,0,$9,$10)`,
-      [newId("run_"), input.projectId, input.blogId ?? null, provider, model, status, inT, outT, ms, error],
+       VALUES ($1,$2,$3,'image',$4,$5,$6,1,$7,$8,$9,$10,$11)`,
+      [newId("run_"), input.projectId, input.blogId ?? null, provider, model, status, inT, outT, cost, ms, error],
     );
   } catch {
     /* 기록 실패는 무시 */

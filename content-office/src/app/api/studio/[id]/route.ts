@@ -26,7 +26,7 @@ export async function POST(req: Request, ctx: Ctx) {
   return handle(async () => {
     const id = (await ctx.params).id;
     const origin = new URL(req.url).origin;
-    const b = await body<{ action?: string; index?: number; feedback?: string }>(req);
+    const b = await body<{ action?: string; index?: number; feedback?: string; target?: string; request?: string }>(req);
     try {
       switch (b.action) {
         case "replan":
@@ -36,6 +36,18 @@ export async function POST(req: Request, ctx: Ctx) {
           return ok(await makeCharacter(id));
         case "scene_image":
           return ok(await makeSceneImage(id, Number(b.index)));
+        case "prompt_edit": {
+          const { editStudioPrompt } = await import("@/lib/studio");
+          const r = await editStudioPrompt(id, b.target === "character" ? "character" : Number(b.index), String(b.request ?? ""));
+          return ok({ ...r.studio, notice: r.changed ? `프롬프트를 고쳤어요: ${r.changed}` : "프롬프트를 고쳤어요." });
+        }
+        case "recommend_model": {
+          const s = await getStudio(id);
+          const { recommendModels } = await import("@/lib/image-prompt");
+          const prompt = b.target === "character" ? s?.character.prompt ?? "" : s?.scenes[Number(b.index)]?.visual ?? "";
+          const picks = await recommendModels({ prompt, refs: b.target === "character" ? 0 : s?.character.image?.id ? 1 : 0, providers: { higgsfield: false, openai: !!process.env.OPENAI_API_KEY?.trim(), google: !!process.env.GOOGLE_AI_API_KEY?.trim() }, projectId: id });
+          return ok({ picks });
+        }
         case "estimate":
           return ok(await estimateClips(id, origin));
         case "scene_clip":

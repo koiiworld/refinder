@@ -87,6 +87,16 @@ export interface HfSubmitResult {
   cancel_url: string;
 }
 
+/** Soul ID(내 캐릭터) 만들기 — 사진 1~100장 (학습 비용은 공식 문서에 없음 → 화면에서 꼭 확인받음) */
+export async function hfCreateReference(name: string, modelVersion: "v1" | "v2" | "cinema", imageUrls: string[]) {
+  const d = await call("POST", `${base()}/v1/custom-references`, { name: name.slice(0, 100), model_version: modelVersion, input_images: imageUrls.map((u) => ({ type: "image_url", image_url: u })) });
+  return { id: String(d.id ?? ""), status: String(d.status ?? "queued") };
+}
+export async function hfGetReference(id: string) {
+  const d = await call("GET", `${base()}/v1/custom-references/${encodeURIComponent(id)}`);
+  return { id: String(d.id ?? id), status: String(d.status ?? ""), error: d.error ? String(d.error) : null };
+}
+
 /** 생성 전 예상 비용 (Higgsfield 견적 API, 생성·차감 없음) */
 export async function hfEstimate(path: string, body: Record<string, unknown>): Promise<{ usd: number | null; credits: number | null; note?: string }> {
   const d = await call("POST", `${base()}/estimate/${path.replace(/^\//, "")}`, body);

@@ -8,6 +8,9 @@ import SettingsClient from "./SettingsClient";
 import KeysCard from "./KeysCard";
 import BrandCard from "./BrandCard";
 import FeaturesCard from "./FeaturesCard";
+import SoulCard from "./SoulCard";
+import { listSouls } from "@/lib/image-refs";
+import { hfConnected } from "@/lib/higgsfield";
 import { getFeatureOff } from "@/lib/features";
 import { getBrand } from "@/lib/brand";
 import { canSaveKeys, keyStatus } from "@/lib/keystore";
@@ -44,6 +47,7 @@ export default async function SettingsPage() {
         priceUpdates={await pricingUpdates()}
         keysCard={<KeysCard initial={keys} canSave={canSaveKeys()} />}
       />
+      <div style={{ marginTop: 16 }}><SoulCard initial={await listSouls().catch(() => [])} connected={hfConnected()} /></div>
       <div style={{ marginTop: 16 }}><FeaturesCard initial={await getFeatureOff()} /></div>
       <div style={{ marginTop: 16 }}><BrandCard initial={await getBrand()} /></div>
     </div>

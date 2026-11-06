@@ -538,3 +538,15 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .reel-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff5fa2; pointer-events: none; }
 @media (max-width: 1100px) { .reel-main { grid-template-columns: 1fr; } .reel-panel { max-height: none; } }
 @media (max-width: 640px) { .reel-stage { grid-template-columns: repeat(3, 70vw); overflow-x: auto; scroll-snap-type: x mandatory; } .reel-col { scroll-snap-align: start; } }
+
+/* 🎨 이미지 레퍼런스 */
+.ref-box { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.ref-box > summary { cursor: pointer; }
+.ref-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.ref-thumb { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-2); padding: 0; }
+.ref-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ref-thumb.pick { cursor: pointer; }
+.ref-thumb.pick:hover { outline: 2px solid var(--accent); }
+.ref-thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 999px; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; line-height: 18px; padding: 0; cursor: pointer; }
+.rec-pick { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; font: inherit; color: inherit; }
+.rec-pick.on { border-color: var(--accent); background: var(--accent-soft); }
