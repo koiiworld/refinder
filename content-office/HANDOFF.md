@@ -41,11 +41,11 @@
 - 무료 Gemini(`keywords`·`hashtags` 단계 기본)는 키워드·해시태그·화면 캡처 읽기·핫이슈 필터·진단에 씀. 제목(ChatGPT mini)·검수(Claude)는 유료 유지(사용자 결정).
 - 🎬 영상 스튜디오 `/studio` (`studio.ts`): 기획(ChatGPT mini) → 캐릭터(Gemini, 참고 이미지로 같은 인물) → 장면 이미지 → Higgsfield Wan 2.6 장면 영상(공개 주소 필요: Render `RENDER_EXTERNAL_URL`) → ffmpeg 합치기(자막: `bin/NotoSansKR.ttf`) → 영상공장. ffmpeg는 `ffmpeg-static`을 먼저 씀(brew ffmpeg엔 drawtext 없음).
 - ⚠️ 고장 알림 (`health.ts`): 방문자·쿠팡·핫이슈·구글 트렌드·네이버 검색·검색광고·영상 받기·AI·Higgsfield 성공/실패 기록 → 연속 실패 시 대시보드 맨 위. 종류: 직접 해결 / 코드 수정 필요 / 자동 복구. yt-dlp는 켜질 때 + 매주 `-U`, 사이트 변경으로 실패하면 즉시 업데이트 후 재시도.
-- ✅ 할 일 `/todos` (`todos.ts`): 오늘/예정/완료, 한국 날짜·시간 문자열 저장. 대시보드 `🚨오늘할일🚨` 버튼 → 오늘 탭.
+- ✅ 할 일 `/todos` (`todos.ts`): 오늘/예정/완료, 업무내용(인스타·유튜브·블로그·개인일정, `category`·`ref_id`), 한국 날짜·시간 문자열 저장. 할 일은 달력에 "내 할 일"로 자동 표시. 대시보드 `🚨오늘할일🚨` 버튼 → 오늘 탭.
 - 🔔 텔레그램 알림: `todo_notifications`(할 일당 대기 1개) + 작업 큐 `todo_notify`(run_after=알림 시각). 시간 변경=취소 후 재예약, 완료·삭제·끄기=취소. 발송 전 `pending→sending`으로 한 번만 가져감, 응답 불확실하면 재발송 안 함. 키: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (아직 미설정 — 사용자 승인 후).
 - 💡 아이디어 `/ideas` (`ideas.ts`): 저장·이동만, AI 호출 없음. → `/todos?title=&blog=&idea=` · `/new?blog=&hint=`(채우기만).
 - 📅 마케팅 달력 `/calendar` (`calendar.ts`): 시즌(`seasons.ts`) · 공식 공휴일(구글 한국 공휴일 ICS, 하루 캐시) · 비정기(선거·임시공휴일 + 직접 추가 `calendar_events`) · 내 발행(`projects.publish_date`, 발행일).
-- **운영 규칙(사용자 지정, 2026-11-07)**: 운영 데이터 변경·실제 텔레그램 발송·유료 AI 호출·배포(푸시=Render 배포, 맥 앱 재시작=실제 DB 스키마 반영)는 **별도 승인 후**.
+- **운영 규칙(사용자 지정, 2026-11-07)**: 운영 데이터 변경·실제 텔레그램 발송·유료 AI 호출·배포(푸시=Render 배포, 맥 앱 재시작=실제 DB 스키마 반영)는 **별도 승인 후**. 단, **사용자가 바꿔 달라고 요청한 변경은 승인 없이 배포**(2026-11-07 사용자 지시). 텔레그램 연결 완료(@Acontentofficebot).
 - 사용자 보류: 역할별 AI 직원(에이전트) 구성. 후속: 쿠팡 반품상품 검색기. 범위 밖: 지인 배포·상용화. 사무실 화면(대시보드 픽셀 오피스) 제안만 함.
 
 ## 2. 코드 구조 (`content-office/`)

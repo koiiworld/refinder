@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { api, Modal } from "@/components/client-utils";
 import type { CalCat, CalEvent } from "@/lib/calendar";
 
-const COLOR: Record<CalCat, string> = { season: "var(--series-1)", official: "var(--series-2)", irregular: "var(--bad)", publish: "var(--ok)" };
+const COLOR: Record<CalCat, string> = { season: "var(--series-1)", official: "var(--series-2)", irregular: "var(--bad)", publish: "var(--ok)", todo: "#8b5cf6" };
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
 
@@ -18,7 +18,7 @@ function shiftMonth(ym: string, n: number) {
 
 export default function CalendarView({ ym, today, events, labels, blogs }: { ym: string; today: string; events: CalEvent[]; labels: Record<CalCat, string>; blogs: { id: string; name: string }[] }) {
   const router = useRouter();
-  const [show, setShow] = useState<Record<CalCat, boolean>>({ season: true, official: true, irregular: true, publish: true });
+  const [show, setShow] = useState<Record<CalCat, boolean>>({ season: true, official: true, irregular: true, publish: true, todo: true });
   const [day, setDay] = useState<string | null>(null);
   const [open, setOpen] = useState<CalEvent | null>(null);
   const [blogId, setBlogId] = useState("");
@@ -108,7 +108,7 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
             <button key={d} className={`cal-cell ${d === today ? "today" : ""} ${d === day ? "sel" : ""}`} onClick={() => setDay(d === day ? null : d)} aria-label={`${md(d)} 일정 ${on(d).length}개`}>
               <span className="cal-num" style={{ color: i % 7 === 0 || on(d).some((e) => e.cat === "official" && /공휴|날|절|설날|추석|크리스마스/.test(e.title)) ? "var(--bad)" : undefined }}>{Number(d.slice(8))}</span>
               <span className="cal-marks">
-                {on(d).slice(0, 3).map((e) => <span key={e.id} className="cal-mark" style={{ background: COLOR[e.cat] }}>{e.title}</span>)}
+                {on(d).slice(0, 3).map((e) => <span key={e.id} className="cal-mark" style={{ background: COLOR[e.cat], opacity: e.done ? 0.45 : 1, textDecoration: e.done ? "line-through" : undefined }}>{e.title}</span>)}
                 {on(d).length > 3 && <span className="tiny muted">+{on(d).length - 3}</span>}
               </span>
             </button>
@@ -142,7 +142,9 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
             <div className="small"><b>날짜</b> · {open.start}{open.end !== open.start ? ` ~ ${open.end}` : ""}</div>
             {open.note && <div className="tiny muted">{open.note}</div>}
             {open.link && <a className="small" href={open.link} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>🔗 참고 링크 열기</a>}
-            {open.postId ? (
+            {open.todoId ? (
+              <Link className="btn btn-sm" href={`/todos?tab=${open.done ? "done" : open.start > today ? "upcoming" : "today"}`}>✅ 할 일에서 보기·고치기</Link>
+            ) : open.postId ? (
               <Link className="btn btn-sm" href={`/posts/${open.postId}`}>📄 글 열기</Link>
             ) : (
               <>

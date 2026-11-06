@@ -1093,3 +1093,34 @@ test("🖼 이미지 교체 → 같은 자리에 들어감(중복 없음) · 재
   assert.equal(img.status, 200, "내보내기용 사진 파일");
   assert.equal(img.headers.get("content-type"), "image/jpeg");
 });
+
+test("✅ 할 일 업무내용(인스타·유튜브·블로그·개인일정) · 업무에 맞는 연결만 저장 · 할 일은 달력에 자동 표시·수정 반영", async () => {
+  const ym = kstDate(0).slice(0, 7);
+  const day = `${ym}-28`;
+  const car = (await call("/api/carousels")).data[0];
+  const blog = (await call("/api/todos", "POST", { title: "알고 글 사진", category: "blog", blog_id: "blog_algokitchen", due_date: day, due_time: "10:00" })).data;
+  const insta = (await call("/api/todos", "POST", { title: "릴스 올리기", category: "insta", ref_id: car.id, blog_id: "blog_algokitchen", due_date: day })).data;
+  const me = (await call("/api/todos", "POST", { title: "병원", category: "personal", blog_id: "blog_algokitchen", due_date: day })).data;
+  assert.equal(blog.category, "blog");
+  assert.equal(blog.blog_id, "blog_algokitchen");
+  assert.equal(insta.category, "insta");
+  assert.equal(insta.ref_id, car.id);
+  assert.equal(insta.blog_id, null, "인스타는 블로그 연결 안 함");
+  assert.equal(me.category, "personal");
+  assert.equal(me.blog_id, null, "개인일정은 연결 없음");
+  // 달력에 자동 표시
+  let cal = (await call(`/api/calendar?m=${ym}`)).data.filter((e) => e.cat === "todo" && e.start === day);
+  assert.ok(cal.some((e) => e.title === "📝 알고 글 사진" && /블로그 · 네이버 알고키친 · 10:00/.test(e.sub)), JSON.stringify(cal));
+  assert.ok(cal.some((e) => e.title === "📱 릴스 올리기"));
+  assert.ok(cal.some((e) => e.title === "🙋 병원"));
+  // 수정·완료·삭제가 달력에 반영
+  await call(`/api/todos/${me.id}`, "PUT", { title: "치과", due_date: `${ym}-27` });
+  await call(`/api/todos/${blog.id}`, "PUT", { done: true });
+  await call(`/api/todos/${insta.id}`, "DELETE");
+  cal = (await call(`/api/calendar?m=${ym}`)).data.filter((e) => e.cat === "todo");
+  assert.ok(cal.some((e) => e.title === "🙋 치과" && e.start === `${ym}-27`), "수정 반영");
+  assert.equal(cal.find((e) => e.todoId === blog.id)?.done, true, "완료 표시");
+  assert.ok(!cal.some((e) => e.todoId === insta.id), "삭제 반영");
+  const page = (await (await fetch(`${BASE}/todos?tab=upcoming`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(page.includes('aria-label="업무내용"'), "업무내용 칸");
+});

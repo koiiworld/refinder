@@ -16,11 +16,15 @@ const TABS = [
 export default async function Todos({ searchParams }: { searchParams: Promise<{ tab?: string; title?: string; blog?: string; memo?: string; idea?: string; date?: string }> }) {
   const sp = await searchParams;
   const tab = TABS.find((t) => t.id === sp.tab)?.id ?? "today";
-  const [items, blogs, posts] = await Promise.all([
+  const [items, blogs, posts, carousels, videos] = await Promise.all([
     listTodos(tab),
     listBlogs(),
     q<{ id: string; title: string; blog_id: string }>(
       "SELECT p.id, COALESCE(NULLIF(d.title,''), p.title) AS title, p.blog_id FROM projects p LEFT JOIN documents d ON d.project_id=p.id WHERE p.deleted_at IS NULL ORDER BY p.updated_at DESC LIMIT 100",
+    ),
+    q<{ id: string; title: string }>("SELECT id, title FROM carousels ORDER BY updated_at DESC LIMIT 60"),
+    q<{ id: string; title: string }>(
+      "SELECT id, '🎬 ' || title AS title FROM (SELECT id, title, updated_at FROM studio_projects UNION ALL SELECT id, title, updated_at FROM videos WHERE kind <> 'edit') x ORDER BY updated_at DESC LIMIT 60",
     ),
   ]);
   const prefill = sp.title || sp.idea ? { title: sp.title ?? "", blog_id: sp.blog ?? "", memo: sp.memo ?? "", idea_id: sp.idea ?? "", due_date: sp.date ?? "" } : null;
@@ -49,6 +53,7 @@ export default async function Todos({ searchParams }: { searchParams: Promise<{ 
         initial={JSON.parse(JSON.stringify(items))}
         blogs={blogs.map((b) => ({ id: b.id, name: b.name, color: b.color }))}
         posts={posts}
+        refs={{ insta: carousels, youtube: videos }}
         telegram={telegramConnected()}
         prefill={prefill}
       />

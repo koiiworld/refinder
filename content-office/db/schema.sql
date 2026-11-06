@@ -435,3 +435,6 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 );
 -- 글 발행 예정일 (달력 표시용, 한국 날짜)
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS publish_date TEXT;
+-- 할 일 업무내용(인스타·유튜브·블로그·개인일정)과 연결 대상(캐러셀·영상 등)
+ALTER TABLE todos ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '';
+ALTER TABLE todos ADD COLUMN IF NOT EXISTS ref_id TEXT;

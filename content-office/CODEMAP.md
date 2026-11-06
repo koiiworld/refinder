@@ -19,6 +19,7 @@
 | `dashboard.ts` | 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음) | PASS_SCORE, RevenueChannel, RevenueEntry, MonthRevenue, monthKey, getRevenue, saveRevenue, getGoals … |
 | `db.ts` | 데이터베이스 어댑터 | getDb, q, q1, dbKind, newId, j |
 | `diagnose.ts` | 🩺 블로그 진단 | naverBlogSearch, naverSearch, postKey, blogKey, Check, diagnoseBlog, Diagnosis, DiagnoseState … |
+| `estimate.ts` | 돈 드는 버튼을 누르기 전 보여 줄 예상 비용 (토큰 × 단가 추정) | StepEstimate, estimateSteps, postEstimates |
 | `exporter.ts` | 표를 단순 마크다운 표로 변환 | htmlToMarkdown, plainText, buildPackage, packageHtmlFile, escapeHtml |
 | `health.ts` | 기능별 고장 알림: 외부 서비스에 기대는 기능이 연속으로 실패하면 대시보드 맨 위에 '점검 필요' | FEATURES, Feature, markOk, markFail, healthProblems, clearProblem |
 | `hf-models.ts` | 공식 문서에서 요청 형식(스키마)을 확인한 모델 | HF_MODELS, HfModelId, HF_IMAGE_MODELS |
@@ -33,7 +34,7 @@
 | `model-catalog.ts` | 단계별 AI에서 고를 수 있는 모델 목록 (클라이언트·서버 공용) | CatalogModel, MODEL_CATALOG, catalogPricing |
 | `official-images.ts` | 제조사 공식 페이지에서 제품 이미지 후보 찾기 | extractImages, findOfficialImages, checkImageUrl |
 | `post-bundle.ts` | 글 상세 화면 데이터. 생성 중인 이미지는 Higgsfield 에 상태를 물어 갱신 | postBundle, PostBundle |
-| `posts-types.ts` | 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) | PostPlan, PostBrief, PostImage, PostExtras |
+| `posts-types.ts` | 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) | PostPlan, PostOutline, PostBrief, PostImage, PostExtras |
 | `readiness.ts` | 발행 준비 판정 (서버·화면 공용) — 항상 '지금 원고' 기준 | ReadyState, READY_LABEL, Readiness, placeholderNumbers, readiness |
 | `repo.ts` | 말투 예시 파일(사용 중인 것)을 붙인 블로그 — AI 작업 전용 | listBlogs, getBlog, getBlogForAi, getProject, getDocument, getVersion, listVersions, listIdeas … |
 | `research.ts` | 경쟁·참고 콘텐츠 URL에서 제목/설명을 실제로 수집 (수집일 기록) | fetchUrlMeta, naverConnected, naverTrend |
@@ -44,7 +45,7 @@
 | `settings.ts` | 기본 단가 (USD / 100만 토큰). 설정에서 직접 고치면 그 값이 우선합니다. | AppSettings, DEFAULT_PRICING, getSettings, saveSettings |
 | `steps.ts` | 글(프로젝트) 진행 단계 | StepKey, STEP_AI_LABEL, DEFAULT_STEP_AI, FALLBACK_MODELS, POST_STAGES, STEP_NAMES, stageLabel, stageStep |
 | `studio.ts` | 🎬 영상 제작 스튜디오 (쇼츠·릴스) | StudioImage, StudioClip, StudioScene, StudioPlan, StudioCharacter, StudioOptions, StudioProject, STUDIO_STYLES … |
-| `todos.ts` | ✅ 할 일 + 🔔 텔레그램 알림 | Todo, kstToday, kstToDate, telegramConnected, listTodos, todayCount, getTodo, createTodo … |
+| `todos.ts` | ✅ 할 일 + 🔔 텔레그램 알림 | TODO_CATEGORIES, TodoCategory, categoryOf, Todo, kstToday, kstToDate, telegramConnected, listTodos … |
 | `top-posts.ts` | 블로그별 인기 글 TOP 10 | ViewItem, ViewKind, ViewsBlock, ReactionTop, viewsOf, topPosts, saveViewsFromCapture, lastCaptureDay |
 | `trash.ts` | 휴지통으로 옮기기 (대기 중인 AI 작업은 취소, 키워드는 그대로 '사용됨'으로 둠) | moveToTrash, restoreFromTrash, purge |
 | `trends.ts` | 트렌드 뷰어 탭 | TrendTabDef, TREND_TABS, TrendVideo, TrendTabData, trendTab, TrendScrap, listScraps, addScrap … |
@@ -53,7 +54,7 @@
 | `video-store.ts` | 영상 저장소 | MAX_VIDEO_BYTES, storageKind, putFile, getFile, signedUrl, deleteFiles, dbFile |
 | `videos.ts` | 🎬 영상공장 | Box, Video, EditOptions, ffmpegPath, probe, updateYtdlp, listVideos, getVideo … |
 | `visits.ts` | 블로그 방문자 수 수집 (공개 정보만) | VisitSnapshot, naverBlogId, parseCounter, fetchVisits, collectVisits, visitDaily, visitSummary |
-| `workflow.ts` | ② 고른 키워드(1개 또는 여러 개)로 글 1개를 만들고 ③ 제목 후보만 뽑음 — 글쓰기는 사용자가 버튼으로 시작 | WorkflowError, createPosts, startWriting, rerun, selectTitle, setHashtags, setImage, insertImage … |
+| `workflow.ts` | ② 고른 키워드(1개 또는 여러 개)로 글 1개를 만들고 ③ 제목 후보만 뽑음 — 글쓰기는 사용자가 버튼으로 시작 | WorkflowError, createPosts, startWriting, requestOutline, approveOutline, rerun, selectTitle, setHashtags … |
 | `youtube.ts` | YouTube Data API v3 (공식) | youtubeConnected, YT_CATEGORIES, YtVideo, searchRecent, videosByIds, trendingVideos, frequentTerms, trending … |
 
 ## src/lib/ai
@@ -63,7 +64,7 @@
 | `prompts.ts` | 블로그 말투 예시 파일 → 프롬프트 블록 (토큰 비용을 위해 총 글자 수 제한) | blogContext, MAX_SAMPLE_CHARS, styleSamplesText, planPrompt, planTemplate, draftPrompt, revisePrompt, draftTemplate … |
 | `providers.ts` | 공식 HTTP API 직접 호출 (SDK 미사용, 서버에서만 실행) | AiRequest, AiResponse, AiError, PROVIDER_LABELS, providerKey, isConnected, connectionStatus, callProvider … |
 | `run.ts` |  | RunOptions, RunResult, resolveAssignment, runAI, extractJson, sanitizeHtml, StepRunResult, runStep |
-| `step-prompts.ts` | ───────── ① 키워드 추천 ───────── | keywordsPrompt, titlesPrompt, writePrompt, hashtagsPrompt, postReviewPrompt, fixPrompt |
+| `step-prompts.ts` | ───────── ① 키워드 추천 ───────── | keywordsPrompt, titlesPrompt, outlinePrompt, writePrompt, hashtagsPrompt, postReviewPrompt, fixPrompt |
 
 ## src/app
 

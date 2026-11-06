@@ -10,10 +10,10 @@ import { seasonEvents, KIND_LABEL } from "./seasons";
  * - publish: 내 발행 예정일 · 발행한 날
  */
 
-export type CalCat = "season" | "official" | "irregular" | "publish";
-export type CalEvent = { id: string; title: string; start: string; end: string; cat: CalCat; sub: string; link: string; note: string; seeds: string[]; postId?: string; custom?: boolean };
+export type CalCat = "season" | "official" | "irregular" | "publish" | "todo";
+export type CalEvent = { id: string; title: string; start: string; end: string; cat: CalCat; sub: string; link: string; note: string; seeds: string[]; postId?: string; custom?: boolean; todoId?: string; done?: boolean; time?: string | null };
 
-export const CAT_LABEL: Record<CalCat, string> = { season: "매년 시즌", official: "공식 일정", irregular: "비정기·갑작스런 행사", publish: "내 발행" };
+export const CAT_LABEL: Record<CalCat, string> = { season: "매년 시즌", official: "공식 일정", irregular: "비정기·갑작스런 행사", publish: "내 발행", todo: "내 할 일" };
 
 const naverSearch = (s: string) => `https://search.naver.com/search.naver?query=${encodeURIComponent(s)}`;
 const ICS_URL = () => process.env.KR_HOLIDAY_ICS_URL?.trim() || "https://calendar.google.com/calendar/ical/ko.south_korea%23holiday%40group.v.calendar.google.com/public/basic.ics";
@@ -90,7 +90,17 @@ export async function monthEvents(ym: string): Promise<CalEvent[]> {
     if (!day || day < from || day > to) continue;
     out.push({ id: `post:${p.id}`, title: p.title, start: day, end: day, cat: "publish", sub: `${p.blog_name} · ${p.stage === "published" ? "발행함" : "발행 예정"}`, link: "", note: "", seeds: [], postId: p.id });
   }
-  return out.sort((a, b) => a.start.localeCompare(b.start) || a.cat.localeCompare(b.cat));
+  // 내 할 일 (할 일에서 추가·수정하면 바로 반영)
+  const CAT_ICON: Record<string, string> = { insta: "📱", youtube: "🎬", blog: "📝", personal: "🙋" };
+  for (const t of await q<{ id: string; title: string; due_date: string; due_time: string | null; category: string; blog_id: string | null; blog_name: string | null; done_at: string | null; memo: string }>(
+    "SELECT t.id, t.title, t.due_date, t.due_time, t.category, t.blog_id, b.name AS blog_name, t.done_at, t.memo FROM todos t LEFT JOIN blogs b ON b.id=t.blog_id WHERE t.due_date BETWEEN $1 AND $2",
+    [from, to],
+  )) {
+    const cat = ["insta", "youtube", "blog", "personal"].includes(t.category) ? t.category : t.blog_id ? "blog" : "personal";
+    const label = { insta: "인스타", youtube: "유튜브", blog: "블로그", personal: "개인일정" }[cat]!;
+    out.push({ id: `todo:${t.id}`, todoId: t.id, title: `${CAT_ICON[cat]} ${t.title}`, start: t.due_date, end: t.due_date, cat: "todo", sub: `${label}${t.blog_name ? ` · ${t.blog_name}` : ""}${t.due_time ? ` · ${t.due_time}` : ""}${t.done_at ? " · 완료" : ""}`, link: "", note: t.memo, seeds: [], done: !!t.done_at, time: t.due_time });
+  }
+  return out.sort((a, b) => a.start.localeCompare(b.start) || (a.time ?? "").localeCompare(b.time ?? "") || a.cat.localeCompare(b.cat));
 }
 
 export async function addCalendarEvent(input: { title?: string; start?: string; end?: string; kind?: string; link?: string; memo?: string }) {

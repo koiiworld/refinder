@@ -8,7 +8,15 @@ import type { Todo } from "@/lib/todos";
 
 type Blog = { id: string; name: string; color: string };
 type Post = { id: string; title: string; blog_id: string };
-type Form = { title: string; due_date: string; due_time: string; blog_id: string; project_id: string; memo: string; notify: boolean; idea_id: string };
+type Form = { title: string; due_date: string; due_time: string; category: string; ref_id: string; blog_id: string; project_id: string; memo: string; notify: boolean; idea_id: string };
+type Refs = { insta: { id: string; title: string }[]; youtube: { id: string; title: string }[] };
+const CATS = [
+  { id: "insta", label: "📱 인스타" },
+  { id: "youtube", label: "🎬 유튜브" },
+  { id: "blog", label: "📝 블로그" },
+  { id: "personal", label: "🙋 개인일정" },
+] as const;
+const catOf = (t: { category?: string | null; blog_id?: string | null }) => (CATS.some((c) => c.id === t.category) ? t.category! : t.blog_id ? "blog" : "personal");
 
 const NOTICE: Record<string, string> = { pending: "🔔 예약됨", sending: "🔔 보내는 중", sent: "✅ 알림 보냄", canceled: "", failed: "⚠️ 알림 실패" };
 const fmtDay = (d: string, today: string) => {
@@ -21,7 +29,7 @@ const fmtDay = (d: string, today: string) => {
   return diff === 1 ? `내일 ${md}` : diff < 0 ? `${md} · ${-diff}일 지남` : md;
 };
 
-function TodoForm({ init, blogs, posts, telegram, onSave, onCancel, saveLabel }: { init: Form; blogs: Blog[]; posts: Post[]; telegram: boolean; onSave: (f: Form) => Promise<void>; onCancel?: () => void; saveLabel: string }) {
+function TodoForm({ init, blogs, posts, refs, telegram, onSave, onCancel, saveLabel }: { init: Form; blogs: Blog[]; posts: Post[]; refs: Refs; telegram: boolean; onSave: (f: Form) => Promise<void>; onCancel?: () => void; saveLabel: string }) {
   const [f, setF] = useState(init);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -42,19 +50,37 @@ function TodoForm({ init, blogs, posts, telegram, onSave, onCancel, saveLabel }:
       <div className="todo-fields">
         <label className="small stack" style={{ gap: 2 }}>날짜<input className="input" type="date" value={f.due_date} onChange={(e) => set({ due_date: e.target.value })} aria-label="날짜" /></label>
         <label className="small stack" style={{ gap: 2 }}>시간 (선택)<input className="input" type="time" value={f.due_time} onChange={(e) => set({ due_time: e.target.value, notify: e.target.value ? f.notify : false })} aria-label="시간" /></label>
-        <label className="small stack" style={{ gap: 2 }}>블로그 (선택)
-          <select className="input" value={f.blog_id} onChange={(e) => set({ blog_id: e.target.value, project_id: "" })} aria-label="블로그">
-            <option value="">없음</option>
-            {blogs.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        <label className="small stack" style={{ gap: 2 }}>업무내용
+          <select className="input" value={f.category} onChange={(e) => set({ category: e.target.value, blog_id: "", project_id: "", ref_id: "" })} aria-label="업무내용">
+            {CATS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
         </label>
+        {f.category === "blog" ? (
+          <label className="small stack" style={{ gap: 2 }}>블로그 (선택)
+            <select className="input" value={f.blog_id} onChange={(e) => set({ blog_id: e.target.value, project_id: "" })} aria-label="블로그">
+              <option value="">정하지 않음</option>
+              {blogs.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </label>
+        ) : f.category === "insta" || f.category === "youtube" ? (
+          <label className="small stack" style={{ gap: 2 }}>{f.category === "insta" ? "캐러셀 (선택)" : "영상 (선택)"}
+            <select className="input" value={f.ref_id} onChange={(e) => set({ ref_id: e.target.value })} aria-label={f.category === "insta" ? "캐러셀" : "영상"}>
+              <option value="">정하지 않음</option>
+              {refs[f.category].map((r) => <option key={r.id} value={r.id}>{r.title.slice(0, 40)}</option>)}
+            </select>
+          </label>
+        ) : (
+          <div />
+        )}
+      </div>
+      {f.category === "blog" && f.blog_id && (
         <label className="small stack" style={{ gap: 2 }}>글 (선택)
           <select className="input" value={f.project_id} onChange={(e) => set({ project_id: e.target.value })} aria-label="글">
-            <option value="">없음</option>
-            {posts.filter((p) => !f.blog_id || p.blog_id === f.blog_id).map((p) => <option key={p.id} value={p.id}>{p.title.slice(0, 40)}</option>)}
+            <option value="">정하지 않음</option>
+            {posts.filter((p) => p.blog_id === f.blog_id).map((p) => <option key={p.id} value={p.id}>{p.title.slice(0, 50)}</option>)}
           </select>
         </label>
-      </div>
+      )}
       <input className="input" value={f.memo} onChange={(e) => set({ memo: e.target.value })} placeholder="메모 (선택)" aria-label="메모" />
       <label className="small row" style={{ gap: 6, opacity: f.due_time ? 1 : 0.5 }}>
         <input type="checkbox" checked={f.notify} disabled={!f.due_time} onChange={(e) => set({ notify: e.target.checked })} />
@@ -69,27 +95,27 @@ function TodoForm({ init, blogs, posts, telegram, onSave, onCancel, saveLabel }:
   );
 }
 
-export default function TodoBoard({ tab, today, initial, blogs, posts, telegram, prefill }: { tab: string; today: string; initial: Todo[]; blogs: Blog[]; posts: Post[]; telegram: boolean; prefill: { title: string; blog_id: string; memo: string; idea_id: string; due_date: string } | null }) {
+export default function TodoBoard({ tab, today, initial, blogs, posts, refs, telegram, prefill }: { tab: string; today: string; initial: Todo[]; blogs: Blog[]; posts: Post[]; refs: Refs; telegram: boolean; prefill: { title: string; blog_id: string; memo: string; idea_id: string; due_date: string } | null }) {
   const router = useRouter();
   const [items, setItems] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [toast, setToast] = useState("");
-  const empty: Form = { title: prefill?.title ?? "", due_date: prefill?.due_date || today, due_time: "", blog_id: prefill?.blog_id ?? "", project_id: "", memo: prefill?.memo ?? "", notify: false, idea_id: prefill?.idea_id ?? "" };
+  const empty: Form = { title: prefill?.title ?? "", due_date: prefill?.due_date || today, due_time: "", category: prefill?.blog_id ? "blog" : "blog", ref_id: "", blog_id: prefill?.blog_id ?? "", project_id: "", memo: prefill?.memo ?? "", notify: false, idea_id: prefill?.idea_id ?? "" };
 
   async function reload() {
     setItems(await api<Todo[]>(`/api/todos?tab=${tab}`));
     router.refresh();
   }
   async function add(f: Form) {
-    await api("/api/todos", "POST", { ...f, due_time: f.due_time || null, blog_id: f.blog_id || null, project_id: f.project_id || null, idea_id: f.idea_id || null });
+    await api("/api/todos", "POST", { ...f, due_time: f.due_time || null, blog_id: f.blog_id || null, project_id: f.project_id || null, idea_id: f.idea_id || null, ref_id: f.ref_id || null });
     setFormKey((k) => k + 1);
     setToast(f.due_date > today ? `'${fmtDay(f.due_date, today)}' 예정에 추가했어요.` : "오늘 할 일에 추가했어요.");
     if (prefill) router.replace(`/todos?tab=${tab}`, { scroll: false });
     await reload();
   }
   async function save(id: string, f: Form) {
-    await api(`/api/todos/${id}`, "PUT", { ...f, due_time: f.due_time || null, blog_id: f.blog_id || null, project_id: f.project_id || null });
+    await api(`/api/todos/${id}`, "PUT", { ...f, due_time: f.due_time || null, blog_id: f.blog_id || null, project_id: f.project_id || null, ref_id: f.ref_id || null });
     setEditing(null);
     await reload();
   }
@@ -112,7 +138,7 @@ export default function TodoBoard({ tab, today, initial, blogs, posts, telegram,
       {tab !== "done" && (
         <section className="card card-pad">
           {prefill && <div className="tiny muted" style={{ marginBottom: 6 }}>💡 아이디어에서 넘어온 내용을 채워 뒀어요.</div>}
-          <TodoForm key={formKey} init={empty} blogs={blogs} posts={posts} telegram={telegram} onSave={add} saveLabel="+ 할 일 추가" />
+          <TodoForm key={formKey} init={empty} blogs={blogs} posts={posts} refs={refs} telegram={telegram} onSave={add} saveLabel="+ 할 일 추가" />
           {toast && <div className="notice notice-ok small" style={{ marginTop: 8 }}>{toast}</div>}
         </section>
       )}
@@ -123,7 +149,7 @@ export default function TodoBoard({ tab, today, initial, blogs, posts, telegram,
           {items.map((t) =>
             editing === t.id ? (
               <div key={t.id} className="list-item" style={{ display: "block" }}>
-                <TodoForm init={{ title: t.title, due_date: t.due_date, due_time: t.due_time ?? "", blog_id: t.blog_id ?? "", project_id: t.project_id ?? "", memo: t.memo, notify: t.notify, idea_id: t.idea_id ?? "" }} blogs={blogs} posts={posts} telegram={telegram} onSave={(f) => save(t.id, f)} onCancel={() => setEditing(null)} saveLabel="저장" />
+                <TodoForm init={{ title: t.title, due_date: t.due_date, due_time: t.due_time ?? "", category: catOf(t), ref_id: t.ref_id ?? "", blog_id: t.blog_id ?? "", project_id: t.project_id ?? "", memo: t.memo, notify: t.notify, idea_id: t.idea_id ?? "" }} blogs={blogs} posts={posts} refs={refs} telegram={telegram} onSave={(f) => save(t.id, f)} onCancel={() => setEditing(null)} saveLabel="저장" />
               </div>
             ) : (
               <div key={t.id} className="list-item todo-row">
@@ -132,7 +158,9 @@ export default function TodoBoard({ tab, today, initial, blogs, posts, telegram,
                   <span className="small" style={{ fontWeight: 600, textDecoration: t.done_at ? "line-through" : undefined, color: t.done_at ? "var(--muted)" : undefined }}>{t.title}</span>
                   <span className="tiny muted row" style={{ gap: 6 }}>
                     <span style={{ color: t.due_date < today && !t.done_at ? "var(--bad)" : undefined }}>{fmtDay(t.due_date, today)}{t.due_time ? ` ${t.due_time}` : ""}</span>
+                    <span>· {CATS.find((c) => c.id === catOf(t))?.label}</span>
                     {t.blog_name && <span>· {t.blog_name}</span>}
+                    {t.ref_id && t.ref_title && <Link href={catOf(t) === "insta" ? `/carousels/${t.ref_id}` : t.ref_id.startsWith("std_") ? `/studio/${t.ref_id}` : `/videos/${t.ref_id}`} style={{ color: "var(--accent)" }}>· {t.ref_title.slice(0, 24)}</Link>}
                     {t.project_id && t.project_title && <Link href={`/posts/${t.project_id}`} style={{ color: "var(--accent)" }}>· 📄 {t.project_title.slice(0, 24)}</Link>}
                     {t.notice && NOTICE[t.notice.status] && <span title={t.notice.error ?? ""} style={{ color: t.notice.status === "failed" ? "var(--bad)" : undefined }}>· {NOTICE[t.notice.status]}</span>}
                   </span>

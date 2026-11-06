@@ -10,9 +10,23 @@ import { AiError } from "./ai/providers";
  * - 중복 방지: 발송 전에 예약을 'sending'으로 한 번만 가져감. 응답이 불확실한 실패는 다시 보내지 않음
  */
 
+export const TODO_CATEGORIES = [
+  { id: "insta", label: "인스타", icon: "📱" },
+  { id: "youtube", label: "유튜브", icon: "🎬" },
+  { id: "blog", label: "블로그", icon: "📝" },
+  { id: "personal", label: "개인일정", icon: "🙋" },
+] as const;
+export type TodoCategory = (typeof TODO_CATEGORIES)[number]["id"];
+/** 예전 할 일(업무내용 없음): 블로그가 있으면 블로그, 없으면 개인일정 */
+export const categoryOf = (t: { category?: string | null; blog_id?: string | null }): TodoCategory =>
+  (TODO_CATEGORIES.some((c) => c.id === t.category) ? t.category : t.blog_id ? "blog" : "personal") as TodoCategory;
+
 export type Todo = {
   id: string;
   title: string;
+  category: string;
+  ref_id: string | null;
+  ref_title?: string | null;
   due_date: string;
   due_time: string | null;
   blog_id: string | null;
@@ -49,6 +63,7 @@ export async function listTodos(tab: "today" | "upcoming" | "done") {
   const order = tab === "done" ? "t.done_at DESC" : "t.due_date, t.due_time NULLS LAST, t.created_at";
   return q<Todo>(
     `SELECT t.*, b.name AS blog_name, COALESCE(NULLIF(d.title,''), p.title) AS project_title,
+       COALESCE((SELECT c.title FROM carousels c WHERE c.id=t.ref_id), (SELECT s.title FROM studio_projects s WHERE s.id=t.ref_id), (SELECT v.title FROM videos v WHERE v.id=t.ref_id)) AS ref_title,
        (SELECT json_build_object('status', n.status, 'send_at', n.send_at, 'error', n.error, 'sent_at', n.sent_at)
           FROM todo_notifications n WHERE n.todo_id = t.id ORDER BY n.created_at DESC LIMIT 1) AS notice
      FROM todos t LEFT JOIN blogs b ON b.id=t.blog_id LEFT JOIN projects p ON p.id=t.project_id LEFT JOIN documents d ON d.project_id=t.project_id
@@ -66,7 +81,7 @@ export async function getTodo(id: string) {
   return q1<Todo>("SELECT * FROM todos WHERE id=$1", [id]);
 }
 
-type Input = { title?: string; due_date?: string; due_time?: string | null; blog_id?: string | null; project_id?: string | null; idea_id?: string | null; memo?: string; notify?: boolean };
+type Input = { title?: string; due_date?: string; due_time?: string | null; category?: string; ref_id?: string | null; blog_id?: string | null; project_id?: string | null; idea_id?: string | null; memo?: string; notify?: boolean };
 
 function clean(input: Input, cur?: Todo) {
   const title = String(input.title ?? cur?.title ?? "").trim().slice(0, 200);
@@ -77,12 +92,19 @@ function clean(input: Input, cur?: Todo) {
   const due_time = rawTime ? String(rawTime).slice(0, 5) : null;
   if (due_time && !isTime(due_time)) throw new Error("시간을 확인해 주세요 (예: 09:30).");
   const notify = (input.notify ?? cur?.notify ?? false) && !!due_time;
+  const blogIn = input.blog_id === undefined ? cur?.blog_id ?? null : input.blog_id || null;
+  const category = categoryOf({ category: input.category ?? cur?.category, blog_id: blogIn });
+  // 업무내용에 맞는 연결만 남김: 블로그 → 블로그·글, 인스타·유튜브 → 캐러셀·영상, 개인일정 → 없음
+  const isBlog = category === "blog";
+  const refIn = input.ref_id === undefined ? cur?.ref_id ?? null : input.ref_id || null;
   return {
     title,
     due_date,
     due_time,
-    blog_id: input.blog_id === undefined ? cur?.blog_id ?? null : input.blog_id || null,
-    project_id: input.project_id === undefined ? cur?.project_id ?? null : input.project_id || null,
+    category,
+    ref_id: category === "insta" || category === "youtube" ? refIn : null,
+    blog_id: isBlog ? blogIn : null,
+    project_id: isBlog ? (input.project_id === undefined ? cur?.project_id ?? null : input.project_id || null) : null,
     idea_id: input.idea_id === undefined ? cur?.idea_id ?? null : input.idea_id || null,
     memo: String(input.memo ?? cur?.memo ?? "").slice(0, 1000),
     notify,
@@ -93,8 +115,8 @@ export async function createTodo(input: Input) {
   const v = clean(input);
   const id = newId("todo_");
   await q(
-    "INSERT INTO todos (id, title, due_date, due_time, blog_id, project_id, idea_id, memo, notify) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-    [id, v.title, v.due_date, v.due_time, v.blog_id, v.project_id, v.idea_id, v.memo, v.notify],
+    "INSERT INTO todos (id, title, due_date, due_time, blog_id, project_id, idea_id, memo, notify, category, ref_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+    [id, v.title, v.due_date, v.due_time, v.blog_id, v.project_id, v.idea_id, v.memo, v.notify, v.category, v.ref_id],
   );
   await reschedule(id);
   return getTodo(id);
@@ -107,8 +129,8 @@ export async function updateTodo(id: string, input: Input & { done?: boolean }) 
   const done = input.done === undefined ? !!cur.done_at : !!input.done;
   await q(
     `UPDATE todos SET title=$2, due_date=$3, due_time=$4, blog_id=$5, project_id=$6, idea_id=$7, memo=$8, notify=$9,
-       done_at = CASE WHEN $10 THEN COALESCE(done_at, NOW()) ELSE NULL END, updated_at=NOW() WHERE id=$1`,
-    [id, v.title, v.due_date, v.due_time, v.blog_id, v.project_id, v.idea_id, v.memo, v.notify, done],
+       done_at = CASE WHEN $10 THEN COALESCE(done_at, NOW()) ELSE NULL END, category=$11, ref_id=$12, updated_at=NOW() WHERE id=$1`,
+    [id, v.title, v.due_date, v.due_time, v.blog_id, v.project_id, v.idea_id, v.memo, v.notify, done, v.category, v.ref_id],
   );
   await reschedule(id);
   return getTodo(id);
@@ -158,7 +180,8 @@ export async function sendTodoNotification(notificationId: string) {
     return;
   }
   const blog = t.blog_id ? await q1<{ name: string }>("SELECT name FROM blogs WHERE id=$1", [t.blog_id]) : null;
-  const text = `🚨 할 일 알림 · ${t.due_time}\n${t.title}${blog ? `\n📝 ${blog.name}` : ""}${t.memo ? `\n${t.memo}` : ""}`;
+  const cat = TODO_CATEGORIES.find((c) => c.id === categoryOf(t));
+  const text = `🚨 할 일 알림 · ${t.due_time}\n${t.title}\n${cat ? `${cat.icon} ${cat.label}` : ""}${blog ? ` · ${blog.name}` : ""}${t.memo ? `\n${t.memo}` : ""}`;
   let res: Response;
   try {
     res = await fetch(`${tgBase()}/bot${process.env.TELEGRAM_BOT_TOKEN!.trim()}/sendMessage`, {
