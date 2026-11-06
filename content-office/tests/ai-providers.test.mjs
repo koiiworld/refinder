@@ -1075,14 +1075,22 @@ test("📋 기획안 승인: 제목 → 목차·근거·이미지 계획 → 고
   assert.equal(vc[1].check, true);
   assert.match(v.notice, /확인완료 1개 · 확인안됨 1개/);
   assert.equal(v.project.plan.outline.approved, false, "확인만 하고 승인은 안 함");
+  // 목차도 같은 방식: 확인 필요 → AI 확인 (주장 1개 + 목차 1개 → 결과 순서대로)
+  const draft2 = { ...v.project.plan.outline, claims: [vc[1]], sections: v.project.plan.outline.sections.map((x, k) => (k === 0 ? { ...x, check: true } : x)) };
+  const v2 = (await call(`/api/posts/${id}`, "POST", { action: "verify_claims", outline: draft2, indexes: [0], sectionIndexes: [0] })).data;
+  assert.equal(v2.project.plan.outline.claims[0].verify.status, "verified");
+  assert.equal(v2.project.plan.outline.sections[0].verify.status, "unverified", "목차 확인 결과");
+  assert.equal(v2.project.plan.outline.sections[0].check, true);
   // 고쳐서 승인 (체크해서 지운 주장은 글에 안 씀, 따로 보관)
-  const outline = { ...b.project.plan.outline, sections: [{ heading: "굴 손질부터 보쌈까지", points: ["굴 씻는 법"] }, ...b.project.plan.outline.sections.slice(1)], claims: [{ ...b.project.plan.outline.claims[0], source: "https://www.nifs.go.kr" }, { ...vc[1], removed: true }] };
+  const outline = { ...b.project.plan.outline, sections: [{ heading: "굴 손질부터 보쌈까지", points: ["굴 씻는 법"] }, ...b.project.plan.outline.sections.slice(1), { heading: "지운 목차", points: ["안 씀"], removed: true }], claims: [{ ...b.project.plan.outline.claims[0], source: "https://www.nifs.go.kr" }, { ...vc[1], removed: true }] };
   await call(`/api/posts/${id}`, "POST", { action: "approve_outline", outline });
   b = await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "글·검수");
   assert.equal(b.project.plan.outline.approved, true);
   assert.equal(b.project.plan.outline.claims.length, 1, "지운 주장 빠짐");
   assert.equal(b.project.plan.outline.removed[0].claim, "굴은 하루 10kg 먹어도 된다");
   assert.ok(!(await stepPrompt("전속 작가")).includes("10kg"), "지운 주장은 글에 안 들어감");
+  assert.equal(b.project.plan.outline.removedSections[0].heading, "지운 목차");
+  assert.ok(!(await stepPrompt("전속 작가")).includes("지운 목차"), "지운 목차는 글에 안 들어감");
   const wp = await stepPrompt("전속 작가");
   assert.match(wp, /\[승인된 기획안[\s\S]*1\. 굴 손질부터 보쌈까지/);
   assert.match(wp, /출처: https:\/\/www\.nifs\.go\.kr/);
@@ -1395,14 +1403,26 @@ test("📣 블로그 글 → 다른 채널 · 🔍 릴스 분석(받아쓰기·�
   // 📣 다른 채널용
   const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
   const pid = posts[0].id;
-  assert.equal((await call(`/api/posts/${pid}/repurpose`, "POST", { channels: [] })).status, 400);
-  const rp = (await call(`/api/posts/${pid}/repurpose`, "POST", { channels: ["reel", "cards", "threads"] })).data;
-  assert.match(rp.reel, /김장/);
-  assert.match(rp.cards, /1장: 김장 황금비율\n\n2장/, "배열로 와도 글로 합침");
-  assert.ok(!rp.faq, "안 고른 채널은 안 만듦");
-  assert.equal((await call(`/api/posts/${pid}/repurpose`)).data.threads, "김장 양념, 이것만 기억하세요", "저장됨");
+  // 앱 글 불러오기
+  const src = (await call("/api/repurpose", "POST", { action: "load", postId: pid })).data;
+  assert.ok(src.text.length > 5 && src.blogId === "blog_algokitchen", JSON.stringify(src).slice(0, 200));
+  // 이미 블로그에 올린 글: 주소로 불러오기 (모의 네이버 글)
+  const fromUrl = await call("/api/repurpose", "POST", { action: "load", url: "http://localhost:4110/PostView.naver?blogId=algo_kitchen&logNo=1" });
+  assert.ok(fromUrl.status === 200 || fromUrl.status === 400, "주소 불러오기 응답");
+  assert.equal((await call("/api/repurpose", "POST", { action: "make", title: "x", text: "짧음", channels: ["reel"] })).status, 400, "본문이 너무 짧음");
+  const pasted = "김장 양념 황금비율을 정리했어요. 절임배추 20kg 기준으로 고춧가루, 젓갈, 마늘, 생강 비율을 알려 드려요. 처음 김장하는 분도 실패 없이 따라 할 수 있어요.";
+  assert.equal((await call("/api/repurpose", "POST", { action: "make", title: "김장", text: pasted, channels: [] })).status, 400, "채널 안 고름");
+  let rp = (await call("/api/repurpose", "POST", { action: "make", title: "김장 양념 비율", text: pasted, blogId: "blog_algokitchen", channels: ["reel", "cards"] })).data;
+  assert.match(rp.result.reel, /김장/);
+  assert.match(rp.result.cards, /1장: 김장 황금비율\n\n2장/, "배열로 와도 글로 합침");
+  assert.ok(!rp.result.threads, "안 고른 채널은 안 만듦");
+  rp = (await call("/api/repurpose", "POST", { action: "make", id: rp.id, title: "김장 양념 비율", text: pasted, channels: ["threads"] })).data;
+  assert.ok(rp.result.reel && rp.result.threads, "같은 글에 채널 더하기");
+  assert.equal((await call("/api/repurpose")).data[0].id, rp.id, "기록");
+  const rpPage = (await (await fetch(`${BASE}/repurpose?post=${pid}`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["채널 변환", "내 블로그에 올린 글", "앱에서 만든 글", "글 주소로", "직접 붙여넣기", "김장 양념 비율"]) assert.ok(rpPage.includes(w), w);
   const pv = (await (await fetch(`${BASE}/posts/${pid}`)).text()).replace(/<!-- -->/g, "");
-  assert.ok(pv.includes("다른 채널용으로 바꾸기") && pv.includes("당근 비즈프로필"), "글 화면");
+  assert.ok(pv.includes(`/repurpose?post=${pid}`), "글 화면에서 채널 변환으로");
 
   // 🔍 릴스 분석
   const add = await call("/api/study", "POST", { urls: ["http://localhost:4110/sample.mp4"], mine: true });

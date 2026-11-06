@@ -482,6 +482,19 @@ CREATE TABLE IF NOT EXISTS studio_series (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- 📣 채널 변환: 블로그 글(앱 글·이미 올린 글·붙여넣기) → 다른 채널 초안
+CREATE TABLE IF NOT EXISTS repurpose_docs (
+  id          TEXT PRIMARY KEY,
+  blog_id     TEXT,
+  project_id  TEXT,
+  title       TEXT NOT NULL DEFAULT '',
+  source_url  TEXT NOT NULL DEFAULT '',
+  source_text TEXT NOT NULL DEFAULT '',
+  result      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  model       TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image_kit JSONB NOT NULL DEFAULT '{}'::jsonb;  -- 🎨 이미지 컨셉 키트 (레퍼런스·스타일 문구·Soul ID)
 ALTER TABLE carousels ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;        -- 게시함 (직접 표시)
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;

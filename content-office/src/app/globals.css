@@ -571,3 +571,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .claim-box.verified { border-color: var(--ok); }
 .claim-box.unverified { border-color: var(--bad); }
 .reel-ctl .seg { flex-wrap: wrap; }
+.rp-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+.rp-item { width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; cursor: pointer; }
+.rp-item.on { background: var(--accent-soft); }

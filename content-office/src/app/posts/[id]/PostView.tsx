@@ -13,8 +13,6 @@ import DocEditor from "@/components/DocEditor";
 import BackButton from "@/components/BackButton";
 import { IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel } from "@/lib/image-models";
 import RefPicker from "@/components/RefPicker";
-import RepurposeCard from "./RepurposeCard";
-import { CHANNELS } from "@/lib/repurpose-channels";
 
 type Review = {
   summary: string;
@@ -136,7 +134,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                   projectId={p.id}
                   outline={plan.outline}
                   onApprove={(outline) => act({ action: "approve_outline", outline }, "기획안을 승인했어요. 글 작성을 시작합니다.")}
-                  onVerify={(outline, indexes) => act({ action: "verify_claims", outline, indexes })}
+                  onVerify={(outline, indexes, sectionIndexes) => act({ action: "verify_claims", outline, indexes, sectionIndexes })}
                   onRedo={() => act({ action: "outline", title: titleDraft.trim() || title }, "기획안을 다시 만들고 있어요.")}
                 />
               )}
@@ -251,10 +249,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
         </Section>
 
         {doc?.content_html && (
-          <section className="card card-pad stack" style={{ gap: 8 }}>
-            <b>📣 다른 채널용으로 바꾸기</b>
-            <RepurposeCard projectId={p.id} channels={CHANNELS.map((c) => ({ id: c.id, label: c.label, hint: c.hint }))} copy={copy} />
-          </section>
+          <Link className="btn" style={{ alignSelf: "flex-start" }} href={`/repurpose?post=${p.id}`}>📣 이 글을 다른 채널용으로 바꾸기 →</Link>
         )}
       </div>
 
@@ -924,19 +919,22 @@ function WriteStart({ projectId, disabled, onOutline, onWrite }: { projectId: st
 }
 
 /** ③-2 기획안 확인·수정 → 승인하면 글 작성 */
-function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { projectId: string; outline: NonNullable<PostPlan["outline"]>; onApprove: (o: NonNullable<PostPlan["outline"]>) => void; onRedo: () => void; onVerify: (o: NonNullable<PostPlan["outline"]>, indexes: number[]) => Promise<boolean> }) {
+function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { projectId: string; outline: NonNullable<PostPlan["outline"]>; onApprove: (o: NonNullable<PostPlan["outline"]>) => void; onRedo: () => void; onVerify: (o: NonNullable<PostPlan["outline"]>, indexes: number[], sectionIndexes: number[]) => Promise<boolean> }) {
   const e = useEstimates(projectId);
   const [o, setO] = useState(outline);
   useEffect(() => setO(outline), [outline]);
   const [sel, setSel] = useState<number[]>([]);
+  const [selSec, setSelSec] = useState<number[]>([]);
   const [verifying, setVerifying] = useState<string | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
   const removed = o.claims.map((c, i) => ({ c, i })).filter((x) => x.c.removed);
+  const removedSec = o.sections.map((x, i) => ({ x, i })).filter((y) => y.x.removed);
+  const needSec = o.sections.map((x, i) => (x.check && !x.removed ? i : -1)).filter((i) => i >= 0);
   const needCheck = o.claims.map((c, i) => (c.check && !c.removed ? i : -1)).filter((i) => i >= 0);
   const checks = o.claims.filter((c) => c.check && !c.removed && !c.source.trim()).length;
-  async function verify(indexes: number[]) {
-    setVerifying(indexes.length > 1 ? "all" : String(indexes[0]));
-    await onVerify(o, indexes);
+  async function verify(indexes: number[], sectionIndexes: number[] = []) {
+    setVerifying(sectionIndexes.length > 1 ? "secall" : sectionIndexes.length ? `s${sectionIndexes[0]}` : indexes.length > 1 ? "all" : String(indexes[0]));
+    await onVerify(o, indexes, sectionIndexes);
     setVerifying(null);
   }
   return (
@@ -946,11 +944,30 @@ function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { proj
         <button className="btn btn-sm btn-ghost" onClick={onRedo}>🔄 다시 만들기</button>
       </div>
       <div className="stack" style={{ gap: 6 }}>
-        <span className="label">목차 (소제목 · 들어갈 내용 — 고쳐도 돼요)</span>
-        {o.sections.map((s, i) => (
-          <div key={i} className="stack" style={{ gap: 2 }}>
-            <input className="input" style={{ fontWeight: 700 }} value={s.heading} onChange={(ev) => setO({ ...o, sections: o.sections.map((x, k) => (k === i ? { ...x, heading: ev.target.value } : x)) })} aria-label={`소제목 ${i + 1}`} />
-            <textarea className="textarea" style={{ minHeight: 44, fontSize: 13 }} value={s.points.join("\n")} onChange={(ev) => setO({ ...o, sections: o.sections.map((x, k) => (k === i ? { ...x, points: ev.target.value.split("\n") } : x)) })} aria-label={`소제목 ${i + 1} 내용`} />
+        <div className="row between" style={{ gap: 6 }}>
+          <span className="label" style={{ margin: 0 }}>목차 (소제목 · 들어갈 내용 — 고쳐도 돼요 · ☑ 확인 필요 = AI가 확인할 내용)</span>
+          <div className="row" style={{ gap: 6 }}>
+            {needSec.length > 0 && <button className="btn btn-sm" disabled={verifying !== null} onClick={() => verify([], needSec)}>{verifying === "secall" ? <><span className="spinner" /> 확인 중…</> : `🔎 확인 필요 ${needSec.length}개 모두 AI 확인`}</button>}
+            {selSec.length > 0 && <button className="btn btn-sm btn-danger" onClick={() => { setO({ ...o, sections: o.sections.map((x, k) => (selSec.includes(k) ? { ...x, removed: true } : x)) }); setSelSec([]); }}>🗑 선택한 {selSec.length}개 삭제</button>}
+          </div>
+        </div>
+        {o.sections.map((sec, i) => sec.removed ? null : (
+          <div key={i} className="row" style={{ gap: 8, flexWrap: "nowrap", alignItems: "flex-start" }}>
+            <input type="checkbox" style={{ marginTop: 14, flexShrink: 0 }} checked={selSec.includes(i)} onChange={() => setSelSec(selSec.includes(i) ? selSec.filter((x) => x !== i) : [...selSec, i])} aria-label={`소제목 ${i + 1} 선택 (삭제)`} />
+            <div className={`card card-pad stack claim-box${sec.verify ? ` ${sec.verify.status}` : ""}`} style={{ gap: 4, padding: 8, flex: 1, minWidth: 0 }}>
+              <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                <input className="input" style={{ fontWeight: 700 }} value={sec.heading} onChange={(ev) => setO({ ...o, sections: o.sections.map((x, k) => (k === i ? { ...x, heading: ev.target.value, verify: undefined } : x)) })} aria-label={`소제목 ${i + 1}`} />
+                <label className="tiny row" style={{ gap: 4, flexShrink: 0 }}><input type="checkbox" checked={!!sec.check} onChange={(ev) => setO({ ...o, sections: o.sections.map((x, k) => (k === i ? { ...x, check: ev.target.checked } : x)) })} />확인 필요</label>
+              </div>
+              <textarea className="textarea" style={{ minHeight: 44, fontSize: 13 }} value={sec.points.join("\n")} onChange={(ev) => setO({ ...o, sections: o.sections.map((x, k) => (k === i ? { ...x, points: ev.target.value.split("\n"), verify: undefined } : x)) })} aria-label={`소제목 ${i + 1} 내용`} />
+              {(sec.check || sec.verify) && (
+                <div className="row" style={{ gap: 6 }}>
+                  {sec.verify && <span className={`badge ${sec.verify.status === "verified" ? "badge-ok" : "badge-bad"}`}>{sec.verify.status === "verified" ? "✅ 확인완료" : "❌ 확인안됨"}</span>}
+                  {sec.verify && <span className="tiny muted" style={{ flex: 1 }}>{sec.verify.note}{sec.verify.source ? <> · <a href={sec.verify.source} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>출처</a></> : null}</span>}
+                  {sec.check && <button className="btn btn-sm" disabled={verifying !== null} onClick={() => verify([], [i])}>{verifying === `s${i}` ? <span className="spinner" /> : sec.verify ? "🔎 다시 확인" : "🔎 확인 요청"}</button>}
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -993,23 +1010,32 @@ function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { proj
       )}
       {checks > 0 && <div className="notice notice-warn small">출처 없이 &apos;확인 필요&apos;인 사실 {checks}개 — 🔎 AI 확인을 눌러 보세요. 확인완료면 출처가 채워지고, 확인안됨은 지우거나 그대로 두면 글에서 단정하지 않고 [확인 필요]로 남겨요.</div>}
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-primary" onClick={() => onApprove({ ...o, sections: o.sections.map((s) => ({ ...s, points: s.points.map((x) => x.trim()).filter(Boolean) })) })}>✅ 승인하고 글 쓰기{e?.write.total != null ? ` · 약 ${fmtUsd(e.write.total)}` : ""}</button>
-        {removed.length > 0 && <button className="btn" onClick={() => setShowRemoved(true)}>🗑 삭제한 내용 ({removed.length})</button>}
+        <button className="btn btn-primary" onClick={() => onApprove({ ...o, sections: o.sections.map((sec) => ({ ...sec, points: sec.points.map((x) => x.trim()).filter(Boolean) })) })}>✅ 승인하고 글 쓰기{e?.write.total != null ? ` · 약 ${fmtUsd(e.write.total)}` : ""}</button>
+        {removed.length + removedSec.length > 0 && <button className="btn" onClick={() => setShowRemoved(true)}>🗑 삭제한 내용 ({removed.length + removedSec.length})</button>}
       </div>
       {showRemoved && (
-        <Modal title={`삭제한 내용 ${removed.length}개`} onClose={() => setShowRemoved(false)}>
+        <Modal title={`삭제한 내용 ${removed.length + removedSec.length}개`} onClose={() => setShowRemoved(false)}>
           <div className="stack" style={{ gap: 8 }}>
-            <span className="tiny muted">삭제한 주장은 글에 들어가지 않아요. 되살리려면 원상복구를 누르세요.</span>
+            <span className="tiny muted">삭제한 목차·주장은 글에 들어가지 않아요. 되살리려면 원상복구를 누르세요.</span>
+            {removedSec.map(({ x, i }) => (
+              <div key={`s${i}`} className="row between" style={{ gap: 8, flexWrap: "nowrap", borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+                <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+                  <span className="small"><span className="badge">목차</span> <b>{x.heading}</b></span>
+                  {x.points.length > 0 && <span className="tiny muted">{x.points.join(" · ")}</span>}
+                </div>
+                <button className="btn btn-sm" onClick={() => setO({ ...o, sections: o.sections.map((y, k) => (k === i ? { ...y, removed: false } : y)) })}>↩ 원상복구</button>
+              </div>
+            ))}
             {removed.map(({ c, i }) => (
               <div key={i} className="row between" style={{ gap: 8, flexWrap: "nowrap", borderTop: "1px solid var(--line)", paddingTop: 8 }}>
                 <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-                  <span className="small">{c.claim}</span>
+                  <span className="small"><span className="badge">주장</span> {c.claim}</span>
                   {c.verify && <span className="tiny muted">{c.verify.status === "verified" ? "✅ 확인완료" : "❌ 확인안됨"} · {c.verify.note}</span>}
                 </div>
                 <button className="btn btn-sm" onClick={() => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, removed: false } : x)) })}>↩ 원상복구</button>
               </div>
             ))}
-            <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => { setO({ ...o, claims: o.claims.map((x) => ({ ...x, removed: false })) }); setShowRemoved(false); }}>모두 원상복구</button>
+            <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => { setO({ ...o, claims: o.claims.map((x) => ({ ...x, removed: false })), sections: o.sections.map((x) => ({ ...x, removed: false })) }); setShowRemoved(false); }}>모두 원상복구</button>
           </div>
         </Modal>
       )}

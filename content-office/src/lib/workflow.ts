@@ -59,6 +59,20 @@ export function cleanClaims(list: Partial<Claim>[]): Claim[] {
     .slice(0, 12);
 }
 
+type Section = import("./posts-types").PostOutline["sections"][number];
+/** 화면에서 고친 목차 정리 (확인 필요·AI 확인 결과·삭제 표시 유지) */
+export function cleanSections(list: Partial<Section>[]): Section[] {
+  return list
+    .map((x) => ({
+      heading: String(x.heading ?? "").slice(0, 120), points: (x.points ?? []).map(String).slice(0, 4),
+      ...(x.check ? { check: true } : {}),
+      ...(x.verify && ["verified", "unverified"].includes(x.verify.status) ? { verify: { status: x.verify.status, note: String(x.verify.note ?? "").slice(0, 200), at: String(x.verify.at ?? ""), ...(x.verify.source ? { source: String(x.verify.source).slice(0, 300) } : {}) } } : {}),
+      ...(x.removed ? { removed: true } : {}),
+    }))
+    .filter((x) => x.heading)
+    .slice(0, 10);
+}
+
 /** 승인 전 기획안 저장 (AI 확인 결과 반영용) */
 export async function saveOutlineDraft(projectId: string, edited: Partial<import("./posts-types").PostOutline>) {
   const p = await getProject(projectId);
@@ -67,7 +81,7 @@ export async function saveOutlineDraft(projectId: string, edited: Partial<import
   const o = plan.outline;
   const outline = {
     ...o,
-    sections: Array.isArray(edited.sections) ? edited.sections.map((x) => ({ heading: String(x.heading ?? "").slice(0, 120), points: (x.points ?? []).map(String).slice(0, 4) })).filter((x) => x.heading).slice(0, 8) : o.sections,
+    sections: Array.isArray(edited.sections) ? cleanSections(edited.sections) : o.sections,
     claims: Array.isArray(edited.claims) ? cleanClaims(edited.claims) : o.claims,
     images: Array.isArray(edited.images) ? edited.images.map((m, i) => ({ n: Number(m.n) || i + 1, what: String(m.what ?? "").slice(0, 160) })).filter((m) => m.what).slice(0, 5) : o.images,
   };
@@ -82,7 +96,9 @@ export async function approveOutline(projectId: string, edited?: Partial<import(
   const o = plan.outline;
   const outline = {
     ...o,
-    sections: Array.isArray(edited?.sections) ? edited!.sections.map((s) => ({ heading: String(s.heading ?? "").slice(0, 120), points: (s.points ?? []).map(String).slice(0, 4) })).filter((s) => s.heading).slice(0, 8) : o.sections,
+    // 체크해서 지운 목차는 글에 안 씀 (removedSections 로 따로 보관)
+    sections: (Array.isArray(edited?.sections) ? cleanSections(edited!.sections) : o.sections).filter((x) => !x.removed),
+    removedSections: (Array.isArray(edited?.sections) ? cleanSections(edited!.sections) : o.sections).filter((x) => x.removed),
     // 체크해서 지운 주장은 글에 안 씀 (removed 로 따로 보관)
     claims: (Array.isArray(edited?.claims) ? cleanClaims(edited!.claims) : o.claims).filter((c) => !c.removed),
     removed: (Array.isArray(edited?.claims) ? cleanClaims(edited!.claims) : o.claims).filter((c) => c.removed),

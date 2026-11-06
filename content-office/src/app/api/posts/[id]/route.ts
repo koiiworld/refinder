@@ -29,7 +29,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; refIds?: string[]; useKit?: boolean; soulId?: string | null; request?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; date?: string; outline?: Partial<import("@/lib/posts-types").PostOutline> }>(req);
+    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; refIds?: string[]; useKit?: boolean; soulId?: string | null; request?: string; indexes?: number[]; sectionIndexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; date?: string; outline?: Partial<import("@/lib/posts-types").PostOutline> }>(req);
     switch (b.action) {
       case "rerun":
         if (!b.step) throw new WorkflowError("다시 실행할 단계를 고르세요.");
@@ -55,22 +55,33 @@ export async function POST(req: Request, { params }: Ctx) {
         await requestOutline(id, { index: b.index, title: b.title });
         break;
       case "verify_claims": {
-        // ③-2 '확인 필요' 사실을 AI가 확인 (네이버 검색 + 무료 Gemini) → 확인완료면 출처를 채우고 '확인 필요' 해제
+        // ③-2 '확인 필요'를 AI가 확인 (네이버 검색 + 무료 Gemini) — 주장(indexes)·목차(sectionIndexes) 같은 방식
         const { saveOutlineDraft } = await import("@/lib/workflow");
         const { verifyClaims } = await import("@/lib/factcheck");
         const outline = await saveOutlineDraft(id, b.outline ?? {});
-        const idx = (b.indexes ?? []).map(Number).filter((i) => outline.claims[i] && !outline.claims[i].removed);
-        if (!idx.length) return fail("확인할 사실을 골라 주세요.");
+        const ci = (b.indexes ?? []).map(Number).filter((i) => outline.claims[i] && !outline.claims[i].removed);
+        const si = (b.sectionIndexes ?? []).map(Number).filter((i) => outline.sections[i] && !outline.sections[i].removed);
+        if (!ci.length && !si.length) return fail("확인할 내용을 골라 주세요.");
         const p = await getProject(id);
-        const verdicts = await verifyClaims(id, p?.topic ?? "", idx.map((i) => outline.claims[i]));
+        const items = [
+          ...ci.map((i) => ({ claim: outline.claims[i].claim, evidence: outline.claims[i].evidence, source: outline.claims[i].source })),
+          ...si.map((i) => ({ claim: `${outline.sections[i].heading}: ${outline.sections[i].points.join(" / ")}`, evidence: "", source: "" })),
+        ];
+        const verdicts = await verifyClaims(id, p?.topic ?? "", items);
         const at = new Date().toISOString();
         const claims = outline.claims.map((c, i) => {
-          const k = idx.indexOf(i);
+          const k = ci.indexOf(i);
           if (k < 0) return c;
           const v = verdicts[k];
           return { ...c, source: v.source || c.source, check: v.status !== "verified", verify: { status: v.status, note: v.note, at } };
         });
-        await saveOutlineDraft(id, { ...outline, claims });
+        const sections = outline.sections.map((x, i) => {
+          const k = si.indexOf(i);
+          if (k < 0) return x;
+          const v = verdicts[ci.length + k];
+          return { ...x, check: v.status !== "verified", verify: { status: v.status, note: v.note, at, ...(v.source ? { source: v.source } : {}) } };
+        });
+        await saveOutlineDraft(id, { ...outline, claims, sections });
         const n = verdicts.filter((v) => v.status === "verified").length;
         return ok({ ...(await postBundle(id)), notice: `확인완료 ${n}개 · 확인안됨 ${verdicts.length - n}개` });
       }
