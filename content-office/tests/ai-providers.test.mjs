@@ -1215,3 +1215,21 @@ test("📊 전체 작업 현황: 블로그·캐러셀·영상 5단계 칸반 · 
   const nw = await fetch(`${BASE}/new?blog=blog_algokitchen`, { redirect: "manual" });
   assert.ok([307, 308].includes(nw.status) && nw.headers.get("location").includes("/posts?new=1"), "예전 글 만들기 주소 → 업로드");
 });
+
+test("🔀 설정: 기능 켜기·끄기 (인스타 전체 끄기 · 블로그 진단 끄기) → 메뉴·페이지·현황에서 숨김, 다시 켜면 그대로", async () => {
+  let r = (await call("/api/settings/features", "POST", { off: ["g:insta", "/diagnose", "엉뚱한값"] })).data;
+  assert.deepEqual(r.off, ["g:insta", "/diagnose"], "모르는 값은 버림");
+  const work = (await (await fetch(`${BASE}/work`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(!work.includes('href="/carousels"') && !work.includes('href="/diagnose"') && work.includes('href="/posts"'), "메뉴에서 숨김");
+  assert.ok(!work.includes("📱 캐러셀"), "현황 필터에서도 캐러셀 숨김");
+  const diag = (await (await fetch(`${BASE}/diagnose`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(diag.includes("이 기능은 꺼져 있어요"), "끈 페이지로 들어오면 안내");
+  const car = (await (await fetch(`${BASE}/carousels`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(car.includes("이 기능은 꺼져 있어요"), "그룹을 끄면 그 안 페이지도 꺼짐");
+  const st = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(st.includes("기능 켜기·끄기") && st.includes("인스타그램 관리"), "설정 화면");
+  r = (await call("/api/settings/features", "POST", { off: [] })).data;
+  assert.deepEqual(r.off, []);
+  const car2 = (await (await fetch(`${BASE}/carousels`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(!car2.includes("이 기능은 꺼져 있어요"), "다시 켜면 그대로");
+});

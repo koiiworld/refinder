@@ -3,6 +3,8 @@ import "./globals.css";
 import Nav from "@/components/Nav";
 import { q1 } from "@/lib/db";
 import { getBrand } from "@/lib/brand";
+import { getFeatureOff } from "@/lib/features";
+import FeatureGate from "@/components/FeatureGate";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +37,13 @@ async function pendingCount() {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [pending, brand] = await Promise.all([pendingCount(), getBrand()]);
+  const [pending, brand, off] = await Promise.all([pendingCount(), getBrand(), getFeatureOff().catch(() => [] as string[])]);
   return (
     <html lang="ko">
       <body>
         <div className="shell">
-          <Nav pending={pending} brand={brand} />
-          <main className="main">{children}</main>
+          <Nav pending={pending} brand={brand} off={off} />
+          <main className="main"><FeatureGate off={off}>{children}</FeatureGate></main>
         </div>
       </body>
     </html>

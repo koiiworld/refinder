@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { isOffPath, MENU_BOTTOM, MENU_GROUPS, MENU_TOP, type MenuItem } from "@/lib/menu";
 
 const P = {
   chart: "M5 20V10M12 20V4M19 20v-7",
@@ -32,38 +33,12 @@ function Icon({ d }: { d: string }) {
   );
 }
 
-type Item = { href: string; label: string; sub: string; short?: string; icon?: string; badge?: boolean; mobile?: boolean };
-type Group = { id: string; label: string; icon: string; items: Item[] };
-
-const TOP: Item = { href: "/work", label: "전체 작업 현황", short: "현황", sub: "블로그·인스타·영상 등 전체 업무 진행 상황", icon: P.chart, mobile: true };
-const GROUPS: Group[] = [
-  { id: "workspace", label: "워크스페이스", icon: P.home, items: [
-    { href: "/todos", label: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림" },
-    { href: "/ideas", label: "아이디어 노트", sub: "메모·할 일·글 기획" },
-    { href: "/calendar", label: "캘린더", sub: "시즌·행사별 일정" },
-  ] },
-  { id: "research", label: "콘텐츠 리서치", icon: P.trend, items: [
-    { href: "/trends", label: "트렌드 뷰어", short: "트렌드", sub: "유튜브 급상승·스크랩", icon: P.trend, mobile: true },
-    { href: "/hot", label: "블로그 핫이슈", sub: "네이버 블로그 인기 주제 탐색" },
-  ] },
-  { id: "blog", label: "블로그 관리", icon: P.blog, items: [
-    { href: "/posts", label: "업로드", short: "업로드", sub: "키워드 추천부터 발행 준비까지", icon: P.pen, badge: true, mobile: true },
-    { href: "/diagnose", label: "진단", sub: "노출·제목·누락 점검" },
-    { href: "/blogs", label: "설정", sub: "블로그별 말투·작성 규칙" },
-  ] },
-  { id: "video", label: "영상 제작", icon: P.clap, items: [
-    { href: "/studio", label: "영상 스튜디오", sub: "쇼츠·릴스 기획 및 제작" },
-    { href: "/videos", label: "영상공장", short: "영상", sub: "영상 다운로드·자막 제거·편집", icon: P.film, mobile: true },
-  ] },
-  { id: "insta", label: "인스타그램 관리", icon: P.insta, items: [
-    { href: "/carousels", label: "캐러셀", short: "캐러셀", sub: "블로그 글·주제로 카드뉴스 제작", icon: P.phone, mobile: true },
-  ] },
-];
-const BOTTOM: Item[] = [
-  { href: "/settings", label: "설정", short: "설정", sub: "", icon: P.gear, mobile: true },
-  { href: "/trash", label: "휴지통", sub: "", icon: P.trash },
-];
-const MOBILE = [TOP, ...GROUPS.flatMap((g) => g.items), ...BOTTOM].filter((x) => x.mobile);
+type Item = MenuItem & { icon?: string };
+const ICON: Record<string, string> = {
+  "/work": P.chart, workspace: P.home, research: P.trend, blog: P.blog, video: P.clap, insta: P.insta,
+  "/trends": P.trend, "/posts": P.pen, "/videos": P.film, "/carousels": P.phone, "/settings": P.gear, "/trash": P.trash,
+};
+const withIcon = (it: MenuItem): Item => ({ ...it, icon: ICON[it.href] });
 
 function isOn(path: string, href: string) {
   return path === href || path.startsWith(href + "/") || (href === "/posts" && path === "/new");
@@ -71,7 +46,14 @@ function isOn(path: string, href: string) {
 
 const KEY = "nav-open";
 
-export default function Nav({ pending, brand }: { pending: number; brand?: { name: string; mark: string; color: string } }) {
+export default function Nav({ pending, brand, off = [] }: { pending: number; brand?: { name: string; mark: string; color: string }; off?: string[] }) {
+  const TOP = withIcon(MENU_TOP);
+  const GROUPS = MENU_GROUPS.filter((g) => !off.includes(`g:${g.id}`))
+    .map((g) => ({ ...g, icon: ICON[g.id], items: g.items.filter((it) => !isOffPath(off, it.href)).map(withIcon) }))
+    .filter((g) => g.items.length);
+  const BOTTOM = MENU_BOTTOM.map(withIcon);
+  const showTop = !isOffPath(off, TOP.href);
+  const MOBILE = [...(showTop ? [TOP] : []), ...GROUPS.flatMap((g) => g.items), ...BOTTOM].filter((x) => x.mobile);
   const b = brand ?? { name: "콘텐츠 오피스", mark: "AI", color: "" };
   const markStyle = b.color ? { background: b.color, color: "#fff" } : undefined;
   const path = usePathname();
@@ -111,7 +93,7 @@ export default function Nav({ pending, brand }: { pending: number; brand?: { nam
           <span className="tiny muted">메뉴</span>
           <button type="button" className="nav-all" onClick={() => save(Object.fromEntries(GROUPS.map((g) => [g.id, !allOpen])))}>{allOpen ? "모두 접기" : "모두 펼치기"}</button>
         </div>
-        {link(TOP)}
+        {showTop && link(TOP)}
         <div className="nav-sep" />
         {GROUPS.map((g) => {
           const o = isOpen(g.id);

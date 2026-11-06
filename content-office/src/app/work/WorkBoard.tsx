@@ -57,7 +57,7 @@ function Detail({ it, types }: { it: WorkItem; types: Props["types"] }) {
   );
 }
 
-export default function WorkBoard({ items, cols, types, blogs }: Props) {
+export default function WorkBoard({ items, cols, types, blogs, shownTypes = ["blog", "carousel", "studio", "video"] }: Props & { shownTypes?: WorkType[] }) {
   const [type, setType] = useState<WorkType | "all">("all");
   const [blog, setBlog] = useState("");
   const [view, setView] = useState<"board" | "list">("board");
@@ -94,7 +94,7 @@ export default function WorkBoard({ items, cols, types, blogs }: Props) {
 
       <div className="row between" style={{ gap: 8 }}>
         <div className="row" style={{ gap: 6 }}>
-          {(["all", "blog", "carousel", "studio", "video"] as const).map((t) => (
+          {(["all", ...(Object.keys(types) as WorkType[]).filter((t) => shownTypes.includes(t))] as (WorkType | "all")[]).map((t) => (
             <button key={t} className={`btn btn-sm ${type === t ? "btn-primary" : ""}`} onClick={() => setType(t)} aria-pressed={type === t}>
               {t === "all" ? "전체" : `${types[t].icon} ${types[t].label}`}
             </button>
