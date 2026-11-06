@@ -137,14 +137,14 @@ export default function DiagnoseView({ blogs, blogId, initial, initialState }: {
 
           {!!d.metrics.indexed?.length && (
             <section className="card">
-              <div className="card-head"><h2 style={{ fontSize: 15 }}>검색 누락 검사</h2></div>
+              <div className="card-head"><h2 style={{ fontSize: 15 }}>제목 검색 노출 검사</h2></div>
               <div className="card-pad stack" style={{ gap: 4 }}>
-                <p className="tiny muted" style={{ marginTop: 0 }}>최근 글 제목 그대로 네이버 블로그 검색을 해서 내 글이 30위 안에 나오는지 봤어요. 안 나오면 &apos;누락&apos;(저품질·중복 의심)일 수 있어요.</p>
+                <p className="tiny muted" style={{ marginTop: 0 }}>최근 글 제목 그대로 네이버 블로그 검색을 해서 내 글이 상위 30위 안에 나오는지 본 결과예요. &apos;30위 밖&apos;은 검색 반영이 늦거나 같은 제목 경쟁이 심할 때도 생겨요. 실제 색인 상태는 이 검사로 알 수 없고, 네이버 서치어드바이저 같은 곳에서 따로 확인해야 해요.</p>
                 {d.metrics.indexed.map((x, i) => (
                   <div key={i} className="small row" style={{ flexWrap: "nowrap", gap: 8 }}>
                     <span>{x.found ? "✅" : "❌"}</span>
                     <a href={x.url} target="_blank" rel="noreferrer" className="ellipsis" style={{ flex: 1 }}>{x.title}</a>
-                    <span className="tiny muted">{x.found ? `${x.rank}위` : "안 나옴"}</span>
+                    <span className="tiny muted">{x.found ? `${x.rank}위` : "30위 밖"}</span>
                   </div>
                 ))}
               </div>

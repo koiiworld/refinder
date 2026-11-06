@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { PostBundle } from "@/lib/post-bundle";
 import type { PostExtras, PostPlan } from "@/lib/posts-types";
 import { stageLabel, stageStep } from "@/lib/steps";
+import { placeholderNumbers, readiness, READY_LABEL, type Readiness } from "@/lib/readiness";
 import { api, useToast } from "@/components/client-utils";
 import { BlogTag, fmtDate, fmtUsd, Steps } from "@/components/ui";
 import DocEditor from "@/components/DocEditor";
@@ -162,11 +163,19 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
               </p>
               )}
               {extras.images.map((im, i) => (
-                im.kind === "official" ? (
-                  <OfficialImageCard key={i} index={i} im={im} disabled={running} act={act} />
-                ) : (
-                  <ImageCard key={i} projectId={p.id} index={i} im={im} providers={imageProviders} disabled={running} act={act} copy={copy} />
-                )
+                <div key={i} className="stack" style={{ gap: 4 }}>
+                  <label className="tiny row" style={{ gap: 6, justifyContent: "flex-end" }} title="체크하면 이 자리는 앱에서 넣지 않고, 블로그 편집기에서 직접 사진을 넣어요 (발행 준비 판정에서 빠져요)">
+                    <input type="checkbox" checked={!!im.manual} disabled={running} onChange={(e) => void act({ action: "image_manual", index: i, manual: e.target.checked }, e.target.checked ? `이미지 ${i + 1}은 블로그 편집기에서 직접 넣는 걸로 표시했어요.` : `이미지 ${i + 1}은 앱에서 넣는 걸로 바꿨어요.`)} />
+                    📷 이미지 {i + 1}: 블로그 편집기에서 직접 넣을게요
+                  </label>
+                  {im.manual ? (
+                    <div className="card card-pad small muted" style={{ padding: 10 }}>이미지 {i + 1} 자리는 블로그 편집기에서 직접 넣어요. 본문의 [이미지 {i + 1}] 표시 자리에 사진을 넣고 표시는 지우세요.</div>
+                  ) : im.kind === "official" ? (
+                    <OfficialImageCard index={i} im={im} disabled={running} act={act} />
+                  ) : (
+                    <ImageCard projectId={p.id} index={i} im={im} providers={imageProviders} disabled={running} act={act} copy={copy} />
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -202,6 +211,7 @@ export default function PostView({ initial, higgsfield }: { initial: PostBundle;
             <p className="small muted">글이 완성되면 여기서 복사·다운로드해 블로그에 올리세요.</p>
           ) : (
             <Publish
+              ready={readiness({ stage: p.stage, status: p.status, needsRereview: p.needs_rereview, review: p.review as never, images: extras.images, placeholders: placeholderNumbers(doc.content_html), outlinePending: !!(plan as PostPlan & { outline?: { approved?: boolean } } | null)?.outline && !(plan as PostPlan & { outline?: { approved?: boolean } }).outline?.approved })}
               title={title}
               html={doc.content_html}
               hashtags={extras.hashtags}
@@ -660,14 +670,20 @@ function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFi
   );
 }
 
-function Publish(props: { title: string; html: string; hashtags: string[]; blogUrl?: string; projectId: string; published: boolean; publishedUrl: string | null; publishedAt: string | null; disabled: boolean; copy: (t: string, w: string) => void; act: (p: Record<string, unknown>, m?: string) => Promise<boolean> }) {
+function Publish(props: { ready: Readiness; title: string; html: string; hashtags: string[]; blogUrl?: string; projectId: string; published: boolean; publishedUrl: string | null; publishedAt: string | null; disabled: boolean; copy: (t: string, w: string) => void; act: (p: Record<string, unknown>, m?: string) => Promise<boolean> }) {
   const [url, setUrl] = useState(props.publishedUrl ?? "");
   const tags = props.hashtags.map((t) => "#" + t).join(" ");
   const base = `/api/projects/${props.projectId}/export`;
-  const placeholders = (props.html.match(/\[이미지\s*\d+[^\]]*\]/g) ?? []).length;
+  const r = props.ready;
+  const ok = r.state === "ready" || r.state === "manual" || r.state === "published";
   return (
     <div className="stack" style={{ gap: 10 }}>
-      {placeholders > 0 && <div className="notice notice-warn small">본문에 아직 이미지가 안 들어간 자리 {placeholders}곳이 있어요. ⑤에서 이미지를 넣거나 블로그 편집기에서 직접 넣으세요.</div>}
+      <div className={`notice ${ok ? "notice-ok" : "notice-warn"} small stack`} style={{ gap: 4 }}>
+        <b>{READY_LABEL[r.state].label}{r.score != null ? ` · 검수 ${r.score}점 · 남은 지적 ${r.openIssues}건` : ""}</b>
+        {r.reasons.map((x) => <span key={x}>• {x}</span>)}
+        {r.unverified.slice(0, 3).map((u, i) => <span key={i} className="tiny">  ↳ 근거 확인: {u.quote ? `"${u.quote.slice(0, 40)}" — ` : ""}{u.comment.slice(0, 80)}</span>)}
+        {r.manualPlaceholders.length > 0 && <span className="tiny">블로그에 붙여 넣은 뒤 [이미지 {r.manualPlaceholders.join("], [이미지 ")}] 자리에 직접 사진을 넣으세요.</span>}
+      </div>
       <div className="row">
         <button className="btn" onClick={() => props.copy(props.title, "제목")}>제목 복사</button>
         <button className="btn" onClick={() => props.copy(props.html, "본문(HTML)")}>본문 복사</button>
@@ -686,7 +702,7 @@ function Publish(props: { title: string; html: string; hashtags: string[]; blogU
       ) : (
         <div className="row" style={{ flexWrap: "nowrap" }}>
           <input className="input" placeholder="발행한 글 주소 (선택)" value={url} onChange={(e) => setUrl(e.target.value)} />
-          <button className="btn btn-ok" disabled={props.disabled} onClick={() => props.act({ action: "publish", url }, "발행 완료로 표시했습니다.")}>⑦ 발행 완료</button>
+          <button className="btn btn-ok" disabled={props.disabled} onClick={() => (ok || confirm(`아직 '${READY_LABEL[r.state].label}' 상태예요.\n${r.reasons.join("\n")}\n\n그래도 발행 완료로 표시할까요?`)) && props.act({ action: "publish", url }, "발행 완료로 표시했습니다.")}>⑦ 발행 완료</button>
         </div>
       )}
     </div>

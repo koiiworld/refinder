@@ -15,7 +15,7 @@ export default async function Diagnose({ searchParams }: { searchParams: Promise
       <div className="page-head">
         <div>
           <h1>🩺 블로그 진단</h1>
-          <p className="sub">발행 리듬·제목·검색 누락·키워드 순위·글 구조·방문자를 앱이 직접 재고, AI가 고칠 점을 정리합니다.</p>
+          <p className="sub">발행 리듬·제목·제목 검색 노출·키워드 순위·글 구조·방문자를 앱이 직접 재고, AI가 고칠 점을 정리합니다.</p>
         </div>
       </div>
       {cur ? <DiagnoseView key={cur.id} blogs={blogs} blogId={cur.id} initial={last} initialState={state} /> : <p className="muted">블로그를 먼저 추가하세요.</p>}

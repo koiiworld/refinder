@@ -23,7 +23,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string }>(req);
+    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; indexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean }>(req);
     switch (b.action) {
       case "rerun":
         if (!b.step) throw new WorkflowError("다시 실행할 단계를 고르세요.");
@@ -92,6 +92,9 @@ export async function POST(req: Request, { params }: Ctx) {
         await setImage(id, Number(b.index), { pageUrl, candidates, ...(b.credit !== undefined ? { credit: b.credit } : {}) });
         break;
       }
+      case "image_manual":
+        await setImage(id, Number(b.index), { manual: !!b.manual });
+        break;
       case "image_credit":
         await setImage(id, Number(b.index), { credit: String(b.credit ?? "").slice(0, 100) });
         break;

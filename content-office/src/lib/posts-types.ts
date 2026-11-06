@@ -23,6 +23,8 @@ export interface PostBrief {
 }
 
 export interface PostImage {
+  /** 이 자리는 앱에서 넣지 않고 블로그 편집기에서 직접 넣음 (발행 준비 판정에서 제외) */
+  manual?: boolean;
   prompt: string;
   alt: string;
   aspect: string;

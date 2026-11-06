@@ -10,7 +10,7 @@ import { blogContext } from "./ai/prompts";
 
 /**
  * 🩺 블로그 진단
- * - 발행 리듬·제목 패턴(블로그 RSS) · 검색 누락 여부/키워드 순위·경쟁도(네이버 검색 API)
+ * - 발행 리듬·제목 패턴(블로그 RSS) · 제목 검색 상위 30위 여부/키워드 순위·경쟁도(네이버 검색 API)
  * - 최근 글 구조(직접 읽어서 셈) · 방문자 추이 · AI 종합 진단(무료 Gemini 기본)
  */
 
@@ -120,7 +120,7 @@ export async function diagnoseBlog(blogId: string) {
   const ts = titleStats(posts);
   const notes: string[] = [];
 
-  // 1) 검색 누락 검사: 최근 글 제목으로 검색해 내 글이 나오는지
+  // 1) 제목 검색 노출: 최근 글 제목으로 검색해 상위 30위 안에 나오는지 (색인 여부는 알 수 없음)
   let searchError = "";
   const indexed: { title: string; url: string; found: boolean; rank: number | null }[] = [];
   for (const p of posts.slice(0, 8)) {
@@ -207,8 +207,8 @@ export async function diagnoseBlog(blogId: string) {
   }
   if (indexed.length) {
     const miss = indexed.filter((i) => !i.found);
-    checks.push({ label: "검색 누락", status: miss.length === 0 ? "ok" : miss.length <= 2 ? "warn" : "bad", detail: miss.length ? `최근 글 ${indexed.length}개 중 ${miss.length}개가 제목으로 검색해도 안 나와요` : `최근 글 ${indexed.length}개 모두 검색에 나와요` });
-  } else if (searchError) checks.push({ label: "검색 누락·키워드 순위", status: "skip", detail: searchError });
+    checks.push({ label: "제목 검색 노출", status: miss.length === 0 ? "ok" : miss.length <= 2 ? "warn" : "bad", detail: miss.length ? `최근 글 ${indexed.length}개 중 ${miss.length}개가 '제목 그대로 검색' 상위 30위 안에 없어요 (검색 반영 지연·제목 경쟁일 수도 있어요. 색인 여부는 이 검사로 알 수 없어요)` : `최근 글 ${indexed.length}개 모두 제목 검색 상위 30위 안에 나와요` });
+  } else if (searchError) checks.push({ label: "제목 검색 노출·키워드 순위", status: "skip", detail: searchError });
   if (readStats.length) {
     const chars = avg("chars")!, imgs = avg("images")!, heads = avg("headings")!;
     checks.push({ label: "본문 길이", status: chars >= 1500 ? "ok" : chars >= 800 ? "warn" : "bad", detail: `최근 글 평균 ${chars.toLocaleString("ko-KR")}자 (권장 1,500자 이상)` });
@@ -230,7 +230,7 @@ export async function diagnoseBlog(blogId: string) {
   const metrics = { rhythm: rh, titles: { avgLen: ts.avgLen, count: ts.count, withNumber: ts.withNumber, repeated: ts.repeated.slice(0, 5), special: ts.special.slice(0, 5), tooLong: ts.tooLong.slice(0, 5) }, indexed, ranks, structure: { avgChars: avg("chars"), avgImages: avg("images"), avgHeadings: avg("headings"), avgLists: avg("lists") }, visits: vis };
 
   // 6) AI 종합 진단 (단계별 AI의 '키워드' 담당 — 기본 무료 Gemini)
-  const system = `당신은 네이버·티스토리 블로그 성장 컨설턴트입니다. 앱이 직접 잰 수치만 근거로 진단합니다. 수치에 없는 사실(방문자 수, 순위 등)을 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다. 한국어로, 쉽고 짧게 씁니다.`;
+  const system = `당신은 네이버·티스토리 블로그 성장 컨설턴트입니다. 앱이 직접 잰 수치만 근거로 진단합니다. 수치에 없는 사실(방문자 수, 순위 등)을 지어내지 않습니다. '제목 검색 노출' 검사는 네이버 블로그 검색에서 제목 그대로 검색했을 때 상위 30위 안에 드는지만 본 것입니다. 이 결과로 '색인 미등록', '누락', '저품질'을 단정하지 말고 "제목 검색 상위 30위 밖"이라고만 표현하세요. 반드시 JSON 객체 하나만 출력합니다. 한국어로, 쉽고 짧게 씁니다.`;
   const prompt = `${blogContext(blog)}
 
 [최근 글 제목 - 블로그 RSS]

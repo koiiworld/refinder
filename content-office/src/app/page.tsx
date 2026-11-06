@@ -54,7 +54,7 @@ export default async function Dashboard() {
         </div>
 
         {/* 수익 (직접 입력) */}
-        <RevenueCard month={d.month} data={d.revenue.data} total={d.revenue.total} prevTotal={d.revenue.prevTotal} aiKrw={d.cost.monthUsd * KRW_PER_USD} coupang={d.revenue.coupang} />
+        <RevenueCard month={d.month} data={d.revenue.data} total={d.revenue.total} prevTotal={d.revenue.prevTotal} aiKrw={d.cost.monthUsd * KRW_PER_USD} coupang={d.revenue.coupang} goal={d.revenue.goal} />
 
         {/* AI 비용 */}
         <section className="card">

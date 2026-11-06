@@ -558,7 +558,7 @@ test("🩺 블로그 진단: 발행 리듬·제목·검색 누락·키워드 순
   assert.equal(idx["굴보쌈"].rank, 2);
   assert.equal(idx["깍두기"].found, false, "검색 누락");
   const check = (label) => d.checks.find((c) => c.label.startsWith(label));
-  assert.equal(check("검색 누락").status, "warn");
+  assert.equal(check("제목 검색 노출").status, "warn");
   assert.match(check("발행 빈도").detail, /최근 30일 2개/);
   assert.ok(d.metrics.ranks.length >= 1, "앱에서 쓴 글 키워드 순위");
   assert.equal(d.metrics.ranks[0].rank, 5);
@@ -842,4 +842,34 @@ test("⚠️ 고장 알림: 방문자 수집이 3번 연속 실패하면 대시�
   await call("/api/dashboard/visits?refresh=1");
   h = (await call("/api/dashboard/health")).data;
   assert.ok(!h.some((x) => x.id === "visits"), "다시 성공하면 사라짐");
+});
+
+test("✅ 발행 준비 판정: 지금 원고 기준 · 재검수 필요 · 근거 확인 · 이미지 자리(앱/직접) · 진행 목록 표시", async () => {
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  const id = posts[0].id;
+  let b = (await call(`/api/posts/${id}`)).data;
+  // 모의 검수는 'fact' 지적 1건(low) → 근거 확인 필요
+  const html1 = await (await fetch(`${BASE}/posts`)).text();
+  assert.ok(html1.includes("손볼 곳이 있어요"), "진행 목록에 손볼 곳 그룹");
+  assert.ok(html1.replace(/<!-- -->/g, "").includes("근거 확인 필요"), "근거 확인 사유");
+  // 코멘트에 원문 출처 주소를 붙이면 해결
+  await call(`/api/posts/${id}`, "POST", { action: "issue_note", index: 0, note: "출처: https://www.gov.kr/abc" });
+  // 이미지 자리: 하나는 직접 넣기로
+  b = (await call(`/api/posts/${id}`)).data;
+  const n = b.project.package.images.length;
+  for (let i = 0; i < n; i++) await call(`/api/posts/${id}`, "POST", { action: "image_manual", index: i, manual: true });
+  b = (await call(`/api/posts/${id}`)).data;
+  assert.ok(b.project.package.images.every((im) => im.manual), "직접 넣기 표시 저장");
+  const html2 = (await (await fetch(`${BASE}/posts`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(/수동 발행 준비|발행 준비 완료/.test(html2), "근거 연결·이미지 직접 넣기면 발행 준비");
+});
+
+test("🎯 매출 목표: 정하면 달성률·남은 금액 · 다음 달은 지난 목표 이어서", async () => {
+  const now = new Date(Date.now() + 9 * 3600 * 1000);
+  const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  assert.equal((await call("/api/dashboard/revenue", "PUT", { month, goal: 100000 })).status, 200);
+  const html = (await (await fetch(`${BASE}/`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(html.includes("이번 달 매출 목표") && html.includes("₩100,000"), "목표 표시");
+  assert.match(html, /\d+%<\/b> 달성/, "달성률");
+  await call("/api/dashboard/revenue", "PUT", { month, goal: 0 });
 });

@@ -141,7 +141,7 @@ const CHANNELS: { id: RevenueChannel; name: string; metricHint: string; usd?: bo
   { id: "adsense", name: "애드센스", metricHint: "예: 페이지뷰 9,400 · RPM $1.98", usd: true },
 ];
 
-export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: { month: string; data: MonthRevenue; total: number; prevTotal: number | null; aiKrw: number; coupang?: { connected: boolean; at: string | null; error: string } }) {
+export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang, goal }: { month: string; data: MonthRevenue; total: number; prevTotal: number | null; aiKrw: number; coupang?: { connected: boolean; at: string | null; error: string }; goal?: { krw: number; inherited: boolean } | null }) {
   const router = useRouter();
   const [edit, setEdit] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -151,6 +151,27 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
   );
   const [, m] = month.split("-").map(Number);
   const [syncing, setSyncing] = useState(false);
+  const [goalEdit, setGoalEdit] = useState(false);
+  const [goalIn, setGoalIn] = useState(goal?.krw ? String(goal.krw) : "");
+  async function saveGoalNow() {
+    setMsg("");
+    try {
+      await api("/api/dashboard/revenue", "PUT", { month, goal: Number(goalIn.replace(/[^\d]/g, "")) || 0 });
+      setGoalEdit(false);
+      router.refresh();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  }
+  // 달성률 · 이 속도면 월말 예상
+  const now = new Date(Date.now() + 9 * 3600 * 1000);
+  const [gy, gm] = month.split("-").map(Number);
+  const daysInMonth = new Date(Date.UTC(gy, gm, 0)).getUTCDate();
+  const isThisMonth = now.getUTCFullYear() === gy && now.getUTCMonth() + 1 === gm;
+  const dayNow = isThisMonth ? now.getUTCDate() : daysInMonth;
+  const rate = goal?.krw ? total / goal.krw : null;
+  const projected = dayNow > 0 ? Math.round((total / dayNow) * daysInMonth) : total;
+  const expectedRate = dayNow / daysInMonth;
   const [reading, setReading] = useState(false);
   const [capNote, setCapNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -235,6 +256,30 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
         </div>
       </div>
       <div className="card-pad stack" style={{ gap: 12 }}>
+        <div className="stack" style={{ gap: 6 }}>
+          <div className="row between">
+            <span className="small"><b>🎯 이번 달 매출 목표</b> {goal?.krw ? <>{krw(goal.krw)}{goal.inherited && <span className="tiny muted"> (지난 목표 이어서)</span>}</> : <span className="tiny muted">아직 없음</span>}</span>
+            <button className="btn btn-sm btn-ghost" onClick={() => setGoalEdit(!goalEdit)}>{goalEdit ? "닫기" : goal?.krw ? "목표 바꾸기" : "목표 정하기"}</button>
+          </div>
+          {goalEdit && (
+            <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+              <input className="input" inputMode="numeric" placeholder="이번 달 목표 (원, 예: 300,000)" value={commas(goalIn)} onChange={(e) => setGoalIn(e.target.value.replace(/[^\d]/g, ""))} aria-label="매출 목표" />
+              <button className="btn btn-sm btn-primary" onClick={saveGoalNow}>저장</button>
+            </div>
+          )}
+          {goal?.krw ? (
+            <>
+              <div className="goal-bar" title={`달성률 ${Math.round((rate ?? 0) * 100)}%`}>
+                <div className="goal-fill" style={{ width: `${Math.min(100, (rate ?? 0) * 100)}%`, background: (rate ?? 0) >= expectedRate ? "var(--ok, #1a9e5a)" : "var(--warn, #e8a000)" }} />
+                {isThisMonth && <div className="goal-pace" style={{ left: `${expectedRate * 100}%` }} title={`오늘까지 지나야 할 지점 ${Math.round(expectedRate * 100)}%`} />}
+              </div>
+              <div className="row between tiny">
+                <span><b style={{ fontSize: 15 }}>{Math.round((rate ?? 0) * 100)}%</b> 달성 · {krw(total)} / {krw(goal.krw)}{total < goal.krw ? ` · 남은 금액 ${krw(goal.krw - total)}` : " · 🎉 목표 달성"}</span>
+                {isThisMonth && <span className="muted">이 속도면 월말 약 {krw(projected)} ({Math.round((projected / goal.krw) * 100)}%)</span>}
+              </div>
+            </>
+          ) : null}
+        </div>
         {total > 0 ? (
           <div className="kpi-grid">
             <div>

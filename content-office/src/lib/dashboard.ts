@@ -55,6 +55,25 @@ export async function saveRevenue(month: string, data: MonthRevenue) {
   return clean;
 }
 
+/** 월 매출 목표 (원). 그 달 목표가 없으면 가장 최근에 정한 목표를 이어서 씀 */
+export async function getGoals(): Promise<Record<string, number>> {
+  const r = await q1<{ value: Record<string, number> }>("SELECT value FROM settings WHERE key='revenue_goals'");
+  return r?.value ?? {};
+}
+export async function saveGoal(month: string, krw: number) {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("월 형식이 올바르지 않습니다.");
+  const all = await getGoals();
+  if (krw > 0) all[month] = Math.round(krw);
+  else delete all[month];
+  await q(`INSERT INTO settings (key, value) VALUES ('revenue_goals', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j(all)]);
+  return all;
+}
+function goalFor(all: Record<string, number>, month: string) {
+  if (all[month]) return { krw: all[month], inherited: false };
+  const prev = Object.keys(all).filter((m) => m < month).sort().pop();
+  return prev ? { krw: all[prev], inherited: true } : null;
+}
+
 const revTotal = (r?: MonthRevenue) => (["coupang", "adpost", "adsense"] as RevenueChannel[]).reduce((s, c) => s + (r?.[c]?.krw ?? 0), 0);
 
 export async function dashboardData() {
@@ -202,6 +221,7 @@ export async function dashboardData() {
   const revenueAll = await getRevenue();
   const month = monthKey();
   const revenue = revenueAll[month] ?? {};
+  const goal = goalFor(await getGoals(), month);
   const prevRevenue = revenueAll[prevMonthKey()];
 
   return {
@@ -241,7 +261,7 @@ export async function dashboardData() {
     topKeywords: topKeywords.map((k) => ({ ...k, volume: Number(k.volume), blog: blogs.find((b) => b.id === k.blog_id)?.name ?? "" })),
     ops: { ...(ops ?? { ready: 0, failed: 0, rereview: 0, choosing: 0 }), todayCalls: today.models.reduce((s, m) => s + m.calls, 0), todayUsd: today.total },
     cost: { monthUsd, monthCalls, perPost: completedMonth ? monthUsd / completedMonth : null, todayUsd: today.total, todaySteps: today.steps, days },
-    revenue: { month, data: revenue, total: revTotal(revenue), prevTotal: prevRevenue ? revTotal(prevRevenue) : null, coupang: { connected: coupangConnected(), at: coupangSync?.at ?? null, error: coupangError } },
+    revenue: { month, goal, data: revenue, total: revTotal(revenue), prevTotal: prevRevenue ? revTotal(prevRevenue) : null, coupang: { connected: coupangConnected(), at: coupangSync?.at ?? null, error: coupangError } },
   };
 }
 

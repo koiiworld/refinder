@@ -402,3 +402,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .studio-badge { position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 6px; }
 .studio-scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
 @media (max-width: 640px) { .studio-char { flex-direction: column; } .studio-scenes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* 🎯 매출 목표 */
+.goal-bar { position: relative; height: 12px; border-radius: 6px; background: var(--panel-2); overflow: visible; }
+.goal-fill { height: 100%; border-radius: 6px; transition: width .3s; }
+.goal-pace { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .5; }

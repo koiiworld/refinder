@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { stageLabel, stageStep } from "@/lib/steps";
+import { READY_LABEL, type ReadyState } from "@/lib/readiness";
 import { BlogTag, fmtDate, Steps } from "@/components/ui";
 import { api } from "@/components/client-utils";
 
-export type PostRow = { id: string; title: string; topic: string; stage: string; status: string; status_message: string; updated_at: string; blog_name: string; blog_color: string; needs_rereview: boolean };
+export type PostRow = { id: string; title: string; topic: string; stage: string; status: string; status_message: string; updated_at: string; blog_name: string; blog_color: string; needs_rereview: boolean; ready?: { state: ReadyState; score: number | null; openIssues: number; reasons: string[] } };
 
 /** 진행 현황 목록: 체크박스로 골라 휴지통으로 보내기 */
 export default function PostGroups({ groups }: { groups: [string, PostRow[]][] }) {
@@ -63,13 +64,23 @@ export default function PostGroups({ groups }: { groups: [string, PostRow[]][] }
                             <span className="tiny muted">키워드 {r.topic} · {fmtDate(r.updated_at)}</span>
                           </div>
                         </div>
-                        <span className={`badge ${r.status === "error" ? "badge-bad" : r.stage === "ready" ? "badge-warn" : r.stage === "published" ? "badge-ok" : "badge-accent"}`} style={{ flexShrink: 0 }}>
-                          {r.status === "running" && <span className="spinner" style={{ width: 9, height: 9, borderWidth: 1.5 }} />}
-                          {stageLabel(r.stage, r.status)}
-                        </span>
+                        <div className="row" style={{ gap: 4, flexShrink: 0, justifyContent: "flex-end" }}>
+                          {r.ready && (
+                            <span className={`badge ${READY_LABEL[r.ready.state].tone ? `badge-${READY_LABEL[r.ready.state].tone}` : ""}`}>
+                              {r.ready.state === "running" && <span className="spinner" style={{ width: 9, height: 9, borderWidth: 1.5 }} />}
+                              {READY_LABEL[r.ready.state].label}
+                            </span>
+                          )}
+                          <span className="badge" title="진행 단계">{stageLabel(r.stage, r.status)}</span>
+                        </div>
                       </div>
                       {r.status_message && <div className="tiny" style={{ color: r.status === "error" ? "var(--bad)" : "var(--warn)" }}>{r.status_message}</div>}
-                      {r.needs_rereview && <div className="tiny" style={{ color: "var(--warn)" }}>검수 후 글을 고쳤어요 · 다시 검수를 권장합니다</div>}
+                      {r.ready && (r.ready.score != null || r.ready.reasons.length > 0) && (
+                        <div className="tiny" style={{ color: ["ready", "manual", "published"].includes(r.ready.state) ? "var(--muted)" : "var(--warn)" }}>
+                          {r.ready.score != null && <>검수 {r.ready.score}점 · 남은 지적 {r.ready.openIssues}건</>}
+                          {r.ready.reasons.length > 0 && <>{r.ready.score != null ? " · " : ""}{r.ready.reasons.join(" · ")}</>}
+                        </div>
+                      )}
                       <Steps current={r.stage === "published" ? 8 : stageStep(r.stage)} error={r.status === "error"} />
                     </Link>
                   </div>
