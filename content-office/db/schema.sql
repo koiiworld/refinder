@@ -329,3 +329,30 @@ CREATE TABLE IF NOT EXISTS carousels (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- 🎬 영상공장: 링크로 받은 영상 · 편집본 · 스튜디오에서 만든 영상
+CREATE TABLE IF NOT EXISTS videos (
+  id           TEXT PRIMARY KEY,
+  source_url   TEXT NOT NULL DEFAULT '',
+  title        TEXT NOT NULL DEFAULT '',
+  kind         TEXT NOT NULL DEFAULT 'download',  -- download | edit | studio
+  parent_id    TEXT,
+  status       TEXT NOT NULL DEFAULT 'queued',    -- queued | running | ready | error
+  message      TEXT NOT NULL DEFAULT '',
+  path         TEXT,                               -- 저장소 경로 (mp4)
+  thumb_path   TEXT,
+  original_path TEXT,                              -- 자막 지우기 전 원본
+  size         BIGINT,
+  duration     REAL,
+  width        INTEGER,
+  height       INTEGER,
+  info         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- 저장소 키가 없을 때 임시로 DB에 보관하는 영상 파일
+CREATE TABLE IF NOT EXISTS video_blobs (
+  path        TEXT PRIMARY KEY,
+  mime        TEXT NOT NULL,
+  data        BYTEA NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

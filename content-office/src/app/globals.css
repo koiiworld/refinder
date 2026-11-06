@@ -383,3 +383,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .hot-step:not(.last)::after { content: "↓"; right: auto; left: 50%; top: auto; bottom: -11px; transform: translateX(-50%); }
   .hot-report { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 🎬 영상 편집 */
+.video-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .video-editor { grid-template-columns: minmax(0, 1fr); } }

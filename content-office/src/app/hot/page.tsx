@@ -59,7 +59,7 @@ export default async function Hot({ searchParams }: { searchParams: Promise<{ c?
       <h2 style={{ fontSize: 15, margin: "4px 0 10px" }}>📰 네이버 블로그 홈 · 주제별 반응 많은 글</h2>
       <nav className="trend-tabs" aria-label="주제">
         {HOT_TABS.map((t) => (
-          <Link key={t.id} href={t.id === "all" ? "/hot" : `/hot?c=${t.id}`} className={`trend-tab ${t.id === tab.id ? "on" : ""}`}>
+          <Link key={t.id} href={t.id === "all" ? "/hot" : `/hot?c=${t.id}`} scroll={false} className={`trend-tab ${t.id === tab.id ? "on" : ""}`}>
             <span aria-hidden>{t.icon}</span> {t.label}
           </Link>
         ))}
@@ -95,7 +95,7 @@ export default async function Hot({ searchParams }: { searchParams: Promise<{ c?
               </a>
               <div className="trend-body stack" style={{ gap: 6, padding: 12 }}>
                 <a href={p.url} target="_blank" rel="noreferrer" className="trend-title small" style={{ fontWeight: 700 }}>{p.title}</a>
-                <div className="tiny muted">{p.nickname} · {ago(p.at)}</div>
+                <div className="tiny muted">{p.topic ? `${p.topic} · ` : ""}{p.nickname} · {ago(p.at)}</div>
                 <div className="tiny">❤️ {p.likes.toLocaleString("ko-KR")} · 💬 {p.comments.toLocaleString("ko-KR")}</div>
                 <Link className="btn btn-sm" href={`/new?hint=${encodeURIComponent(hintOf(p.title))}`}>✍️ 글감으로</Link>
               </div>

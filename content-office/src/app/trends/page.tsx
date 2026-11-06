@@ -24,11 +24,11 @@ export default async function Trends({ searchParams }: { searchParams: Promise<{
 
       <nav className="trend-tabs" aria-label="카테고리">
         {TREND_TABS.map((t) => (
-          <Link key={t.id} href={t.id === "hot" ? "/trends" : `/trends?c=${t.id}`} className={`trend-tab ${!showScraps && t.id === tab.id ? "on" : ""}`}>
+          <Link key={t.id} href={t.id === "hot" ? "/trends" : `/trends?c=${t.id}`} scroll={false} className={`trend-tab ${!showScraps && t.id === tab.id ? "on" : ""}`}>
             <span aria-hidden>{t.icon}</span> {t.label}
           </Link>
         ))}
-        <Link href="/trends?tab=scraps" className={`trend-tab ${showScraps ? "on" : ""}`}>
+        <Link href="/trends?tab=scraps" scroll={false} className={`trend-tab ${showScraps ? "on" : ""}`}>
           <span aria-hidden>📌</span> 스크랩 {scraps.length > 0 && <span className="badge" style={{ padding: "0 6px" }}>{scraps.length}</span>}
         </Link>
       </nav>

@@ -41,7 +41,7 @@ export default function DiagnoseView({ blogs, blogId, initial }: { blogs: { id: 
     <div className="stack" style={{ gap: 16 }}>
       <nav className="trend-tabs" aria-label="블로그">
         {blogs.map((b) => (
-          <Link key={b.id} href={`/diagnose?blog=${b.id}`} className={`trend-tab ${b.id === blogId ? "on" : ""}`}>
+          <Link key={b.id} href={`/diagnose?blog=${b.id}`} scroll={false} className={`trend-tab ${b.id === blogId ? "on" : ""}`}>
             <span className="dot" style={{ background: b.color }} /> {b.name}
           </Link>
         ))}

@@ -46,9 +46,12 @@ export function ensureWorker() {
   const w = g.__worker;
   if (w.started) return;
   w.started = true;
-  void q(
-    `UPDATE jobs SET status='queued', error=COALESCE(error,'') || ' (서버 재시작으로 재시도)' WHERE status='running'`,
-  ).catch(() => {});
+  // 맥 앱과 Render 서버가 같은 DB를 쓰므로, 다른 서버가 지금 하고 있는 작업은 건드리지 않음
+  // (30분 넘게 '진행 중'으로 멈춘 작업만 다시 대기열로)
+  const recover = () =>
+    q(`UPDATE jobs SET status='queued', error=COALESCE(error,'') || ' (오래 멈춰 재시도)' WHERE status='running' AND started_at < NOW() - interval '30 minutes'`).catch(() => {});
+  void recover();
+  setInterval(() => void recover(), 5 * 60 * 1000).unref?.();
   w.timer = setInterval(() => void tick(), TICK_MS);
   w.timer.unref?.();
   // 블로그 방문자 수: 시작 30초 뒤 한 번, 이후 1시간마다 (맥이 켜져 있는 동안)
@@ -56,16 +59,40 @@ export function ensureWorker() {
   setInterval(() => void collectVisits().catch(() => {}), 10 * 60 * 1000).unref?.();
 }
 
+/** 영상 작업(다운로드·인코딩): 맥이 켜져 있으면 맥이 먼저 맡음 (Render 무료 서버는 CPU가 아주 약함) */
+export const VIDEO_JOBS = ["video_fetch", "video_edit", "studio_plan", "studio_character", "studio_scene", "studio_render"];
+const ON_RENDER = !!process.env.RENDER;
+const hb = globalThis as unknown as { __macAlive?: { at: number; alive: boolean }; __macBeat?: number };
+async function macAlive() {
+  if (!ON_RENDER) return true;
+  if (hb.__macAlive && Date.now() - hb.__macAlive.at < 30_000) return hb.__macAlive.alive;
+  const r = await q1<{ value: { at?: string } }>("SELECT value FROM settings WHERE key='worker_mac'").catch(() => null);
+  const alive = !!r?.value?.at && Date.now() - new Date(r.value.at).getTime() < 90_000;
+  hb.__macAlive = { at: Date.now(), alive };
+  return alive;
+}
+async function macHeartbeat() {
+  if (ON_RENDER || (hb.__macBeat && Date.now() - hb.__macBeat < 30_000)) return;
+  hb.__macBeat = Date.now();
+  await q(`INSERT INTO settings (key, value) VALUES ('worker_mac', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j({ at: new Date().toISOString() })]).catch(() => {});
+}
+
 async function tick() {
   const w = g.__worker!;
+  void macHeartbeat();
+  // 이 서버가 처리할 수 있는 작업만 가져감 (버전이 다른 서버가 모르는 작업을 '완료'로 처리하는 일 방지)
+  const known = Object.keys(HANDLERS);
+  const deferVideo = ON_RENDER && (await macAlive());
   while (w.running < CONCURRENCY) {
     let job: Job | null = null;
     try {
       job = await q1<Job>(
         `UPDATE jobs SET status='running', attempts=attempts+1, started_at=NOW()
-         WHERE id = (SELECT id FROM jobs WHERE status='queued' AND run_after <= NOW()
+         WHERE id = (SELECT id FROM jobs WHERE status='queued' AND run_after <= NOW() AND type = ANY($1)
+                       AND (NOT $2 OR type <> ALL($3) OR created_at < NOW() - interval '3 minutes')
                      ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED)
          RETURNING *`,
+        [known, deferVideo, VIDEO_JOBS],
       );
     } catch {
       return;
@@ -134,6 +161,16 @@ const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, 
 const arr = (v: unknown) => (Array.isArray(v) ? v : []);
 
 const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
+  // 🎬 영상공장: 링크에서 받기 · 편집본 만들기
+  async video_fetch(job) {
+    const { runVideoFetch } = await import("./videos");
+    await runVideoFetch(String(job.payload.videoId), job.payload.removeSubs !== false);
+  },
+  async video_edit(job) {
+    const { runVideoEdit } = await import("./videos");
+    await runVideoEdit(String(job.payload.videoId), String(job.payload.parentId), (job.payload.opts ?? {}) as import("./videos").EditOptions);
+  },
+
   // ⑥ 검수에서 고른 지적 사항을 AI가 반영 (본문 일부만 수정) → '다시 검수' 권장
   async fix(job) {
     const { project, blog } = await load(job);

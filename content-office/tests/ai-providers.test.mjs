@@ -569,6 +569,8 @@ test("📰 블로그 핫이슈: 주제별 글을 반응(공감+댓글×3) 순으
   assert.ok(order.every((x) => x > 0), "글 표시 · 태그 제거");
   assert.ok(order[0] < order[1] && order[1] < order[2] && order[2] < order[3], "공감 50 > 공감3+댓글9 > 공감10+댓글1 > 1");
   assert.ok(html.includes(`/new?hint=${encodeURIComponent("김장")}`), "자주 나온 단어 '김장' → 키워드 추천");
+  assert.ok(!html.includes("머,,") && !html.includes("일상 기록 남겨봐요"), "제목·본문 없는 글, 일상 분야 글은 제외");
+  assert.ok(!html.includes("역노화") && !html.includes("1아승기"), "AI가 주제와 무관한 글 제외 · [일상] 글 제외");
   assert.ok(!html.includes(`hint=${encodeURIComponent("후기")}"`), "흔한 말 제외");
   await call("/__reset", "POST", undefined, MOCK);
   await fetch(`${BASE}/hot?c=food`);
@@ -628,4 +630,60 @@ test("📋 글감 추천 리포트: 구글 트렌드·네이버 뉴스·블로�
   await call("/api/hot", "POST", { action: "skip", reportId: r.data.id, index: 1 });
   const last = (await call("/api/hot?blogId=blog_algokitchen")).data;
   assert.deepEqual(last.items.map((x) => x.status), ["approved", "skipped"]);
+});
+
+async function waitVideo(id, label, ms = 120_000) {
+  const t = Date.now();
+  let v;
+  while (Date.now() - t < ms) {
+    v = (await call(`/api/videos/${id}`)).data;
+    if (v.status === "ready" || v.status === "error") return v;
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  throw new Error(`시간 초과: ${label} ${v?.status} ${v?.message}`);
+}
+
+test("🎬 영상공장: 링크 → 받기 → AI가 화면 자막 위치 찾아 지움(원본 보관) → 저장소 · 구간 재생 · 편집본(자르기·9:16·흐리게)", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  const r = await call("/api/videos", "POST", { url: "http://localhost:4110/sample.mp4" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const v = await waitVideo(r.data.id, "받기");
+  assert.equal(v.status, "ready", v.message);
+  assert.equal(v.width, 360);
+  assert.equal(v.height, 640);
+  assert.ok(Math.abs(v.duration - 3) < 0.5, String(v.duration));
+  assert.equal(v.info.subsRemoved, true, "자막 지움");
+  assert.equal(v.info.subBoxes.length, 1);
+  assert.ok(Math.abs(v.info.subBoxes[0].y - 0.788) < 0.01, JSON.stringify(v.info.subBoxes));
+  assert.ok(v.original_path, "자막 있는 원본도 보관");
+  const fp = await stepPrompt("영상 프레임에서");
+  assert.match(fp, /box_2d/);
+  // 파일: 전체 · 구간(Range) · 썸네일
+  const f = await fetch(`${BASE}/api/videos/${v.id}/file`);
+  assert.equal(f.status, 200);
+  assert.equal(f.headers.get("content-type"), "video/mp4");
+  assert.equal(Number(f.headers.get("content-length")), v.size);
+  const part = await fetch(`${BASE}/api/videos/${v.id}/file`, { headers: { range: "bytes=0-99" } });
+  assert.equal(part.status, 206);
+  assert.equal((await part.arrayBuffer()).byteLength, 100);
+  assert.equal((await fetch(`${BASE}/api/videos/${v.id}/file?kind=thumb`)).headers.get("content-type"), "image/jpeg");
+  // 편집본
+  const e = await call(`/api/videos/${v.id}`, "POST", { action: "edit", opts: { start: 0.5, end: 2, aspect: "9:16", mode: "blur", boxes: [{ x: 0.1, y: 0.8, w: 0.8, h: 0.1 }], mute: true } });
+  assert.equal(e.status, 200, JSON.stringify(e.data));
+  const ev = await waitVideo(e.data.id, "편집");
+  assert.equal(ev.status, "ready", ev.message);
+  assert.equal(ev.kind, "edit");
+  assert.equal(ev.parent_id, v.id);
+  assert.equal(ev.width, 1080);
+  assert.equal(ev.height, 1920);
+  assert.ok(Math.abs(ev.duration - 1.5) < 0.4, String(ev.duration));
+  assert.ok((await call("/api/videos")).data.videos.some((x) => x.id === ev.id));
+  // 지우기 · 잘못된 링크
+  assert.equal((await call(`/api/videos/${ev.id}`, "DELETE")).status, 200);
+  assert.equal((await fetch(`${BASE}/api/videos/${ev.id}/file`)).status, 404);
+  assert.equal((await call("/api/videos", "POST", { url: "영상" })).status, 400);
+  const bad = await call("/api/videos", "POST", { url: "http://localhost:4110/no-such-video" });
+  const bv = await waitVideo(bad.data.id, "실패");
+  assert.equal(bv.status, "error");
+  assert.match(bv.message, /영상을 받지 못했어요/);
 });
