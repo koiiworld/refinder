@@ -358,3 +358,14 @@ CREATE TABLE IF NOT EXISTS video_blobs (
 );
 -- Higgsfield 생성 1건 예상 비용 (잔액 계산용)
 ALTER TABLE media_jobs ADD COLUMN IF NOT EXISTS cost_usd NUMERIC;
+-- 조회수 순위 캡처 기록 (블로그·종류·날짜별 하나, 다시 넣으면 교체)
+CREATE TABLE IF NOT EXISTS view_captures (
+  blog_id    TEXT NOT NULL REFERENCES blogs(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL,              -- day | week | month
+  day        DATE NOT NULL,              -- 그 기간의 마지막 날 (일간은 그날)
+  period     TEXT NOT NULL DEFAULT '',
+  items      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ai         TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (blog_id, kind, day)
+);

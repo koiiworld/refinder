@@ -388,7 +388,7 @@ test("대시보드 방문자 수: 네이버 블로그 정보 · 티스토리 카
   assert.equal(tis.week, 12 + 31, "어제 방문자도 기록");
   const html = await (await fetch(BASE + "/")).text();
   assert.ok(html.includes("블로그별 방문자 비교"));
-  assert.ok(html.replace(/<!-- -->/g, "").includes("43명"), "최근 7일 합");
+  assert.ok(/<td style="text-align:right">43<\/td>/.test(html.replace(/<!-- -->/g, "")), "최근 7일 합");
 });
 
 test("크리에이터 어드바이저 캡처 → AI가 검색어 목록을 읽어 줌 (저장은 사용자가)", async () => {
@@ -698,16 +698,26 @@ test("📱 캐러셀 목록: 블로그 글별 공감·댓글 표시 · 반응 �
 
 test("🏆 블로그 인기 글 TOP 10: 반응 순위(공개 숫자) · 통계 캡처 → AI가 조회수 순위 읽어 저장", async () => {
   let t = (await call("/api/dashboard/top?blogId=blog_algokitchen")).data;
-  assert.equal(t.views, null);
+  assert.equal(t.views.day.source, "none");
   assert.deepEqual(t.reaction.map((r) => r.likes), [40, 9, 3], "공감·댓글 많은 순");
   assert.match(t.reaction[0].url, /^https:\/\/blog\.naver\.com\/algo_kitchen\/224000000002$/);
   await call("/__reset", "POST", undefined, MOCK);
   const s = await call("/api/dashboard/top", "POST", { blogId: "blog_algokitchen", images: [PIXEL_URL] });
   assert.equal(s.status, 200, JSON.stringify(s.data));
   assert.deepEqual(s.data.items.map((i) => [i.rank, i.title, i.views]), [[1, "굴보쌈", 3300], [2, "깍두기 담그는 법", 1204]], "조회수 순 · 빈 제목 제외");
+  assert.equal(s.data.kind, "day");
   t = (await call("/api/dashboard/top?blogId=blog_algokitchen")).data;
-  assert.equal(t.views.period, "최근 7일");
-  assert.match(await stepPrompt("블로그 통계 화면"), /크리에이터 어드바이저/);
+  assert.equal(t.views.day.label, "최근 7일");
+  assert.equal(t.views.week.source, "sum", "주간 캡처가 없으면 일간 캡처를 합침");
+  assert.equal(t.views.week.items[0].views, 3300);
+  assert.equal(t.dailyCaptures, 1);
+  assert.match(await stepPrompt("블로그 통계 화면"), /크리에이터 어드바이저[\s\S]*kind: 화면의 기간 단위/);
+  // 같은 날 다시 넣으면 교체 · 주간 캡처를 따로 넣으면 그것을 씀
+  await call("/api/dashboard/top", "POST", { blogId: "blog_algokitchen", images: [PIXEL_URL] });
+  assert.equal((await call("/api/dashboard/top?blogId=blog_algokitchen")).data.dailyCaptures, 1, "같은 날은 하나로");
+  await call("/api/dashboard/top", "POST", { blogId: "blog_algokitchen", images: [PIXEL_URL], kind: "week" });
+  t = (await call("/api/dashboard/top?blogId=blog_algokitchen")).data;
+  assert.equal(t.views.week.source, "capture");
 });
 
 test("💳 AI별 잔액: 충전 기록 − 앱에서 쓴 금액 = 남은 잔액 · 사용률", async () => {

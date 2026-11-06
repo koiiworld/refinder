@@ -313,7 +313,8 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
 }
 
 // ───────── 블로그 이름 누르면: 인기 글 TOP 10 팝업 ─────────
-type TopData = { views: { at: string; period: string; items: { rank: number; title: string; views: number }[]; ai?: string } | null; reaction: { title: string; url: string; likes: number; comments: number; views: number | null }[]; platform: string };
+type ViewsBlock = { items: { rank: number; title: string; views: number }[]; source: "capture" | "sum" | "none"; label: string; days: number; capturedAt: string | null };
+type TopData = { views: Record<"day" | "week" | "month", ViewsBlock>; dailyCaptures: number; reaction: { title: string; url: string; likes: number; comments: number; views: number | null }[]; platform: string };
 
 export function BlogTopButton({ blogId, name }: { blogId: string; name: string }) {
   const [open, setOpen] = useState(false);
@@ -321,6 +322,9 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
   const [tab, setTab] = useState<"views" | "reaction">("views");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [period, setPeriod] = useState<"day" | "week" | "month">("day");
+  const [capKind, setCapKind] = useState<"" | "day" | "week" | "month">("");
+  const [note, setNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -328,7 +332,9 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
     try {
       const x = await api<TopData>(`/api/dashboard/top?blogId=${blogId}`);
       setD(x);
-      setTab(x.views ? "views" : "reaction");
+      const has = (["day", "week", "month"] as const).find((k) => x.views[k].items.length);
+      setTab(has || x.platform === "tistory" ? "views" : "reaction");
+      if (has) setPeriod((p) => (x.views[p].items.length ? p : has));
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -340,9 +346,11 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
     setErr("");
     try {
       const images = await Promise.all(imgs.map((x) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(x); })));
-      await api(`/api/dashboard/top`, "POST", { blogId, images });
+      const r = await api<{ kind: "day" | "week" | "month"; date: string }>(`/api/dashboard/top`, "POST", { blogId, images, kind: capKind || undefined });
       await load();
       setTab("views");
+      setPeriod(r.kind);
+      setNote(`${r.date} ${r.kind === "day" ? "일간" : r.kind === "week" ? "주간" : "월간"} 조회수로 저장했어요. 매일 넣으면 주간·월간이 자동으로 쌓여요.`);
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -380,16 +388,41 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
             {err && <div className="notice notice-bad small">{err}</div>}
             {d && tab === "views" && (
               <>
-                {d.views ? (
+                <div className="row" style={{ gap: 6 }}>
+                  {(["day", "week", "month"] as const).map((k) => (
+                    <button key={k} className={`btn btn-sm ${period === k ? "btn-primary" : "btn-ghost"}`} onClick={() => setPeriod(k)}>
+                      {k === "day" ? "일간" : k === "week" ? "주간" : "월간"}
+                    </button>
+                  ))}
+                  <span className="tiny muted">일간 캡처 {d.dailyCaptures}일치 기억 중</span>
+                </div>
+                {d.views[period].items.length ? (
                   <>
-                    <div className="tiny muted">{d.views.period || "기간 정보 없음"} · {fmtDateShort(d.views.at)} 캡처 기준{d.views.ai ? ` · ${d.views.ai}` : ""}</div>
+                    <div className="tiny muted">
+                      {d.views[period].source === "sum" ? d.views[period].label : `${d.views[period].label || "기간 정보 없음"} · 캡처 기준`}
+                      {d.views[period].capturedAt ? ` · 마지막 캡처 ${fmtDateShort(d.views[period].capturedAt!)}` : ""}
+                    </div>
                     <ol className="stack" style={{ gap: 4, margin: 0, paddingLeft: 22 }}>
-                      {d.views.items.map((i) => <li key={i.rank} className="small"><span className="ellipsis" style={{ display: "inline-block", maxWidth: "75%", verticalAlign: "bottom" }}>{i.title}</span> <b style={{ float: "right" }}>{i.views.toLocaleString("ko-KR")}회</b></li>)}
+                      {d.views[period].items.map((i) => <li key={i.rank} className="small"><span className="ellipsis" style={{ display: "inline-block", maxWidth: "75%", verticalAlign: "bottom" }}>{i.title}</span> <b style={{ float: "right" }}>{i.views.toLocaleString("ko-KR")}회</b></li>)}
                     </ol>
                   </>
                 ) : (
-                  <p className="small muted" style={{ margin: 0 }}>{d.platform === "tistory" ? "티스토리" : "네이버"}는 글별 조회수를 밖에서 볼 수 없게 막아 둬서, 통계 화면 캡처를 올리면 AI가 읽어 순위를 만들어요.</p>
+                  <p className="small muted" style={{ margin: 0 }}>
+                    {period === "day"
+                      ? `${d.platform === "tistory" ? "티스토리" : "네이버"}는 글별 조회수를 밖에서 볼 수 없게 막아 둬서, 통계 화면 캡처를 올리면 AI가 읽어 순위를 만들어요.`
+                      : `${period === "week" ? "주간" : "월간"} 순위는 그 기간 캡처를 넣거나, 일간 캡처를 매일 넣으면 자동으로 합쳐져요.`}
+                  </p>
                 )}
+                {note && <div className="notice notice-ok small">{note}</div>}
+                <div className="row" style={{ gap: 6 }}>
+                  <span className="tiny muted">넣을 캡처:</span>
+                  <select className="input" style={{ maxWidth: 150, padding: "2px 6px", fontSize: 13 }} value={capKind} onChange={(e) => setCapKind(e.target.value as typeof capKind)} aria-label="캡처 기간 종류">
+                    <option value="">AI가 알아서 판단</option>
+                    <option value="day">일간</option>
+                    <option value="week">주간</option>
+                    <option value="month">월간</option>
+                  </select>
+                </div>
                 <div
                   className="card"
                   role="button"

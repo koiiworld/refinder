@@ -14,7 +14,6 @@ export default async function Dashboard() {
   const d = await dashboardData();
   const [y, m] = d.month.split("-").map(Number);
   const pubDelta = d.kpi.publishedThisMonth - d.kpi.publishedPrevSame;
-  const maxWeek = Math.max(1, ...d.visits.blogs.map((b) => b.week ?? 0));
   const seriesVar = (i: number) => `var(--series-${(i % 3) + 1})`;
 
   return (
@@ -99,7 +98,8 @@ export default async function Dashboard() {
           </div>
         </section>
 
-        {/* 방문자 비교(위, 넓게) → 완성 글 추이(아래) */}
+        {/* 방문자 비교(왼쪽) · 완성 글 추이(오른쪽) */}
+        <div className="dash-pair">
           <section className="card">
             <div className="card-head" style={{ flexWrap: "wrap" }}>
               <h2 style={{ fontSize: 15 }}>블로그별 방문자 비교 <a href="/diagnose" className="tiny" style={{ color: "var(--accent)", fontWeight: 500, marginLeft: 6 }}>🩺 블로그 진단 →</a></h2>
@@ -108,18 +108,6 @@ export default async function Dashboard() {
             <div className="card-pad stack" style={{ gap: 10 }}>
               <div className="tiny muted">최근 30일 일별 방문자 (기록한 날만 표시)</div>
               <TrendChart weeks={d.visits.daily.days} series={d.visits.daily.series} unit="명" tipSuffix="" label="최근 30일 블로그별 일별 방문자 수" emptyText="아직 기록된 방문자 수가 없습니다." />
-              <div className="tiny muted" style={{ marginTop: 6 }}>최근 7일 방문자 (수집한 날만 합산)</div>
-              {d.visits.blogs.map((b, i) => (
-                <div key={b.id} className="row" style={{ flexWrap: "nowrap", gap: 10 }}>
-                  <span className="small ellipsis" style={{ width: 130, flexShrink: 0 }}>
-                    <span className="dot" style={{ background: seriesVar(i) }} /> {b.name}
-                  </span>
-                  <div className="hbar" title={`${b.name} 최근 7일 ${b.week ?? 0}명`}>
-                    <div style={{ width: `${((b.week ?? 0) / maxWeek) * 100}%`, background: seriesVar(i) }} />
-                  </div>
-                  <span className="small" style={{ width: 64, textAlign: "right", flexShrink: 0 }}>{b.week == null ? "-" : `${b.week.toLocaleString("ko-KR")}명`}</span>
-                </div>
-              ))}
               <div className="table-wrap" style={{ marginTop: 6 }}>
                 <table className="tbl">
                   <thead><tr><th>블로그</th><th style={{ textAlign: "right" }}>오늘</th><th style={{ textAlign: "right" }}>최근 7일</th><th style={{ textAlign: "right" }}>이번 달</th><th style={{ textAlign: "right" }}>누적</th></tr></thead>
@@ -137,7 +125,7 @@ export default async function Dashboard() {
                 </table>
               </div>
               <p className="tiny muted" style={{ margin: 0 }}>
-                네이버 블로그 정보와 티스토리 방문자 카운터의 공개 숫자입니다. 서버가 1시간마다 기록해서, 기록을 시작한 날({d.visits.blogs.map((b) => b.since).filter(Boolean).sort()[0] ?? "오늘"})부터 쌓입니다. 블로그 이름을 누르면 인기 글 TOP 10을 볼 수 있어요.
+                공개 방문자 숫자 · {d.visits.blogs.map((b) => b.since).filter(Boolean).sort()[0] ?? "오늘"}부터 기록 · 블로그 이름을 누르면 인기 글 TOP 10
               </p>
             </div>
           </section>
@@ -146,8 +134,19 @@ export default async function Dashboard() {
             <div className="card-pad">
               <p className="tiny muted" style={{ marginTop: 0 }}>블로그별 주간 완성 글 수 (⑥ 검수까지 끝난 글, 월요일 시작 주)</p>
               <TrendChart weeks={d.trend.weeks} series={d.trend.series} />
+              <div className="table-wrap" style={{ marginTop: 10 }}>
+                <table className="tbl">
+                  <thead><tr><th>블로그</th>{d.trend.weeks.map((w) => <th key={w} style={{ textAlign: "right" }}>{w.slice(5).replace("-", "/")}</th>)}</tr></thead>
+                  <tbody>
+                    {d.trend.series.map((s) => (
+                      <tr key={s.id}><td className="ellipsis" style={{ maxWidth: 120 }}>{s.name}</td>{s.values.map((v, k) => <td key={k} style={{ textAlign: "right" }}>{v || "·"}</td>)}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </section>
+        </div>
 
         {/* 블로그별 글 작업 */}
         <section className="card">

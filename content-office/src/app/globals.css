@@ -387,3 +387,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* 🎬 영상 편집 */
 .video-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 860px) { .video-editor { grid-template-columns: minmax(0, 1fr); } }
+
+/* 방문자 · 완성 글 추이 좌우 배치 */
+.dash-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.dash-pair > .card { display: flex; flex-direction: column; }
+@media (max-width: 960px) { .dash-pair { grid-template-columns: minmax(0, 1fr); } }
