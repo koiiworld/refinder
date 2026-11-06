@@ -1,6 +1,6 @@
 # 인수인계 (HANDOFF) — AI 콘텐츠 오피스
 
-다른 AI 코딩 도구(Codex 등)가 이어서 작업할 때 **가장 먼저 읽을 문서**입니다. 기준 날짜: 2026-11-04.
+다른 AI 코딩 도구(Codex 등)가 이어서 작업할 때 **가장 먼저 읽을 문서**입니다. 기준 날짜: 2026-11-06. **파일 찾기는 `CODEMAP.md`(자동 생성: `node scripts/codemap.mjs`)를 먼저 보세요.**
 
 ## 0. 사용자와 일하는 규칙 (꼭 지킬 것)
 
@@ -25,6 +25,21 @@
 | ⑦ 발행 | 사용자 | 복사·HTML/MD 다운로드 → 직접 게시 → "발행 완료" |
 
 그 밖: **메인(`/`) = 대시보드**(`src/lib/dashboard.ts` — 실제 기록만: 발행·1차 검수 통과율(첫 검수 80점↑)·완성 글 검색량·AI 비용·10주 추이·블로그별·키워드 TOP5·운영 상태, 수익은 정산 숫자 직접 입력 → `settings` 테이블 `revenue` 키). 글 만들기(①②)는 `/new`. **트렌드 뷰어 `/trends`**(`src/lib/trends.ts`: 유튜브 한국 급상승 카테고리별 30분 캐시, 스크랩 `trend_scraps`, '글감으로' → `/new?hint=`). 대시보드 방문자 비교는 `src/lib/visits.ts`(네이버 `m.blog.naver.com/rego/BlogInfo.naver`, 티스토리 PC 화면 카운터, 1시간마다 `blog_visits`). 진행 현황 체크박스 → **휴지통**(되살리기·완전 삭제), 진행 현황 맨 위 **오늘 쓴 AI 비용**(단계별·모델별, 접기), 설정 > 단계별 AI(모델 드롭다운·가격).
+
+## 1-1. 2026-11-05~06 추가된 기능 (화면 · 핵심 파일)
+
+| 기능 | 화면 | 핵심 파일 | 메모 |
+|---|---|---|---|
+| 블로그 핫이슈 + 글감 리포트 | `/hot` | `blog-hot.ts`, `hot-report.ts` | 네이버 블로그 홈 `DirectoryPostList`(주제 번호 20 요리·29 맛집·15 육아·30 IT·27 국내여행…), AI(무료 Gemini) 관련성 필터 1시간 캐시, 구글 트렌드 KR RSS, 네이버 뉴스(API HUB). 리포트 승인 → `createPosts(…, brief)` → 제목·글 프롬프트에 기획 전달 |
+| 인스타 캐러셀 | `/carousels` | `carousel.ts`, `app/carousels/render.ts` | 브라우저 캔버스 1080×1350로 그림(서버 부담 없음). 콘텐츠 유형 4종(장수·구성), 블로그 발행 글 사진 가져오기(`sample-html.ts` `postImages`) |
+| 블로그 진단 | `/diagnose` | `diagnose.ts` | 검색 누락·키워드 순위(API HUB 블로그 검색), RSS 발행 리듬, 글 구조(굵은 한 줄 = 소제목) |
+| 🎬 영상공장 | `/videos` | `videos.ts`, `video-store.ts` | yt-dlp(`bin/yt-dlp`, `scripts/setup-bin.mjs`로 설치) + ffmpeg(맥 brew / `ffmpeg-static`). AI가 화면 자막 위치(box_2d) 찾아 delogo. 저장: `SUPABASE_SERVICE_KEY` 있으면 Supabase Storage 'videos' 버킷, 없으면 `video_blobs` |
+| 대시보드 추가 | `/` | `dashboard.ts`, `DashboardParts.tsx`, `top-posts.ts`, `balances.ts`, `coupang.ts` | 30일 방문자 그래프, 블로그 이름 → TOP10(반응 순위 + 조회수 캡처 `view_captures` 일·주·월), 블로그별 키워드 TOP5, AI별 잔액(충전 기록 − 앱 사용액), 쿠팡 API 3시간마다, 애드포스트 캡처(파일·드래그·Ctrl+V) |
+| 핵심 규칙 | — | `jobs.ts` | 맥·Render가 같은 DB 작업 큐를 씀. 재시작해도 남의 작업 안 건드림(30분 넘게 멈춘 것만 재시도). 영상 작업은 저장소가 같은 서버만(맥에 Supabase 키 없으면 Render가 처리). 서버가 모르는 작업 종류는 안 가져감 |
+
+- 키 추가(이름만): `COUPANG_ACCESS_KEY`, `COUPANG_SECRET_KEY`(맥·Render 둘 다 넣음), `SUPABASE_SERVICE_KEY`(Render만 — 맥엔 아직 없음).
+- 무료 Gemini(`keywords`·`hashtags` 단계 기본)는 키워드·해시태그·화면 캡처 읽기·핫이슈 필터·진단에 씀. 제목(ChatGPT mini)·검수(Claude)는 유료 유지(사용자 결정).
+- 사용자 보류: 역할별 AI 직원(에이전트) 구성. 사무실 화면(대시보드 픽셀 오피스) 제안만 함.
 
 ## 2. 코드 구조 (`content-office/`)
 
@@ -66,7 +81,7 @@
 
 ```bash
 cd content-office
-zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테스트 (현재 9 + 17 통과)
+zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테스트 (현재 10 + 34 통과)
 ```
 - `tests/workflow.test.mjs` — AI 없이(템플릿) 흐름·휴지통·말투 예시
 - `tests/ai-providers.test.mjs` — 모의 OpenAI/Anthropic/Gemini/네이버/유튜브/Higgsfield/RSS/공식 페이지 서버로 전체 경로
@@ -83,7 +98,10 @@ zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테�
 - [ ] Higgsfield SOUL 외 5개 모델: 견적만 실제 확인, **실제 생성은 미확인**. 처음 생성 결과 확인 필요.
 - [ ] 공식 이미지 찾기: 애플·삼성 페이지에서 사진 추출 가능 확인(curl), 앱 화면에서 실제 사용은 미확인. 다이슨 등 봇 차단 사이트는 이미지 주소 직접 입력.
 - [ ] 단계별 AI 추천 변경 제안(사용자 결정 대기): 글 작성 `gpt-6.1-sol`($2/$10, gpt-5.4보다 저렴), 키워드·제목 `gpt-6-luna`($0.1/$0.5).
-- [ ] 상시 온라인 주소: Render + Supabase 배포(`render.yaml` 준비됨, 사용자 가입 필요). 지금은 맥 + 임시 터널.
+- [x] 상시 온라인 주소: Render + Supabase (완료).
+- [ ] 🎬 영상 제작 스튜디오(프롬프트 기획 → 캐릭터 → 장면별 Higgsfield 영상 → ffmpeg 합치기 → 영상공장에 저장) — 다음 작업.
+- [ ] 애드센스 API(OAuth) — 사용자가 Google Cloud 설정 후 `GOOGLE_ADSENSE_CLIENT_ID/SECRET` 주면 '연결' 버튼 만들기.
+- [ ] 맥에도 `SUPABASE_SERVICE_KEY` 넣으면 영상 작업을 맥이 먼저 처리(더 빠름).
 - [ ] 챈뽕노트 '오류' 글 4~5개(크레딧 충전 전 실패) — 사용자가 정리(휴지통) 또는 다시 실행.
 - [ ] 진행 중이던 글: 알고키친 수제 초콜릿 글 — 재료에 **몰드(틀)** 누락. 사용자가 '수정 요청사항' 칸으로 직접 요청 예정.
 - 참고: 검수(Claude Sonnet)가 글 1편 비용의 절반 이상. 비용 표는 토큰×단가 추정치.
