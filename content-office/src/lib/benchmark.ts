@@ -20,7 +20,8 @@ export function statsOf(md: string): PostStats {
   const lines = md.split("\n");
   return {
     chars: md.replace(/\s+/g, "").length,
-    headings: lines.filter((l) => /^#{1,6}\s/.test(l)).length,
+    // 네이버 에디터는 소제목을 '굵은 글씨 한 줄'로 쓰는 경우가 많아 함께 셈
+    headings: lines.filter((l) => /^#{1,6}\s/.test(l) || /^\s*(\*\*|__)[^*_]{2,40}(\*\*|__)\s*$/.test(l)).length,
     images: (md.match(/\[이미지[^\]]*\]/g) ?? []).length,
     lists: lines.filter((l) => /^\s*([-*•]|\d+\.)\s/.test(l)).length,
     tables: (md.match(/^\|\s*-{3,}/gm) ?? []).length,
