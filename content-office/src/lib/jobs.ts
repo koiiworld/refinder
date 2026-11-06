@@ -89,7 +89,8 @@ async function renderStorageBeat() {
 }
 const hr = globalThis as unknown as { __renderStorage?: { at: number; storage: string | null } };
 async function renderStorage() {
-  if (hr.__renderStorage && Date.now() - hr.__renderStorage.at < 60_000) return hr.__renderStorage.storage;
+  // 모를 때(null)는 기억하지 않고 매번 다시 확인 (재시작 직후 놓치지 않게)
+  if (hr.__renderStorage?.storage && Date.now() - hr.__renderStorage.at < 60_000) return hr.__renderStorage.storage;
   const r = await q1<{ value: { storage?: string } }>("SELECT value FROM settings WHERE key='worker_render'").catch(() => null);
   hr.__renderStorage = { at: Date.now(), storage: r?.value?.storage ?? null };
   return hr.__renderStorage.storage;
