@@ -1132,3 +1132,34 @@ test("✅ 할 일 업무내용(인스타·유튜브·블로그·개인일정) ·
   const page = (await (await fetch(`${BASE}/todos?tab=upcoming`)).text()).replace(/<!-- -->/g, "");
   assert.ok(page.includes('aria-label="업무내용"'), "업무내용 칸");
 });
+
+test("🔑 설정: API 키 직접 연결 (암호화 저장·끝 4자리만·지우면 서버 설정으로) · 💲 단가 새로고침 + NEW", async () => {
+  let keys = (await call("/api/settings/keys")).data;
+  assert.equal(keys.find((k) => k.env === "YOUTUBE_API_KEY").state, "env");
+  assert.ok(!JSON.stringify(keys).includes("test-yt-key"), "키 값은 화면으로 안 나감");
+  assert.equal((await call("/api/settings/keys", "POST", { env: "NOT_A_KEY", value: "x" })).status, 400);
+  assert.equal((await call("/api/settings/keys", "POST", { env: "YOUTUBE_API_KEY", value: "has space" })).status, 400);
+  const r = await call("/api/settings/keys", "POST", { env: "YOUTUBE_API_KEY", value: "app-saved-yt-key-7788" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const yt = r.data.find((k) => k.env === "YOUTUBE_API_KEY");
+  assert.equal(yt.state, "app");
+  assert.equal(yt.last4, "7788");
+  assert.ok(!JSON.stringify(r.data).includes("app-saved-yt-key"), "저장 후에도 키 값은 안 나감");
+  const backup = await (await fetch(`${BASE}/api/export?scope=settings`)).text();
+  assert.ok(!backup.includes("app-saved-yt-key") && !backup.includes("api_keys"), "백업에 키 없음");
+  const page = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(page.includes("API 키 직접 연결") && page.includes("••••7788") && !page.includes("app-saved-yt-key"), "설정 화면");
+  keys = (await call("/api/settings/keys", "POST", { env: "YOUTUBE_API_KEY", remove: true })).data;
+  assert.equal(keys.find((k) => k.env === "YOUTUBE_API_KEY").state, "env", "지우면 서버 설정 키로");
+
+  // 단가 새로고침: gpt-5.4-mini 만 바뀜 → 반영 + NEW
+  const p = (await call("/api/settings/pricing", "POST", { keys: ["openai:gpt-5.4-mini"] })).data;
+  assert.deepEqual(p.changed, ["openai:gpt-5.4-mini"], JSON.stringify(p));
+  assert.deepEqual(p.pricing["openai:gpt-5.4-mini"], { input: 0.8, output: 4.8 });
+  assert.ok(p.missing.includes("anthropic:claude-sonnet-5-5"), "가격표에 없는 모델은 그대로");
+  const s = (await call("/api/settings")).data;
+  assert.equal(s.pricing["openai:gpt-5.4-mini"].input, 0.8);
+  const page2 = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(page2.includes("새로고침") && page2.includes(">NEW<"), "NEW 표시");
+  assert.deepEqual((await call("/api/settings/pricing", "POST", {})).data.changed, [], "두 번째는 바뀐 것 없음");
+});

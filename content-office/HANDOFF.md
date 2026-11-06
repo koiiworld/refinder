@@ -45,6 +45,10 @@
 - 🔔 텔레그램 알림: `todo_notifications`(할 일당 대기 1개) + 작업 큐 `todo_notify`(run_after=알림 시각). 시간 변경=취소 후 재예약, 완료·삭제·끄기=취소. 발송 전 `pending→sending`으로 한 번만 가져감, 응답 불확실하면 재발송 안 함. 키: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (아직 미설정 — 사용자 승인 후).
 - 💡 아이디어 `/ideas` (`ideas.ts`): 저장·이동만, AI 호출 없음. → `/todos?title=&blog=&idea=` · `/new?blog=&hint=`(채우기만).
 - 📅 마케팅 달력 `/calendar` (`calendar.ts`): 시즌(`seasons.ts`) · 공식 공휴일(구글 한국 공휴일 ICS, 하루 캐시) · 비정기(선거·임시공휴일 + 직접 추가 `calendar_events`) · 내 발행(`projects.publish_date`, 발행일).
+- 📅 캘린더(구 마케팅 달력): 시즌 행사는 행사별 색, 기간 행사는 시작·끝 날만 글자(사이는 점), 명절·하루짜리는 글자. 분류 이름: 연간 시즌 행사/공휴일·공식 행사/선거·비정기 행사/콘텐츠 발행 일정/업무 일정.
+- 대시보드 머리: 🚨오늘할일🚨(팝업, 체크로 완료) · ⚠️점검필요(숫자, 팝업 3칸 self/auto/code). 사이드 탭의 '대시보드'는 빼고 로고가 대시보드 링크.
+- 🔑 설정 'API 키 직접 연결' (`keystore.ts`): settings `api_keys`에 AES-256-GCM 암호화(비밀 = `APP_PASSWORD`, 없으면 `KEYS_SECRET`). 시작 시·1분마다 process.env 에 반영, 앱 키가 환경변수보다 우선, 지우면 원래 환경변수. 맥·Render의 APP_PASSWORD가 다르면 한쪽은 '다시 입력 필요'. 백업에서 제외.
+- 💲 단가 새로고침 (`pricing-refresh.ts`): LiteLLM 공개 가격표(`PRICING_SOURCE_URL`)와 비교해 바뀐 모델만 반영, settings `pricing_updates`로 7일간 NEW.
 - **운영 규칙(사용자 지정, 2026-11-07)**: 운영 데이터 변경·실제 텔레그램 발송·유료 AI 호출·배포(푸시=Render 배포, 맥 앱 재시작=실제 DB 스키마 반영)는 **별도 승인 후**. 단, **사용자가 바꿔 달라고 요청한 변경은 승인 없이 배포**(2026-11-07 사용자 지시). 텔레그램 연결 완료(@Acontentofficebot).
 - 사용자 보류: 역할별 AI 직원(에이전트) 구성. 후속: 쿠팡 반품상품 검색기. 범위 밖: 지인 배포·상용화. 사무실 화면(대시보드 픽셀 오피스) 제안만 함.
 

@@ -53,13 +53,36 @@ type Conn = { provider: string; label: string; envKey: string; connected: boolea
 
 const PROVIDER_NAMES: Record<string, string> = { openai: "ChatGPT (OpenAI)", anthropic: "Claude (Anthropic)", google: "Gemini (Google)" };
 
-export default function SettingsClient({ connections, settings, db, data, month }: { connections: Conn[]; settings: AppSettings; db: string; data: { naverAd: boolean; datalab: boolean; youtube: boolean }; month: { runs: number; cost: number } }) {
+export default function SettingsClient({ connections, settings, db, data, month, keysCard, priceUpdates = {} }: { keysCard?: React.ReactNode; priceUpdates?: Record<string, { at: string; from: { input: number; output: number }; to: { input: number; output: number } }>; connections: Conn[]; settings: AppSettings; db: string; data: { naverAd: boolean; datalab: boolean; youtube: boolean }; month: { runs: number; cost: number } }) {
   const [stepAi, setStepAi] = useState(settings.stepAi);
   const [pricing, setPricing] = useState<Record<string, { input: string; output: string }>>(() => {
     const keys = Array.from(new Set([...Object.values(settings.stepAi).map((a) => `${a.provider}:${a.model}`), "google:gemini-3.5-flash", ...Object.keys(settings.pricing)]));
     return Object.fromEntries(keys.map((k) => [k, { input: String(settings.pricing[k]?.input ?? ""), output: String(settings.pricing[k]?.output ?? "") }]));
   });
   const [msg, setMsg] = useState("");
+  const [updates, setUpdates] = useState(priceUpdates);
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceMsg, setPriceMsg] = useState("");
+  const isNew = (k: string) => !!updates[k] && Date.now() - new Date(updates[k].at).getTime() < 7 * 86400_000;
+  async function refreshPrices() {
+    setPriceBusy(true);
+    setPriceMsg("");
+    try {
+      const r = await api<{ checked: number; changed: string[]; missing: string[]; pricing: Record<string, { input: number; output: number }>; updates: typeof updates }>("/api/settings/pricing", "POST", { keys: Object.keys(pricing) });
+      setUpdates(r.updates);
+      setPricing((cur) => {
+        const next = { ...cur };
+        for (const k of r.changed) next[k] = { input: String(r.pricing[k].input), output: String(r.pricing[k].output) };
+        return next;
+      });
+      setPriceMsg(r.changed.length ? `${r.changed.length}개 모델 단가가 바뀌어 반영했어요.` : "바뀐 단가가 없어요.");
+      if (r.missing.length) setPriceMsg((m) => `${m} 공개 가격표에 없는 모델 ${r.missing.length}개는 그대로 뒀어요.`);
+    } catch (e) {
+      setPriceMsg((e as Error).message);
+    } finally {
+      setPriceBusy(false);
+    }
+  }
   const [models, setModels] = useState<Record<string, string>>({});
   const [apiModels, setApiModels] = useState<Record<string, string[]>>({});
   const [loadingModels, setLoadingModels] = useState(false);
@@ -159,19 +182,23 @@ export default function SettingsClient({ connections, settings, db, data, month 
         <p className="tiny muted card-pad">키 연결됨 = 키가 들어 있음. ChatGPT·Claude는 크레딧을 충전해야 실제로 쓰이고, 그 전에는 Gemini가 대신 처리합니다.</p>
       </section>
 
+      {keysCard}
+
       <section className="card">
         <div className="card-head"><h2>AI 단가 (USD / 100만 토큰)</h2></div>
         <div className="card-pad stack">
-          <p className="small muted">각 사 가격표를 보고 입력하면 비용이 원화와 함께 계산됩니다. 비워 두면 0으로 기록됩니다.</p>
+          {priceMsg && <div className="notice small">{priceMsg}</div>}
+          <p className="small muted">🔄 새로고침을 누르면 공개 가격표(LiteLLM)와 비교해 바뀐 단가만 반영하고 NEW 표시(7일)를 달아요. 각 사 가격표를 보고 직접 입력하면 비용이 원화와 함께 계산됩니다. 비워 두면 0으로 기록됩니다.</p>
           <div className="table-wrap">
             <table className="tbl">
-              <thead><tr><th>제공자:모델</th><th>입력</th><th>출력</th></tr></thead>
+              <thead><tr><th>제공자:모델</th><th>입력</th><th>출력</th><th style={{ textAlign: "right" }}><button className="btn btn-sm" disabled={priceBusy} onClick={refreshPrices} title="공개 가격표와 비교해 바뀐 단가만 반영">{priceBusy ? <span className="spinner" /> : "🔄 새로고침"}</button></th></tr></thead>
               <tbody>
                 {Object.entries(pricing).map(([k, v]) => (
                   <tr key={k}>
-                    <td className="mono">{k}</td>
+                    <td className="mono">{k}{isNew(k) && <span className="badge badge-bad" style={{ marginLeft: 6 }} title={`${new Date(updates[k].at).toLocaleDateString("ko-KR")} 단가 변경: 입력 $${updates[k].from.input}→$${updates[k].to.input}, 출력 $${updates[k].from.output}→$${updates[k].to.output}`}>NEW</span>}</td>
                     <td><input className="input" style={{ width: 100 }} inputMode="decimal" value={v.input} onChange={(e) => setPricing({ ...pricing, [k]: { ...v, input: e.target.value } })} /></td>
                     <td><input className="input" style={{ width: 100 }} inputMode="decimal" value={v.output} onChange={(e) => setPricing({ ...pricing, [k]: { ...v, output: e.target.value } })} /></td>
+                    <td className="tiny muted" style={{ textAlign: "right" }}>{isNew(k) ? `$${updates[k].from.input}/$${updates[k].from.output}에서 바뀜` : ""}</td>
                   </tr>
                 ))}
               </tbody>

@@ -106,6 +106,14 @@ http
       res.writeHead(200, { "content-type": "image/jpeg", "content-length": String(buf.length) });
       return res.end(buf);
     }
+    // 공개 AI 가격표 (LiteLLM 형식) — gpt-5.4-mini 만 값이 바뀐 상태
+    if (url.pathname === "/model-prices.json") {
+      return send(res, 200, {
+        "gpt-5.4-mini": { input_cost_per_token: 0.0000008, output_cost_per_token: 0.0000048, litellm_provider: "openai" },
+        "gpt-5.4": { input_cost_per_token: 0.0000025, output_cost_per_token: 0.000015, litellm_provider: "openai" },
+        "gemini/gemini-3.5-flash": { input_cost_per_token: 0.0000015, output_cost_per_token: 0.000009, litellm_provider: "gemini" },
+      });
+    }
     // 한국 공휴일 달력(ICS) — 선거일 포함
     if (url.pathname === "/kr-holidays.ics") {
       const y = new Date().getUTCFullYear();

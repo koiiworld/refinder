@@ -5,10 +5,14 @@ import { naverConnected } from "@/lib/research";
 import { naverAdConnected } from "@/lib/searchad";
 import { youtubeConnected } from "@/lib/youtube";
 import SettingsClient from "./SettingsClient";
+import KeysCard from "./KeysCard";
+import { canSaveKeys, keyStatus } from "@/lib/keystore";
+import { pricingUpdates } from "@/lib/pricing-refresh";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  const keys = await keyStatus(); // 앱에 넣은 키를 먼저 반영한 뒤 연결 상태 계산
   const [kind, settings, cost] = await Promise.all([
     dbKind(),
     getSettings(),
@@ -19,7 +23,7 @@ export default async function SettingsPage() {
       <div className="page-head">
         <div>
           <h1>설정</h1>
-          <p className="sub">단계별로 어떤 AI를 쓸지 정하고, 연결 상태를 확인합니다. API 키는 서버의 .env.local 에만 저장됩니다.</p>
+          <p className="sub">단계별로 어떤 AI를 쓸지 정하고, 연결 상태를 확인합니다. API 키는 아래 'API 키 직접 연결'에서 넣을 수 있어요.</p>
         </div>
       </div>
       {kind === "pglite" && process.env.RENDER && (
@@ -33,6 +37,8 @@ export default async function SettingsPage() {
         db={kind}
         data={{ naverAd: naverAdConnected(), datalab: naverConnected(), youtube: youtubeConnected() }}
         month={{ runs: Number(cost?.n ?? 0), cost: Number(cost?.cost ?? 0) }}
+        priceUpdates={await pricingUpdates()}
+        keysCard={<KeysCard initial={keys} canSave={canSaveKeys()} />}
       />
     </div>
   );
