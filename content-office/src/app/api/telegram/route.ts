@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   return handle(async () => {
     const b = await body<{ action?: string }>(req);
     try {
-      if (b.action === "find_chat") return ok({ chats: await findTelegramChats() });
+      if (b.action === "find_chat") return ok(await findTelegramChats());
       if (b.action === "test") {
         await sendTelegramTest();
         return ok({ ok: true });

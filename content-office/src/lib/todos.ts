@@ -187,6 +187,9 @@ export async function sendTodoNotification(notificationId: string) {
 export async function findTelegramChats() {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   if (!token) throw new Error("먼저 TELEGRAM_BOT_TOKEN 을 넣어 주세요.");
+  // 이 토큰이 어느 봇 것인지 (메시지 보내지 않음)
+  const me = (await (await fetch(`${tgBase()}/bot${token}/getMe`, { signal: AbortSignal.timeout(15_000) })).json().catch(() => ({}))) as { ok?: boolean; result?: { username?: string; first_name?: string } };
+  const bot = me.ok && me.result ? { username: me.result.username ?? "", name: me.result.first_name ?? "" } : null;
   const res = await fetch(`${tgBase()}/bot${token}/getUpdates`, { signal: AbortSignal.timeout(15_000) });
   const d = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: { message?: { chat?: { id: number; first_name?: string; title?: string; username?: string } } }[]; description?: string };
   if (!res.ok || !d.ok) throw new Error(`텔레그램 오류: ${d.description ?? res.status}`);
@@ -195,7 +198,7 @@ export async function findTelegramChats() {
     const c = u.message?.chat;
     if (c) seen.set(c.id, c.title || c.first_name || c.username || String(c.id));
   }
-  return [...seen.entries()].map(([id, name]) => ({ id: String(id), name }));
+  return { bot, chats: [...seen.entries()].map(([id, name]) => ({ id: String(id), name })) };
 }
 
 /** 설정 도우미: 시험 메시지 (사용자가 버튼을 눌렀을 때만) */

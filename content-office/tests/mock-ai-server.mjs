@@ -114,8 +114,9 @@ http
       return res.end(`BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${y}${m}10\r\nDTEND;VALUE=DATE:${y}${m}11\r\nSUMMARY:국회의원선거일\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${y}${m}20\r\nDTEND;VALUE=DATE:${y}${m}21\r\nSUMMARY:시험공휴일\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`);
     }
     // 텔레그램 봇 API (모의 발송 — 실제로 보내지 않음)
-    const tg = url.pathname.match(/^\/bottest-tg-token\/(sendMessage|getUpdates)$/);
+    const tg = url.pathname.match(/^\/bottest-tg-token\/(sendMessage|getUpdates|getMe)$/);
     if (tg) {
+      if (tg[1] === "getMe") return send(res, 200, { ok: true, result: { username: "test_office_bot", first_name: "시험봇" } });
       if (tg[1] === "getUpdates") return send(res, 200, { ok: true, result: [{ message: { chat: { id: 987654, first_name: "민" } } }] });
       if (globalThis.__tgFail) {
         globalThis.__tgFail--;

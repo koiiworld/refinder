@@ -978,6 +978,7 @@ test("🔔 텔레그램 알림: 서버 예약 · 시간 변경 시 갱신 · 완
   // 설정 도우미: 채팅 ID 찾기 (메시지 안 보냄)
   const f = await call("/api/telegram", "POST", { action: "find_chat" });
   assert.deepEqual(f.data.chats, [{ id: "987654", name: "민" }]);
+  assert.equal(f.data.bot.username, "test_office_bot", "토큰의 봇 확인");
 });
 
 test("💡📅 아이디어·달력: 김장철 → 김치 보관 글감 저장 → 아이디어에서 할 일·글 기획으로 (AI 호출 없음) · 선거는 비정기 · 발행 예정일", async () => {

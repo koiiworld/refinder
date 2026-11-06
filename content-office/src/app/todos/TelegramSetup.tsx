@@ -6,15 +6,17 @@ import { api } from "@/components/client-utils";
 /** 텔레그램 연결 도우미: 채팅 ID 찾기(메시지 안 보냄) · 시험 메시지(누를 때만) */
 export default function TelegramSetup({ connected, hasToken }: { connected: boolean; hasToken: boolean }) {
   const [chats, setChats] = useState<{ id: string; name: string }[] | null>(null);
+  const [bot, setBot] = useState<{ username: string; name: string } | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState("");
   async function find() {
     setBusy("find");
     setMsg(null);
     try {
-      const r = await api<{ chats: { id: string; name: string }[] }>("/api/telegram", "POST", { action: "find_chat" });
+      const r = await api<{ bot: { username: string; name: string } | null; chats: { id: string; name: string }[] }>("/api/telegram", "POST", { action: "find_chat" });
       setChats(r.chats);
-      if (!r.chats.length) setMsg({ ok: false, text: "아직 봇에게 온 메시지가 없어요. 텔레그램에서 내 봇에게 아무 말이나 보낸 뒤 다시 눌러 주세요." });
+      setBot(r.bot);
+      if (!r.chats.length) setMsg({ ok: false, text: `아직 봇에게 온 메시지가 없어요. 텔레그램에서 ${r.bot?.username ? `@${r.bot.username}` : "내 봇"}에게 아무 말이나 보낸 뒤 다시 눌러 주세요.` });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     }
@@ -51,6 +53,7 @@ export default function TelegramSetup({ connected, hasToken }: { connected: bool
           {hasToken && <button className="btn btn-sm" disabled={!!busy} onClick={find}>{busy === "find" ? <span className="spinner" /> : "채팅 ID 찾기"}</button>}
           {connected && <button className="btn btn-sm" disabled={!!busy} onClick={test}>{busy === "test" ? <span className="spinner" /> : "시험 메시지 보내기"}</button>}
         </div>
+        {bot && <div className="small">🤖 넣은 토큰의 봇: <b>{bot.name}</b> (<a href={`https://t.me/${bot.username}`} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>@{bot.username}</a>) — 여기에 말을 걸어야 해요</div>}
         {chats?.map((c) => <div key={c.id} className="small">💬 {c.name} · 채팅 ID <b><code>{c.id}</code></b></div>)}
         {msg && <div className={`notice ${msg.ok ? "notice-ok" : "notice-bad"} small`}>{msg.text}</div>}
       </div>
