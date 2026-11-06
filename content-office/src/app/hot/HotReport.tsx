@@ -51,6 +51,11 @@ export default function HotReportView({ blogs }: { blogs: { id: string; name: st
       setBusy("");
     }
   }
+  async function restore(i: number) {
+    if (!r) return;
+    await api("/api/hot", "POST", { action: "restore", reportId: r.id, index: i });
+    setR({ ...r, items: r.items.map((it, k) => (k === i ? { ...it, status: "new" } : it)) });
+  }
   async function skip(i: number) {
     if (!r) return;
     await api("/api/hot", "POST", { action: "skip", reportId: r.id, index: i });
@@ -106,7 +111,10 @@ export default function HotReportView({ blogs }: { blogs: { id: string; name: st
                   {it.status === "approved" ? (
                     <a href={`/posts/${it.projectId}`} className="btn btn-sm">✅ 승인함 · 글 보러 가기</a>
                   ) : it.status === "skipped" ? (
-                    <span className="tiny muted">넘김</span>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="tiny muted">넘김</span>
+                      <button className="btn btn-sm btn-ghost" onClick={() => restore(i)}>↩ 되살리기</button>
+                    </div>
                   ) : (
                     <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
                       <input className="input" style={{ fontSize: 13 }} value={kw[i] ?? it.keyword} onChange={(e) => setKw({ ...kw, [i]: e.target.value })} aria-label="메인 키워드" title="메인 키워드 (고쳐도 돼요)" />

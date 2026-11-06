@@ -186,6 +186,17 @@ const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, 
 const arr = (v: unknown) => (Array.isArray(v) ? v : []);
 
 const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
+  // 🩺 블로그 진단 (화면을 떠나도 서버에서 계속)
+  async diagnose(job) {
+    const { diagnoseBlog, setDiagnoseState } = await import("./diagnose");
+    const blogId = String(job.payload.blogId);
+    try {
+      await diagnoseBlog(blogId);
+      await setDiagnoseState(blogId, null);
+    } catch (e) {
+      await setDiagnoseState(blogId, { status: "error", error: (e as Error).message, at: new Date().toISOString() });
+    }
+  },
   // 🎬 영상공장: 링크에서 받기 · 편집본 만들기
   async video_fetch(job) {
     const { runVideoFetch } = await import("./videos");

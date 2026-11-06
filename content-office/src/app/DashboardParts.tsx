@@ -466,7 +466,7 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
 const fmtDateShort = (iso: string) => new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 // ───────── AI별 잔액: 충전액 · 사용액 · 사용률 · 남은 잔액 ─────────
-type BalanceRow = { id: string; name: string; billing: string; topups: { usd: number; at: string; note?: string }[]; charged: number | null; used: number; calls: number; since: string | null; remaining: number | null; rate: number | null };
+type BalanceRow = { id: string; name: string; billing: string; topups: { usd: number; at: string; note?: string }[]; charged: number | null; used: number; calls: number; since: string | null; remaining: number | null; rate: number | null; actual: { usd: number; at: string } | null };
 
 export function AiBalances() {
   const [rows, setRows] = useState<BalanceRow[] | null>(null);
@@ -474,6 +474,16 @@ export function AiBalances() {
   const [amt, setAmt] = useState("");
   const [at, setAt] = useState("");
   const [err, setErr] = useState("");
+  const [real, setReal] = useState("");
+  async function setActual(provider: string, v: number | null) {
+    setErr("");
+    try {
+      setRows(await api<BalanceRow[]>("/api/dashboard/balances", "POST", { provider, actual: v }));
+      setReal("");
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
   useEffect(() => {
     api<BalanceRow[]>("/api/dashboard/balances").then(setRows).catch((e) => setErr((e as Error).message));
   }, []);
@@ -551,6 +561,12 @@ export function AiBalances() {
               <input className="input" type="date" value={at} onChange={(e) => setAt(e.target.value)} aria-label="충전한 날" style={{ maxWidth: 160 }} />
               <button className="btn btn-sm btn-primary" disabled={!amt.trim()} onClick={() => add(r.id)}>추가</button>
             </div>
+            <div className="row" style={{ gap: 6, flexWrap: "nowrap", marginTop: 4 }}>
+              <input className="input" inputMode="decimal" placeholder={`실제 사용액 (결제 화면 기준, 예: 0.06)`} value={real} onChange={(e) => setReal(e.target.value)} aria-label="실제 사용액" />
+              <button className="btn btn-sm" disabled={!real.trim()} onClick={() => setActual(r.id, Number(real.replace(/[^\d.]/g, "")))}>실제 사용액으로 맞추기</button>
+              {r.actual && <button className="btn btn-sm btn-ghost" onClick={() => setActual(r.id, null)}>맞춤 해제</button>}
+            </div>
+            {r.actual && <span className="tiny muted">{new Date(r.actual.at).toLocaleDateString("ko-KR")}에 실제 사용액 {fmtUsd(r.actual.usd)}로 맞춤 · 그 뒤로는 앱 기록을 더해요</span>}
             <span className="tiny muted">충전한 날부터 이 앱에서 쓴 금액을 빼서 남은 잔액을 보여줘요. 날짜를 비우면 오늘로 기록돼요. 각 사 웹사이트에서 직접 쓴 금액은 빠지니, 가끔 ↗ 링크로 실제 잔액과 맞춰 보세요.</span>
           </div>
         );

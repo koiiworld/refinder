@@ -182,6 +182,14 @@ export async function approveItem(reportId: string, index: number, keyword?: str
   return projectId;
 }
 
+export async function restoreItem(reportId: string, index: number) {
+  const row = await q1<{ data: HotReport }>("SELECT data FROM research_snapshots WHERE id=$1 AND source='hot_report'", [reportId]);
+  const r = row?.data;
+  if (!r?.items[index]) throw new WorkflowError("리포트 항목을 찾을 수 없습니다.");
+  if (r.items[index].status === "skipped") r.items[index] = { ...r.items[index], status: "new" };
+  await saveReport(r);
+}
+
 export async function skipItem(reportId: string, index: number) {
   const row = await q1<{ data: HotReport }>("SELECT data FROM research_snapshots WHERE id=$1 AND source='hot_report'", [reportId]);
   const r = row?.data;

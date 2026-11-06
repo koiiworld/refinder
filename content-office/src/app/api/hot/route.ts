@@ -1,5 +1,5 @@
 import { body, fail, handle, ok } from "@/lib/api";
-import { approveItem, createReport, lastReport, skipItem } from "@/lib/hot-report";
+import { approveItem, createReport, lastReport, restoreItem, skipItem } from "@/lib/hot-report";
 import { AiError } from "@/lib/ai/providers";
 
 export async function GET(req: Request) {
@@ -15,6 +15,10 @@ export async function POST(req: Request) {
     const b = await body<{ action?: string; blogId?: string; reportId?: string; index?: number; keyword?: string }>(req);
     try {
       if (b.action === "approve") return ok({ projectId: await approveItem(String(b.reportId), Number(b.index), b.keyword) });
+      if (b.action === "restore") {
+        await restoreItem(String(b.reportId), Number(b.index));
+        return ok({ ok: true });
+      }
       if (b.action === "skip") {
         await skipItem(String(b.reportId), Number(b.index));
         return ok({ ok: true });

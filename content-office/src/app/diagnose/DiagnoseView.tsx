@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/components/client-utils";
 import { fmtDate } from "@/components/ui";
-import type { Diagnosis } from "@/lib/diagnose";
+import type { Diagnosis, DiagnoseState } from "@/lib/diagnose";
 
 const ICON = { ok: "✅", warn: "⚠️", bad: "❌", skip: "➖" } as const;
 
@@ -20,22 +20,39 @@ const HOMEFEED = [
   ["모바일 가독성", "짧은 문단, 소제목, 목록·표. 대부분 폰으로 봐요."],
 ] as const;
 
-export default function DiagnoseView({ blogs, blogId, initial }: { blogs: { id: string; name: string; platform: string; url: string; color: string }[]; blogId: string; initial: Diagnosis | null }) {
+export default function DiagnoseView({ blogs, blogId, initial, initialState }: { blogs: { id: string; name: string; platform: string; url: string; color: string }[]; blogId: string; initial: Diagnosis | null; initialState: DiagnoseState }) {
   const [d, setD] = useState<Diagnosis | null>(initial);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(initialState?.status === "running");
+  const [err, setErr] = useState(initialState?.status === "error" ? initialState.error ?? "" : "");
+  // 진행 중이면 3초마다 확인 (다른 화면에 갔다 와도 서버에서 계속 진행)
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(async () => {
+      try {
+        const x = await api<{ last: Diagnosis | null; state: DiagnoseState }>(`/api/diagnose?blogId=${blogId}`);
+        if (x.state?.status === "running") return;
+        if (x.state?.status === "error") setErr(x.state.error ?? "진단에 실패했어요.");
+        else if (x.last) setD(x.last);
+        setBusy(false);
+      } catch {
+        /* 다음에 다시 */
+      }
+    }, 3000);
+    return () => clearInterval(t);
+  }, [busy, blogId]);
   const blog = blogs.find((b) => b.id === blogId)!;
 
   async function run() {
     setBusy(true);
     setErr("");
     try {
-      setD(await api<Diagnosis>("/api/diagnose", "POST", { blogId }));
+      await api("/api/diagnose", "POST", { blogId });
     } catch (e) {
       setErr((e as Error).message);
+      setBusy(false);
     }
-    setBusy(false);
   }
+
 
   return (
     <div className="stack" style={{ gap: 16 }}>
@@ -50,7 +67,7 @@ export default function DiagnoseView({ blogs, blogId, initial }: { blogs: { id: 
       <section className="card card-pad stack" style={{ gap: 10 }}>
         <div className="row between">
           <div className="small">{d ? <>마지막 진단 {fmtDate(d.at)} · 최근 글 {d.posts}개 분석</> : "아직 진단한 적이 없어요."}</div>
-          <button className="btn btn-primary" disabled={busy || !blog.url} onClick={run}>{busy ? <><span className="spinner" /> 진단 중… (최대 1분)</> : d ? "🔄 다시 진단" : "🩺 진단 시작"}</button>
+          <button className="btn btn-primary" disabled={busy || !blog.url} onClick={run}>{busy ? <><span className="spinner" /> 진단 중… 다른 화면에 가도 계속돼요</> : d ? "🔄 다시 진단" : "🩺 진단 시작"}</button>
         </div>
         {!blog.url && <div className="notice notice-warn small">블로그 설정에서 블로그 주소를 넣어야 진단할 수 있어요.</div>}
         {err && <div className="notice notice-bad small">{err}</div>}

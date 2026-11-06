@@ -544,7 +544,15 @@ test("🩺 블로그 진단: 발행 리듬·제목·검색 누락·키워드 순
   await call("/__reset", "POST", undefined, MOCK);
   const r = await call("/api/diagnose", "POST", { blogId: "blog_algokitchen" });
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  const d = r.data;
+  assert.equal(r.data.state.status, "running", "서버 작업으로 시작");
+  let st;
+  for (let i = 0; i < 60; i++) {
+    st = (await call("/api/diagnose?blogId=blog_algokitchen")).data;
+    if (st.state?.status !== "running" && st.last) break;
+    await new Promise((x) => setTimeout(x, 500));
+  }
+  assert.equal(st.state, null, JSON.stringify(st.state));
+  const d = st.last;
   const idx = Object.fromEntries(d.metrics.indexed.map((x) => [x.title.slice(0, 3), x]));
   assert.equal(idx["굴보쌈"].found, true);
   assert.equal(idx["굴보쌈"].rank, 2);
@@ -557,8 +565,7 @@ test("🩺 블로그 진단: 발행 리듬·제목·검색 누락·키워드 순
   assert.equal(d.metrics.ranks[0].docs, 52000);
   assert.equal(d.ai.score, 62);
   assert.match(await stepPrompt("블로그 성장 컨설턴트"), /\[점검표\]/);
-  const last = (await call("/api/diagnose?blogId=blog_algokitchen")).data;
-  assert.equal(last.at, d.at, "마지막 진단 저장");
+  assert.ok(d.at, "마지막 진단 저장");
 });
 
 test("📰 블로그 핫이슈: 주제별 글을 반응(공감+댓글×3) 순으로 · 자주 나온 단어 · 1시간 캐시", async () => {
@@ -630,6 +637,8 @@ test("📋 글감 추천 리포트: 구글 트렌드·네이버 뉴스·블로�
   await call("/api/hot", "POST", { action: "skip", reportId: r.data.id, index: 1 });
   const last = (await call("/api/hot?blogId=blog_algokitchen")).data;
   assert.deepEqual(last.items.map((x) => x.status), ["approved", "skipped"]);
+  await call("/api/hot", "POST", { action: "restore", reportId: r.data.id, index: 1 });
+  assert.equal((await call("/api/hot?blogId=blog_algokitchen")).data.items[1].status, "new", "되살리기");
 });
 
 async function waitVideo(id, label, ms = 120_000) {
@@ -733,6 +742,10 @@ test("💳 AI별 잔액: 충전 기록 − 앱에서 쓴 금액 = 남은 잔액 
   assert.ok(o2.rate > 0 && o2.rate < 1);
   const hf = b.find((x) => x.id === "higgsfield");
   assert.ok(hf.used > 0, "Higgsfield는 생성 때 받은 예상 금액으로");
+  b = (await call("/api/dashboard/balances", "POST", { provider: "higgsfield", actual: 0.06 })).data;
+  assert.equal(b.find((x) => x.id === "higgsfield").used, 0.06, "실제 사용액으로 맞춤");
+  b = (await call("/api/dashboard/balances", "POST", { provider: "higgsfield", actual: null })).data;
+  assert.ok(b.find((x) => x.id === "higgsfield").used !== 0.06, "맞춤 해제");
   b = (await call("/api/dashboard/balances", "POST", { provider: "openai", remove: 0 })).data;
   assert.equal(b.find((x) => x.id === "openai").charged, null);
 });
@@ -750,6 +763,17 @@ test("📱 캐러셀 콘텐츠 유형 4가지(장수·구성) · 표지 문구 �
   assert.deepEqual(h.data.style.hooks, ["새 표지 A", "새 표지 B", "새 표지 C"]);
   assert.equal(h.data.style.contentType, "compare", "유형 유지");
   assert.match(await stepPrompt("표지 카피라이터"), /이미 나온 후보 - 겹치지 않게/);
+  // 유형 바꾸기: 처음은 AI로, 다시 돌아가면 저장된 것 불러오기(AI 호출 없음)
+  const tip = await call(`/api/carousels/${id}`, "POST", { action: "switch_type", type: "tip" });
+  assert.equal(tip.data.reused, false);
+  const edited = tip.data.slides.map((s, i) => (i === 0 ? { ...s, headline: "꿀팁 버전 표지" } : s));
+  await call(`/api/carousels/${id}`, "POST", { action: "switch_type", type: "compare", slides: edited });
+  await call("/__reset", "POST", undefined, MOCK);
+  const back = await call(`/api/carousels/${id}`, "POST", { action: "switch_type", type: "tip" });
+  assert.equal(back.data.reused, true, "다시 고르면 불러오기");
+  assert.equal(back.data.slides[0].headline, "꿀팁 버전 표지", "고친 내용도 그대로");
+  assert.equal(back.data.style.contentType, "tip");
+  assert.ok(!(await mockLog()).some((l) => JSON.stringify(l.body ?? {}).includes("카피라이터")), "AI 호출 없음");
 });
 
 test("🔑 대시보드 키워드 TOP 5: 블로그 고르기 ▼ · 그 블로그 키워드만 · 아직 안 쓴 것도", async () => {

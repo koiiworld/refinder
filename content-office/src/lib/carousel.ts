@@ -16,6 +16,8 @@ import { importPostWithImages } from "./sample-html";
 
 export type Slide = { kind: "cover" | "content" | "cta"; headline: string; body: string; image: number | null };
 export type CarouselImage = { url: string; alt: string };
+/** 콘텐츠 유형별로 만들어 둔 결과 (다시 고르면 AI 없이 불러옴) */
+export type TypeVersion = { slides: Slide[]; caption: string; hashtags: string[]; hooks: string[] };
 export type CarouselStyle = { template: "photo" | "clean" | "bold"; accent: string; handle: string };
 export type Carousel = {
   id: string;
@@ -27,7 +29,7 @@ export type Carousel = {
   caption: string;
   hashtags: string[];
   images: CarouselImage[];
-  style: CarouselStyle & { hooks?: string[]; format?: string; niche?: string; sourceText?: string; sourceUrl?: string; contentType?: ContentTypeId };
+  style: CarouselStyle & { hooks?: string[]; format?: string; niche?: string; sourceText?: string; sourceUrl?: string; contentType?: ContentTypeId; versions?: Partial<Record<ContentTypeId, TypeVersion>> };
   ai: { provider?: string; model?: string; at?: string };
   created_at: string;
   updated_at: string;
@@ -177,6 +179,29 @@ ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내�
   await q("UPDATE carousels SET slides=$2, caption=$3, hashtags=$4, style=$5, ai=$6, updated_at=NOW() WHERE id=$1", [
     id, j(slides), String(raw.caption ?? "").slice(0, 2200), j(hashtags), j({ ...DEFAULT_STYLE, ...c.style, hooks: (raw.hooks ?? []).map(String).slice(0, 3) }), j({ provider: res.provider, model: res.model, at: new Date().toISOString() }),
   ]);
+}
+
+/**
+ * 콘텐츠 유형 바꾸기: 지금 결과를 그 유형으로 저장해 두고,
+ * 바꿀 유형을 전에 만든 적 있으면 AI 없이 불러옴 · 처음이면 AI로 만듦
+ */
+export async function switchType(id: string, type: ContentTypeId, current?: { slides?: Slide[]; caption?: string; hashtags?: string[] }) {
+  if (!CONTENT_TYPES.some((t) => t.id === type)) throw new Error("알 수 없는 콘텐츠 유형입니다.");
+  const c = await getCarousel(id);
+  if (!c) throw new Error("캐러셀을 찾을 수 없습니다.");
+  const from = (c.style?.contentType ?? "general") as ContentTypeId;
+  const versions = { ...(c.style?.versions ?? {}) };
+  versions[from] = { slides: current?.slides ?? c.slides, caption: current?.caption ?? c.caption, hashtags: current?.hashtags ?? c.hashtags, hooks: c.style?.hooks ?? [] };
+  const saved = versions[type];
+  if (saved) {
+    await q("UPDATE carousels SET slides=$2, caption=$3, hashtags=$4, style=$5, updated_at=NOW() WHERE id=$1", [
+      id, j(saved.slides), saved.caption, j(saved.hashtags), j({ ...c.style, contentType: type, hooks: saved.hooks, versions }),
+    ]);
+    return { reused: true };
+  }
+  await q("UPDATE carousels SET style=$2, updated_at=NOW() WHERE id=$1", [id, j({ ...c.style, contentType: type, versions })]);
+  await generate(id);
+  return { reused: false };
 }
 
 /** 표지 문구 후보만 다시 받기 (가벼운 호출) */

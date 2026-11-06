@@ -262,6 +262,33 @@ ${checks.map((c) => `- ${c.label}: ${c.status} · ${c.detail}`).join("\n")}
 
 export type Diagnosis = Awaited<ReturnType<typeof diagnoseBlog>>;
 
+export type DiagnoseState = { status: "running" | "error"; error?: string; at: string } | null;
+export async function setDiagnoseState(blogId: string, st: DiagnoseState) {
+  if (!st) await q("DELETE FROM settings WHERE key=$1", [`diagnose_state:${blogId}`]);
+  else await q(`INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [`diagnose_state:${blogId}`, j(st)]);
+}
+export async function getDiagnoseState(blogId: string): Promise<DiagnoseState> {
+  const r = await q1<{ value: DiagnoseState }>("SELECT value FROM settings WHERE key=$1", [`diagnose_state:${blogId}`]);
+  const st = r?.value ?? null;
+  // 10분 넘게 '진행 중'이면 멈춘 것으로 봄
+  if (st?.status === "running" && Date.now() - new Date(st.at).getTime() > 10 * 60 * 1000) return { status: "error", error: "진단이 너무 오래 걸려 멈췄어요. 다시 눌러 주세요.", at: st.at };
+  return st;
+}
+
+/** 진단 시작 → 작업 큐 (화면을 떠나도 계속) */
+export async function startDiagnose(blogId: string) {
+  const blog = await getBlogForAi(blogId);
+  if (!blog) throw new Error("블로그를 찾을 수 없습니다.");
+  if (!blog.url) throw new Error("블로그 설정에서 블로그 주소를 먼저 넣어 주세요.");
+  const st = await getDiagnoseState(blogId);
+  if (st?.status === "running") return st;
+  const now = { status: "running" as const, at: new Date().toISOString() };
+  await setDiagnoseState(blogId, now);
+  const { enqueue } = await import("./jobs");
+  await enqueue("diagnose", { blogId, payload: { blogId }, maxAttempts: 1 });
+  return now;
+}
+
 export async function lastDiagnosis(blogId: string): Promise<Diagnosis | null> {
   const r = await q1<{ data: Diagnosis }>("SELECT data FROM research_snapshots WHERE blog_id=$1 AND source='diagnose' ORDER BY collected_at DESC LIMIT 1", [blogId]);
   return r?.data ?? null;

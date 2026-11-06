@@ -140,16 +140,18 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  /** 콘텐츠 유형 바꾸기 → 그 유형의 장수·구성으로 AI가 다시 만듦 */
+  /** 콘텐츠 유형 바꾸기 → 전에 만든 적 있으면 그대로 불러옴(AI 비용 없음), 처음이면 AI가 만듦 */
   async function changeType(id: string) {
     if (id === ctype) return;
-    if (dirty && !confirm("고친 내용이 새 구성으로 바뀝니다. 계속할까요?")) return;
+    const made = !!c.style?.versions?.[id as keyof NonNullable<typeof c.style.versions>];
     setBusy("ai");
     setMsg(null);
     try {
-      await api(`/api/carousels/${c.id}`, "PUT", { style: { ...style, contentType: id } });
-      apply(await api<Carousel>(`/api/carousels/${c.id}`, "POST", { action: "regenerate", feedback }));
-      setMsg({ ok: true, text: `'${types.find((t) => t.id === id)?.label}' 구성으로 다시 만들었어요.` });
+      await api(`/api/carousels/${c.id}`, "PUT", { style });
+      const r = await api<Carousel & { reused: boolean }>(`/api/carousels/${c.id}`, "POST", { action: "switch_type", type: id, slides, caption, hashtags: tags.split(/[\s,]+/).filter(Boolean) });
+      apply(r);
+      setMsg({ ok: true, text: r.reused ? `전에 만든 '${types.find((t) => t.id === id)?.label}' 버전을 불러왔어요 (AI 비용 없음).` : `'${types.find((t) => t.id === id)?.label}' 구성으로 새로 만들었어요.` });
+      void made;
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     }
@@ -268,11 +270,11 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
         </div>
         {!!types.length && (
           <div className="stack" style={{ gap: 4 }}>
-            <div className="tiny muted">콘텐츠 유형 (누르면 그 장수·구성으로 다시 만들어요)</div>
+            <div className="tiny muted">콘텐츠 유형 · ✓ 표시는 만들어 둔 버전이 있어 AI 비용 없이 불러와요</div>
             <div className="row" style={{ gap: 6 }}>
               {types.map((t) => (
-                <button key={t.id} className={`btn btn-sm ${ctype === t.id ? "btn-primary" : ""}`} disabled={!!busy} onClick={() => changeType(t.id)} title={`추천 ${t.range}`}>
-                  {t.label} <span className="tiny" style={{ opacity: 0.75 }}>{t.range}</span>
+                <button key={t.id} className={`btn btn-sm ${ctype === t.id ? "btn-primary" : ""}`} disabled={!!busy} onClick={() => changeType(t.id)} title={c.style?.versions?.[t.id as keyof NonNullable<typeof c.style.versions>] ? "만들어 둔 버전 불러오기 (AI 비용 없음)" : `추천 ${t.range} · 처음이라 AI가 만들어요`}>
+                  {t.label} <span className="tiny" style={{ opacity: 0.75 }}>{t.range}</span>{ctype !== t.id && c.style?.versions?.[t.id as keyof NonNullable<typeof c.style.versions>] ? <span className="tiny"> ✓</span> : null}
                 </button>
               ))}
             </div>

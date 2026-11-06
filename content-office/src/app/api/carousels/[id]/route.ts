@@ -1,5 +1,5 @@
 import { body, fail, handle, ok, type Ctx } from "@/lib/api";
-import { addUpload, deleteCarousel, generate, getCarousel, importBlogImages, regenerateHooks, saveCarousel, type CarouselStyle, type ContentTypeId, type Slide } from "@/lib/carousel";
+import { addUpload, deleteCarousel, generate, getCarousel, importBlogImages, regenerateHooks, saveCarousel, switchType, type CarouselStyle, type ContentTypeId, type Slide } from "@/lib/carousel";
 
 export async function GET(_req: Request, ctx: Ctx) {
   return handle(async () => {
@@ -26,10 +26,13 @@ export async function PUT(req: Request, ctx: Ctx) {
 export async function POST(req: Request, ctx: Ctx) {
   return handle(async () => {
     const id = (await ctx.params).id;
-    const b = await body<{ action?: string; feedback?: string; dataUrl?: string; url?: string }>(req);
+    const b = await body<{ action?: string; feedback?: string; dataUrl?: string; url?: string; type?: ContentTypeId; slides?: Slide[]; caption?: string; hashtags?: string[] }>(req);
     try {
       if (b.action === "regenerate") await generate(id, String(b.feedback ?? "").slice(0, 2000));
-      else if (b.action === "hooks") {
+      else if (b.action === "switch_type") {
+        const r = await switchType(id, b.type as ContentTypeId, { slides: b.slides, caption: b.caption, hashtags: b.hashtags });
+        return ok({ ...(await getCarousel(id)), reused: r.reused });
+      } else if (b.action === "hooks") {
         await regenerateHooks(id);
       }
       else if (b.action === "upload") {

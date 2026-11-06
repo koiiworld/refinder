@@ -17,7 +17,7 @@ export const BALANCE_PROVIDERS = [
 ] as const;
 export type BalanceProvider = (typeof BALANCE_PROVIDERS)[number]["id"];
 type TopUp = { usd: number; at: string; note?: string };
-type Stored = Partial<Record<BalanceProvider, { topups: TopUp[] }>>;
+type Stored = Partial<Record<BalanceProvider, { topups: TopUp[]; actual?: { usd: number; at: string } }>>;
 
 async function stored(): Promise<Stored> {
   const r = await q1<{ value: Stored }>("SELECT value FROM settings WHERE key='ai_balances'");
@@ -75,7 +75,11 @@ export async function balances() {
     const topups = (s[p.id]?.topups ?? []).slice().sort((a, b) => a.at.localeCompare(b.at));
     const charged = topups.reduce((a, t) => a + t.usd, 0);
     const since = topups[0]?.at ?? null;
-    const used = await usedSince(p.id, since);
+    // '실제 사용액 맞추기': 그 시점까지는 사용자가 적은 실제 금액, 이후는 앱 기록
+    const actual = s[p.id]?.actual;
+    const after = actual ? await usedSince(p.id, actual.at) : null;
+    const base = await usedSince(p.id, since);
+    const used = actual && after ? { usd: actual.usd + after.usd, calls: base.calls } : base;
     rows.push({
       id: p.id,
       name: p.name,
@@ -87,6 +91,7 @@ export async function balances() {
       since,
       remaining: topups.length ? charged - used.usd : null,
       rate: topups.length && charged > 0 ? used.usd / charged : null,
+      actual: actual ?? null,
     });
   }
   return rows;
@@ -99,6 +104,20 @@ export async function addTopUp(provider: string, usd: number, at?: string, note?
   const s = await stored();
   const cur = s[provider as BalanceProvider]?.topups ?? [];
   s[provider as BalanceProvider] = { topups: [...cur, { usd: Math.round(usd * 100) / 100, at: when, note: String(note ?? "").slice(0, 60) }] };
+  await save(s);
+}
+
+/** 각 사 결제 화면의 실제 사용액으로 맞추기 (지금까지 = usd, 이후는 앱 기록을 더함). usd 가 null 이면 해제 */
+export async function setActualUsed(provider: string, usd: number | null) {
+  if (!BALANCE_PROVIDERS.some((p) => p.id === provider)) throw new Error("알 수 없는 AI입니다.");
+  const s = await stored();
+  const cur = s[provider as BalanceProvider] ?? { topups: [] };
+  if (usd == null) delete cur.actual;
+  else {
+    if (!(usd >= 0) || usd > 100000) throw new Error("사용액을 확인해 주세요 (달러).");
+    cur.actual = { usd: Math.round(usd * 10000) / 10000, at: new Date().toISOString() };
+  }
+  s[provider as BalanceProvider] = cur;
   await save(s);
 }
 
