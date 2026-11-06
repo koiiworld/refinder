@@ -13,8 +13,11 @@ export function fmtDate(iso?: string | null, withTime = true) {
   });
 }
 
-/** 원화 환산 기준 환율 (1달러 = 1,400원) */
-export const KRW_PER_USD = 1400;
+/** 원화 환산 기준 환율 */
+/** 지출(AI 비용 등) 원화 환산: $1 = ₩1,500 */
+export const KRW_PER_USD = 1500;
+/** 수익(애드센스 달러 등) 원화 환산: $1 = ₩1,200 */
+export const REVENUE_KRW_PER_USD = 1200;
 
 /** 달러 표시 + 괄호 안 원화 환산. 예: $0.15 (₩210) */
 export function fmtUsd(n: number) {

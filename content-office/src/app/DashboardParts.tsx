@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api, Modal } from "@/components/client-utils";
-import { fmtUsd, KRW_PER_USD } from "@/components/ui";
+import { fmtUsd, KRW_PER_USD, REVENUE_KRW_PER_USD } from "@/components/ui";
 import type { MonthRevenue, RevenueChannel } from "@/lib/dashboard";
 
 /** 입력칸 숫자에 천 단위 쉼표 */
@@ -163,7 +163,7 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
       const payload = Object.fromEntries(
         CHANNELS.map((c) => {
           const usd = f[c.id].usd.trim() ? Number(f[c.id].usd.replace(/[^\d.]/g, "")) : null;
-          const won = f[c.id].krw.trim() ? Number(f[c.id].krw.replace(/[^\d]/g, "")) : usd != null ? Math.round(usd * KRW_PER_USD) : 0;
+          const won = f[c.id].krw.trim() ? Number(f[c.id].krw.replace(/[^\d]/g, "")) : usd != null ? Math.round(usd * REVENUE_KRW_PER_USD) : 0;
           return [c.id, { krw: won, usd, metric: f[c.id].metric }];
         }),
       );
@@ -230,7 +230,7 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
       <div className="card-head" style={{ flexWrap: "wrap" }}>
         <h2 style={{ fontSize: 15 }}>수익 ({m}월)</h2>
         <div className="row">
-          <span className="tiny muted">쿠팡 자동 · 나머지는 직접 입력/캡처 · 달러는 $1 = ₩{KRW_PER_USD.toLocaleString()} 환산</span>
+          <span className="tiny muted">쿠팡 자동 · 나머지는 직접 입력/캡처 · 달러 환산: 수익 $1 = ₩{REVENUE_KRW_PER_USD.toLocaleString()} · 지출 $1 = ₩{KRW_PER_USD.toLocaleString()}</span>
           <button className="btn btn-sm" onClick={() => setEdit(!edit)}>{edit ? "닫기" : total ? "수정" : "이번 달 수익 입력"}</button>
         </div>
       </div>
