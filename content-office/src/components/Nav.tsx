@@ -50,14 +50,16 @@ function isOn(path: string, href: string) {
   return href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
 }
 
-export default function Nav({ pending }: { pending: number }) {
+export default function Nav({ pending, brand }: { pending: number; brand?: { name: string; mark: string; color: string } }) {
+  const b = brand ?? { name: "콘텐츠 오피스", mark: "AI", color: "" };
+  const markStyle = b.color ? { background: b.color, color: "#fff" } : undefined;
   const path = usePathname();
   if (path === "/login") return null;
   return (
     <>
       <aside className="side">
-        <Link href="/" className={`brand${path === "/" ? " on" : ""}`} title="대시보드로" aria-label="콘텐츠 오피스 대시보드">
-          <span className="brand-mark">AI</span> 콘텐츠 오피스
+        <Link href="/" className={`brand${path === "/" ? " on" : ""}`} title="대시보드로" aria-label={`${b.name} 대시보드`}>
+          <span className="brand-mark" style={markStyle}>{b.mark}</span> {b.name}
         </Link>
         {ITEMS.map((it) => (
           <Link key={it.href} href={it.href} className={`nav-link ${isOn(path, it.href) ? "on" : ""}`} style={{ alignItems: "flex-start" }}>
@@ -73,7 +75,7 @@ export default function Nav({ pending }: { pending: number }) {
 
       <header className="topbar">
         <Link href="/" className="brand" style={{ padding: 0 }}>
-          <span className="brand-mark">AI</span> 콘텐츠 오피스
+          <span className="brand-mark" style={markStyle}>{b.mark}</span> {b.name}
         </Link>
       </header>
 

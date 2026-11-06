@@ -6,6 +6,8 @@ import { naverAdConnected } from "@/lib/searchad";
 import { youtubeConnected } from "@/lib/youtube";
 import SettingsClient from "./SettingsClient";
 import KeysCard from "./KeysCard";
+import BrandCard from "./BrandCard";
+import { getBrand } from "@/lib/brand";
 import { canSaveKeys, keyStatus } from "@/lib/keystore";
 import { pricingUpdates } from "@/lib/pricing-refresh";
 
@@ -40,6 +42,7 @@ export default async function SettingsPage() {
         priceUpdates={await pricingUpdates()}
         keysCard={<KeysCard initial={keys} canSave={canSaveKeys()} />}
       />
+      <div style={{ marginTop: 16 }}><BrandCard initial={await getBrand()} /></div>
     </div>
   );
 }

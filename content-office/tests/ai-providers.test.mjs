@@ -1163,3 +1163,14 @@ test("🔑 설정: API 키 직접 연결 (암호화 저장·끝 4자리만·지�
   assert.ok(page2.includes("새로고침") && page2.includes(">NEW<"), "NEW 표시");
   assert.deepEqual((await call("/api/settings/pricing", "POST", {})).data.changed, [], "두 번째는 바뀐 것 없음");
 });
+
+test("🏷 설정: 로고 아이콘·이름 바꾸기 → 왼쪽 위·탭 제목 반영 · 처음대로", async () => {
+  const b = (await call("/api/settings/brand", "POST", { name: "민의 블로그 공장", mark: "🍳", color: "#ff0000" })).data;
+  assert.deepEqual(b, { name: "민의 블로그 공장", mark: "🍳", color: "#ff0000" });
+  const html = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(html.includes("민의 블로그 공장") && html.includes("<title>민의 블로그 공장</title>"), "반영");
+  assert.equal((await call("/api/settings/brand", "POST", { name: "", mark: "ABCD", color: "red" })).data.mark, "AB", "아이콘은 2자까지");
+  const r = (await call("/api/settings/brand", "POST", { reset: true })).data;
+  assert.deepEqual(r, { name: "콘텐츠 오피스", mark: "AI", color: "" });
+  assert.ok((await (await fetch(`${BASE}/`)).text()).includes("<title>AI 콘텐츠 오피스</title>"));
+});

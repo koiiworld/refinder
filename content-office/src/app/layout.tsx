@@ -2,13 +2,17 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import { q1 } from "@/lib/db";
+import { getBrand } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "AI 콘텐츠 오피스",
-  description: "ChatGPT·Claude·Gemini를 함께 쓰는 멀티 블로그 콘텐츠 제작 오피스",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const b = await getBrand();
+  return {
+    title: /^[\p{L}\p{N}]+$/u.test(b.mark) ? `${b.mark} ${b.name}` : b.name,
+    description: "ChatGPT·Claude·Gemini를 함께 쓰는 멀티 블로그 콘텐츠 제작 오피스",
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -31,12 +35,12 @@ async function pendingCount() {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const pending = await pendingCount();
+  const [pending, brand] = await Promise.all([pendingCount(), getBrand()]);
   return (
     <html lang="ko">
       <body>
         <div className="shell">
-          <Nav pending={pending} />
+          <Nav pending={pending} brand={brand} />
           <main className="main">{children}</main>
         </div>
       </body>
