@@ -21,10 +21,23 @@ export async function naverBlogSearch(query: string, display = 10): Promise<{ to
   const id = process.env.NAVER_CLIENT_ID?.trim();
   const secret = process.env.NAVER_CLIENT_SECRET?.trim();
   if (!id || !secret) throw new Error("네이버 검색 API 키(NAVER_CLIENT_ID / NAVER_CLIENT_SECRET)가 없습니다.");
-  const base = process.env.NAVER_SEARCH_URL?.trim() || "https://openapi.naver.com/v1/search/blog.json";
-  const res = await fetch(`${base}?query=${encodeURIComponent(query)}&display=${display}&sort=sim`, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret }, signal: AbortSignal.timeout(10_000) });
-  const data = (await res.json().catch(() => ({}))) as { total?: number; items?: SearchItem[]; errorMessage?: string };
-  if (res.status === 401 || res.status === 403) throw new Error("네이버 검색 API 권한이 없습니다. 네이버 개발자센터 > 내 애플리케이션 > API 설정에서 '검색'을 추가해 주세요.");
+  // 2026-07-31 이후 키: NAVER API HUB 주소·헤더. 기존 개발자센터 키: openapi.naver.com
+  const both = { "X-NCP-APIGW-API-KEY-ID": id, "X-NCP-APIGW-API-KEY": secret, "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret };
+  const attempts: [string, Record<string, string>][] = process.env.NAVER_SEARCH_URL?.trim()
+    ? [[process.env.NAVER_SEARCH_URL.trim(), both]]
+    : [
+        ["https://naverapihub.apigw.ntruss.com/search/v1/blog", { "X-NCP-APIGW-API-KEY-ID": id, "X-NCP-APIGW-API-KEY": secret }],
+        ["https://openapi.naver.com/v1/search/blog.json", { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret }],
+      ];
+  let res: Response | null = null;
+  let data: { total?: number; items?: SearchItem[]; errorMessage?: string } = {};
+  for (const [base, headers] of attempts) {
+    res = await fetch(`${base}?query=${encodeURIComponent(query)}&display=${display}&sort=sim`, { headers, signal: AbortSignal.timeout(10_000) });
+    data = await res.json().catch(() => ({}));
+    if (![401, 403, 404].includes(res.status)) break;
+  }
+  if (!res) throw new Error("네이버 검색 API에 연결하지 못했습니다.");
+  if (res.status === 401 || res.status === 403) throw new Error("네이버 검색 API 권한이 없습니다. NAVER API HUB(또는 개발자센터) 앱에서 '블로그 검색'을 추가해 주세요.");
   if (!res.ok) throw new Error(`네이버 검색 API 오류 (HTTP ${res.status}) ${data.errorMessage ?? ""}`.trim());
   return { total: Number(data.total ?? 0), items: (data.items ?? []).map((i) => ({ ...i, title: String(i.title ?? "").replace(/<[^>]+>/g, "") })) };
 }
