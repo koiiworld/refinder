@@ -727,6 +727,21 @@ test("💳 AI별 잔액: 충전 기록 − 앱에서 쓴 금액 = 남은 잔액 
   assert.equal(b.find((x) => x.id === "openai").charged, null);
 });
 
+test("📱 캐러셀 콘텐츠 유형 4가지(장수·구성) · 표지 문구 다시 받기", async () => {
+  const t = await call("/api/carousels", "POST", { topic: "전기요금 아끼는 법", format: "money" });
+  const id = t.data.id;
+  assert.match(await stepPrompt("카드뉴스) 카피라이터"), /\[콘텐츠 유형\] 일반 정보형 — 7~9장 \(기본 8장\)[\s\S]*02 문제 제기\(공감 유도\)/, "기본은 일반 정보형 8장 구성");
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/carousels/${id}`, "PUT", { style: { contentType: "compare" } });
+  await call(`/api/carousels/${id}`, "POST", { action: "regenerate" });
+  assert.match(await stepPrompt("카드뉴스) 카피라이터"), /\[콘텐츠 유형\] 비교·분석·체크리스트 — 8~12장/);
+  const h = await call(`/api/carousels/${id}`, "POST", { action: "hooks" });
+  assert.equal(h.status, 200, JSON.stringify(h.data));
+  assert.deepEqual(h.data.style.hooks, ["새 표지 A", "새 표지 B", "새 표지 C"]);
+  assert.equal(h.data.style.contentType, "compare", "유형 유지");
+  assert.match(await stepPrompt("표지 카피라이터"), /이미 나온 후보 - 겹치지 않게/);
+});
+
 test("🔑 대시보드 키워드 TOP 5: 블로그 고르기 ▼ · 그 블로그 키워드만 · 아직 안 쓴 것도", async () => {
   const html = await (await fetch(`${BASE}/`)).text();
   assert.ok(html.includes('aria-label="블로그 고르기"'), "블로그 고르기");

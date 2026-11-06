@@ -47,7 +47,7 @@ function Preview({ slide, index, total, img, style, fontReady, onCanvas }: { sli
   return <canvas ref={ref} style={{ width: "100%", height: "auto", borderRadius: 10, display: "block", border: "1px solid var(--line)" }} aria-label={`${index + 1}장 미리보기`} />;
 }
 
-export default function CarouselEditor({ initial, recent = [] }: { initial: Carousel; recent?: { title: string; url: string; blog: string }[] }) {
+export default function CarouselEditor({ initial, recent = [], types = [] }: { initial: Carousel; recent?: { title: string; url: string; blog: string }[]; types?: { id: string; label: string; range: string }[] }) {
   const router = useRouter();
   const [c, setC] = useState(initial);
   const [slides, setSlides] = useState<Slide[]>(initial.slides);
@@ -55,11 +55,13 @@ export default function CarouselEditor({ initial, recent = [] }: { initial: Caro
   const [caption, setCaption] = useState(initial.caption);
   const [tags, setTags] = useState(initial.hashtags.map((h) => "#" + h).join(" "));
   const [feedback, setFeedback] = useState("");
-  const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload" | "import">("");
+  const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload" | "import" | "hooks">("");
+  const ctype = c.style?.contentType ?? "general";
   const [importUrl, setImportUrl] = useState(recent[0]?.url ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [imgVer, setImgVer] = useState(0);
+  const [hex, setHex] = useState(initial.style?.accent ?? "#ff6b35");
   const [fontReady, setFontReady] = useState(false);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -136,6 +138,32 @@ export default function CarouselEditor({ initial, recent = [] }: { initial: Caro
     }
     setBusy("");
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  /** 콘텐츠 유형 바꾸기 → 그 유형의 장수·구성으로 AI가 다시 만듦 */
+  async function changeType(id: string) {
+    if (id === ctype) return;
+    if (dirty && !confirm("고친 내용이 새 구성으로 바뀝니다. 계속할까요?")) return;
+    setBusy("ai");
+    setMsg(null);
+    try {
+      await api(`/api/carousels/${c.id}`, "PUT", { style: { ...style, contentType: id } });
+      apply(await api<Carousel>(`/api/carousels/${c.id}`, "POST", { action: "regenerate", feedback }));
+      setMsg({ ok: true, text: `'${types.find((t) => t.id === id)?.label}' 구성으로 다시 만들었어요.` });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+    setBusy("");
+  }
+
+  async function newHooks() {
+    setBusy("hooks");
+    try {
+      setC(await api<Carousel>(`/api/carousels/${c.id}`, "POST", { action: "hooks" }));
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+    setBusy("");
   }
 
   async function importPhotos() {
@@ -215,12 +243,47 @@ export default function CarouselEditor({ initial, recent = [] }: { initial: Caro
           {TEMPLATES.map((t) => (
             <button key={t.id} className={`btn btn-sm ${style.template === t.id ? "btn-primary" : ""}`} onClick={() => { setStyle({ ...style, template: t.id }); setDirty(true); }}>{t.label}</button>
           ))}
-          <label className="small row" style={{ gap: 4 }}>강조색 <input type="color" value={style.accent} onChange={(e) => { setStyle({ ...style, accent: e.target.value }); setDirty(true); }} aria-label="강조색" /></label>
+          <span className="small row" style={{ gap: 4, flexWrap: "nowrap" }}>
+            강조색
+            <input type="color" value={style.accent} onChange={(e) => { setStyle({ ...style, accent: e.target.value }); setHex(e.target.value); setDirty(true); }} aria-label="강조색 고르기" />
+            <input
+              className="input"
+              style={{ width: 92, fontFamily: "monospace", padding: "4px 8px" }}
+              value={hex}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                setHex(v);
+                const m = /^#?([0-9a-f]{6})$/i.exec(v);
+                if (m) { setStyle({ ...style, accent: `#${m[1].toLowerCase()}` }); setDirty(true); }
+              }}
+              placeholder="#ff6b35"
+              aria-label="강조색 HEX"
+              title="HEX 색상 코드 (예: #ff6b35)"
+            />
+            {["#ff6b35", "#2f6bff", "#16a34a", "#e11d48", "#111827", "#f59e0b"].map((col) => (
+              <button key={col} type="button" onClick={() => { setStyle({ ...style, accent: col }); setHex(col); setDirty(true); }} aria-label={`강조색 ${col}`} title={col} style={{ width: 18, height: 18, borderRadius: 9, border: style.accent === col ? "2px solid var(--text)" : "1px solid var(--line)", background: col, cursor: "pointer", padding: 0 }} />
+            ))}
+          </span>
           <input className="input" style={{ maxWidth: 180 }} placeholder="@인스타 계정 (선택)" value={style.handle} onChange={(e) => { setStyle({ ...style, handle: e.target.value }); setDirty(true); }} aria-label="인스타 계정" />
         </div>
+        {!!types.length && (
+          <div className="stack" style={{ gap: 4 }}>
+            <div className="tiny muted">콘텐츠 유형 (누르면 그 장수·구성으로 다시 만들어요)</div>
+            <div className="row" style={{ gap: 6 }}>
+              {types.map((t) => (
+                <button key={t.id} className={`btn btn-sm ${ctype === t.id ? "btn-primary" : ""}`} disabled={!!busy} onClick={() => changeType(t.id)} title={`추천 ${t.range}`}>
+                  {t.label} <span className="tiny" style={{ opacity: 0.75 }}>{t.range}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {!!c.style?.hooks?.length && (
           <div className="stack" style={{ gap: 4 }}>
-            <div className="tiny muted">표지 문구 다른 후보 (누르면 바뀌어요)</div>
+            <div className="tiny muted row" style={{ gap: 6 }}>
+              표지 문구 다른 후보 (누르면 바뀌어요)
+              <button className="btn btn-sm btn-ghost" style={{ padding: "0 8px" }} disabled={!!busy} onClick={newHooks} title="표지 문구 다시 받기" aria-label="표지 문구 다시 받기">{busy === "hooks" ? <span className="spinner" /> : "↻ 다시 받기"}</button>
+            </div>
             <div className="row" style={{ gap: 6 }}>
               {c.style.hooks.map((h) => <button key={h} className="btn btn-sm btn-ghost" onClick={() => edit(0, { headline: h })}>{h.replace(/\n/g, " ")}</button>)}
             </div>

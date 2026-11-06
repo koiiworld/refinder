@@ -27,11 +27,20 @@ export type Carousel = {
   caption: string;
   hashtags: string[];
   images: CarouselImage[];
-  style: CarouselStyle & { hooks?: string[]; format?: string; niche?: string; sourceText?: string; sourceUrl?: string };
+  style: CarouselStyle & { hooks?: string[]; format?: string; niche?: string; sourceText?: string; sourceUrl?: string; contentType?: ContentTypeId };
   ai: { provider?: string; model?: string; at?: string };
   created_at: string;
   updated_at: string;
 };
+
+/** 콘텐츠 유형별 장수·구성 (정보형 캐러셀은 기본 8장) */
+export const CONTENT_TYPES = [
+  { id: "tip", label: "짧은 생활 꿀팁·정보", range: "5~6장", count: 6, plan: "표지(시선 집중) → 문제 제기(공감) → 핵심 팁 ①~③ → 마무리(저장·공유)" },
+  { id: "general", label: "일반 정보형", range: "7~9장", count: 8, plan: "01 표지(시선 집중) → 02 문제 제기(공감 유도) → 03 핵심 정보①(첫 번째 팁) → 04 핵심 정보②(두 번째 팁) → 05 핵심 정보③(세 번째 팁) → 06 실전 예시(활용 방법) → 07 핵심 요약(저장할 정보) → 08 마무리(저장·공유)" },
+  { id: "compare", label: "비교·분석·체크리스트", range: "8~12장", count: 10, plan: "표지 → 문제 제기 → 비교 기준 → 항목별 비교(장마다 하나) → 한눈에 보는 표/체크리스트 → 추천 정리 → 핵심 요약(저장할 정보) → 마무리(저장·공유)" },
+  { id: "guide", label: "심층 가이드·단계별", range: "10~15장", count: 12, plan: "표지 → 문제 제기 → 준비물/전체 흐름 → 1단계~N단계(장마다 한 단계) → 자주 하는 실수 → 실전 예시 → 핵심 요약(저장할 정보) → 마무리(저장·공유)" },
+] as const;
+export type ContentTypeId = (typeof CONTENT_TYPES)[number]["id"];
 
 export const FORMATS = [
   { id: "save", label: "📌 저장형 정리·체크리스트" },
@@ -132,11 +141,15 @@ export async function generate(id: string, feedback = "") {
   const blog = c.blog_id ? await getBlogForAi(c.blog_id) : null;
   const doc = c.project_id ? await getDocument(c.project_id) : null;
   const fmt = FORMATS.find((f) => f.id === c.style?.format)?.label ?? "";
+  const ctype = CONTENT_TYPES.find((t) => t.id === c.style?.contentType) ?? CONTENT_TYPES[1];
   const source = doc?.content_html ? text(doc.content_html).slice(0, 6000) : (c.style?.sourceText ?? "").slice(0, 6000);
   const system = `당신은 저장·공유·친구 태그가 많이 나오는 인스타그램 캐러셀(카드뉴스) 카피라이터입니다. 짧고 리듬감 있게, 해요체로 씁니다. 확인할 수 없는 수치·효과를 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.`;
   const prompt = `${blog ? `[계정 분야] ${blog.name} · ${blog.category}\n` : ""}${c.style?.niche ? `[계정 분야] ${c.style.niche}\n` : ""}[주제] ${c.title}
 ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내용만 근거로]\n${source}\n` : ""}${c.images.length ? `\n[쓸 수 있는 사진 (번호: 설명)]\n${c.images.map((im, i) => `${i}: ${im.alt || "(설명 없음)"}`).join("\n")}\n` : ""}${feedback ? `\n[수정 요청 - 반드시 반영]\n${feedback}\n` : ""}
-인스타 캐러셀 6~9장을 만드세요.
+[콘텐츠 유형] ${ctype.label} — ${ctype.range} (기본 ${ctype.count}장)
+[추천 구성] ${ctype.plan}
+
+위 유형에 맞춰 인스타 캐러셀을 ${ctype.range} (가능하면 ${ctype.count}장) 만드세요. 추천 구성 순서를 따르되 내용에 맞게 조절하세요.
 - 사진이 있으면 되도록 많은 장에 서로 다른 사진을 배치하세요 (같은 사진 반복은 최소로).
 - 1장(cover): 스크롤을 멈추게 하는 후킹. headline 18자 이내(줄바꿈 \\n 1번 가능), body 는 한 줄 보조 문구(20자 이내).
   잘 먹히는 틀: 숫자+결과("10분이면 김밥집 맛"), 실수 경고("이렇게 하면 다 터져요"), 저장 유도("저장 안 하면 후회해요"), 반전·호기심("○○ 넣으면 달라져요").
@@ -158,7 +171,7 @@ ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내�
       image: Number.isInteger(s.image) && Number(s.image) >= 0 && Number(s.image) < c.images.length ? Number(s.image) : null,
     }))
     .filter((s) => s.headline || s.body)
-    .slice(0, 10);
+    .slice(0, 15);
   if (!slides.length) throw new Error("AI가 장면을 만들지 못했습니다. 다시 시도해 주세요.");
   const hashtags = Array.from(new Set((raw.hashtags ?? []).map((h) => String(h).replace(/^#/, "").replace(/\s+/g, "")).filter(Boolean))).slice(0, 5);
   await q("UPDATE carousels SET slides=$2, caption=$3, hashtags=$4, style=$5, ai=$6, updated_at=NOW() WHERE id=$1", [
@@ -166,10 +179,30 @@ ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내�
   ]);
 }
 
-export async function saveCarousel(id: string, patch: { title?: string; slides?: Slide[]; caption?: string; hashtags?: string[]; style?: Partial<CarouselStyle> }) {
+/** 표지 문구 후보만 다시 받기 (가벼운 호출) */
+export async function regenerateHooks(id: string) {
   const c = await getCarousel(id);
   if (!c) throw new Error("캐러셀을 찾을 수 없습니다.");
-  const slides = (patch.slides ?? c.slides).slice(0, 12).map((s) => ({
+  const blog = c.blog_id ? await getBlogForAi(c.blog_id) : null;
+  const system = `당신은 저장·공유·친구 태그가 많이 나오는 인스타그램 캐러셀(카드뉴스) 표지 카피라이터입니다. 확인할 수 없는 수치를 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.`;
+  const prompt = `[주제] ${c.title}
+[지금 표지] ${c.slides[0]?.headline ?? ""}
+[이미 나온 후보 - 겹치지 않게] ${(c.style?.hooks ?? []).join(" / ") || "(없음)"}
+[내용 요약] ${c.slides.slice(1, 6).map((s) => s.headline).join(" / ")}
+
+스크롤을 멈추게 하는 새 표지 문구 3개를 만드세요. 18자 이내, 서로 다른 틀(숫자+결과, 실수 경고, 저장 유도, 반전·호기심 중)로.
+형식: {"hooks": ["", "", ""]}`;
+  const res = await runStep({ step: "carousel", purpose: "carousel", blog, projectId: c.project_id, system, prompt, json: true, maxTokens: 400 });
+  const hooks = (extractJson<{ hooks?: string[] }>(res.text).hooks ?? []).map((h) => String(h).replace(/\\n/g, "\n").slice(0, 60)).filter(Boolean).slice(0, 3);
+  if (!hooks.length) throw new Error("새 표지 문구를 받지 못했어요. 다시 눌러 주세요.");
+  await q("UPDATE carousels SET style=$2, updated_at=NOW() WHERE id=$1", [id, j({ ...c.style, hooks })]);
+  return hooks;
+}
+
+export async function saveCarousel(id: string, patch: { title?: string; slides?: Slide[]; caption?: string; hashtags?: string[]; style?: Partial<CarouselStyle> & { contentType?: ContentTypeId } }) {
+  const c = await getCarousel(id);
+  if (!c) throw new Error("캐러셀을 찾을 수 없습니다.");
+  const slides = (patch.slides ?? c.slides).slice(0, 15).map((s) => ({
     kind: (["cover", "content", "cta"].includes(s.kind) ? s.kind : "content") as Slide["kind"],
     headline: String(s.headline ?? "").slice(0, 80),
     body: String(s.body ?? "").slice(0, 300),
@@ -178,6 +211,7 @@ export async function saveCarousel(id: string, patch: { title?: string; slides?:
   const style = { ...c.style, ...(patch.style ?? {}) };
   if (style.accent && !/^#[0-9a-f]{6}$/i.test(style.accent)) style.accent = DEFAULT_STYLE.accent;
   if (!["photo", "clean", "bold"].includes(style.template)) style.template = "photo";
+  if (style.contentType && !CONTENT_TYPES.some((t) => t.id === style.contentType)) style.contentType = "general";
   style.handle = String(style.handle ?? "").slice(0, 40);
   await q("UPDATE carousels SET title=$2, slides=$3, caption=$4, hashtags=$5, style=$6, updated_at=NOW() WHERE id=$1", [
     id, String(patch.title ?? c.title).slice(0, 200), j(slides), String(patch.caption ?? c.caption).slice(0, 2200),
