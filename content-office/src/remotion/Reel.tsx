@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, OffthreadVideo, Sequence } from "remotion";
+import { AbsoluteFill, Audio, interpolate, OffthreadVideo, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { ReelBg, ReelProps, ReelText } from "./types";
 import { docDuration, sceneStarts } from "./types";
 
@@ -29,9 +29,34 @@ export function fittedSize(t: ReelText) {
   return Math.max(16, Math.min(t.style.size, Math.floor(t.style.width / (em + pad))));
 }
 
+/** 등장 효과: 자막이 나타나는 순간의 움직임 (Sequence 안에서 0프레임부터) */
+function useAnim(anim: string | undefined, text: string) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const sp = (damping: number) => spring({ frame, fps, config: { damping, stiffness: 180, mass: 0.6 } });
+  switch (anim) {
+    case "fade":
+      return { style: { opacity: interpolate(frame, [0, 8], [0, 1], { extrapolateRight: "clamp" }) }, text };
+    case "pop":
+      return { style: { transform: `scale(${interpolate(sp(12), [0, 1], [0.6, 1])})`, opacity: interpolate(frame, [0, 4], [0, 1], { extrapolateRight: "clamp" }) }, text };
+    case "slide":
+      return { style: { transform: `translateY(${interpolate(sp(16), [0, 1], [60, 0])}px)`, opacity: interpolate(frame, [0, 6], [0, 1], { extrapolateRight: "clamp" }) }, text };
+    case "bounce":
+      return { style: { transform: `scale(${interpolate(sp(5), [0, 1], [0.3, 1])})` }, text };
+    case "type": {
+      const chars = Array.from(text);
+      const n = Math.min(chars.length, Math.floor((frame / fps) * 18) + 1); // 1초에 18글자
+      return { style: {}, text: chars.slice(0, n).join("") };
+    }
+    default:
+      return { style: {}, text };
+  }
+}
+
 export function TextLayer({ t }: { t: ReelText }) {
   const s = t.style;
   const size = fittedSize(t);
+  const a = useAnim(s.anim, t.text);
   return (
     <div
       style={{
@@ -52,6 +77,8 @@ export function TextLayer({ t }: { t: ReelText }) {
     >
       <span
         style={{
+          display: "inline-block",
+          ...a.style,
           background: s.box || undefined,
           padding: s.box ? `${size * 0.12}px ${size * 0.35}px` : undefined,
           borderRadius: s.box ? size * 0.2 : undefined,
@@ -61,7 +88,7 @@ export function TextLayer({ t }: { t: ReelText }) {
           paintOrder: "stroke fill",
         }}
       >
-        {t.text}
+        {a.text}
       </span>
     </div>
   );

@@ -23,7 +23,7 @@ export type StudioClip = { jobId?: string; url?: string; status?: string; error?
 export type StudioScene = { n: number; seconds: number; visual: string; motion: string; caption: string; narration: string; image: StudioImage; video: StudioClip };
 export type StudioPlan = { title: string; concept: string; hook: string; caption: string; hashtags: string[]; style: string; ai?: string };
 export type StudioCharacter = { name: string; description: string; prompt: string; image: StudioImage };
-export type StudioOptions = { seconds: number; style: string; aspect: "9:16"; imageModel: string; clipSeconds: 5 | 10; resolution: "480p" | "720p" | "1080p"; captions: boolean };
+export type StudioOptions = { seconds: number; style: string; aspect: "9:16"; imageModel: string; clipSeconds: 5 | 10; resolution: "480p" | "720p" | "1080p"; captions: boolean; lockCharacter?: string; seriesId?: string; episode?: number };
 export type StudioProject = { id: string; title: string; prompt: string; options: StudioOptions; plan: StudioPlan; character: StudioCharacter; scenes: StudioScene[]; video_id: string | null; status: string; message: string; created_at: string; updated_at: string };
 
 export const STUDIO_STYLES = [
@@ -57,7 +57,7 @@ async function publicBase(fallback?: string) {
 }
 
 /** ① 기획 */
-export async function createStudio(input: { prompt: string; seconds?: number; style?: string; imageModel?: string; clipSeconds?: number; resolution?: string }) {
+export async function createStudio(input: { prompt: string; seconds?: number; style?: string; imageModel?: string; clipSeconds?: number; resolution?: string; lockCharacter?: string; seriesId?: string; episode?: number }) {
   const prompt = input.prompt.trim().slice(0, 2000);
   if (!prompt) throw new Error("어떤 영상을 만들지 적어 주세요.");
   const options: StudioOptions = {
@@ -67,6 +67,8 @@ export async function createStudio(input: { prompt: string; seconds?: number; st
     imageModel: /^(google|openai):/.test(String(input.imageModel ?? "")) ? String(input.imageModel) : DEFAULT_OPTIONS.imageModel,
     clipSeconds: Number(input.clipSeconds) === 10 ? 10 : 5,
     resolution: ["480p", "720p", "1080p"].includes(String(input.resolution)) ? (input.resolution as StudioOptions["resolution"]) : "720p",
+    ...(input.lockCharacter ? { lockCharacter: String(input.lockCharacter).slice(0, 1200) } : {}),
+    ...(input.seriesId ? { seriesId: input.seriesId, episode: Number(input.episode) || undefined } : {}),
   };
   const id = newId("std_");
   await q("INSERT INTO studio_projects (id, title, prompt, options, status, message) VALUES ($1,$2,$3,$4,'planning','AI가 기획 중…')", [id, prompt.slice(0, 40), prompt, j(options)]);
@@ -84,14 +86,15 @@ export async function plan(id: string, feedback = "") {
   const userPrompt = `[만들 영상] ${s.prompt}
 [길이] 약 ${o.seconds}초 · 장면 ${n}개 (장면당 ${o.clipSeconds}초)
 [그림체] ${style.label} — ${style.prompt}
-${s.plan?.title ? `[이전 기획 제목] ${s.plan.title}\n` : ""}${feedback ? `[수정 요청 - 반드시 반영]\n${feedback}\n` : ""}
+${o.lockCharacter ? `[캐릭터 고정 문장 — character.prompt 에도 그대로]\n${o.lockCharacter}\n` : ""}${s.plan?.title ? `[이전 기획 제목] ${s.plan.title}\n` : ""}${feedback ? `[수정 요청 - 반드시 반영]\n${feedback}\n` : ""}
 기획하세요.
 - title: 영상 제목 (한국어, 짧게)
 - concept: 한두 문장 콘셉트
 - hook: 첫 장면 자막(3초 안에 멈추게 하는 한 줄, 15자 이내)
 - character: 영상 전체에 나오는 주인공 1명. name(한국어 이름), description(한국어 한 줄), prompt(영어: 외모·옷·색·체형을 아주 구체적으로 — 모든 장면에서 같은 인물로 그리기 위한 기준, 배경 없이 전신, 그림체 포함)
 - scenes: ${n}개. 각 장면:
-  - visual: 영어 이미지 프롬프트 (주인공이 무엇을 하는 장면인지 + 배경 + 구도. 세로 9:16, 글자 넣지 말 것)
+  - visual: 영어 이미지 프롬프트 (주인공이 무엇을 하는 장면인지 + 배경 + 구도. 세로 9:16, 글자 넣지 말 것). 한 장면에 동작은 딱 하나만 (동작이 여러 개면 AI가 엉뚱한 장면을 만듦)${o.lockCharacter ? `
+  - 모든 visual 맨 앞에 아래 [캐릭터 고정 문장]을 한 글자도 바꾸지 말고 그대로 넣기` : ""}
   - motion: 영어 움직임 프롬프트 (카메라·인물 움직임 한 문장, ${o.clipSeconds}초 분량)
   - caption: 화면 자막 (한국어, 18자 이내, 첫 장면은 hook)
   - narration: 말로 할 내용 (한국어 한 문장, 선택)
@@ -101,10 +104,12 @@ ${s.plan?.title ? `[이전 기획 제목] ${s.plan.title}\n` : ""}${feedback ? `
   try {
     const res = await runStep({ step: "studio", purpose: "studio-plan", blog: null, system, prompt: userPrompt, json: true, maxTokens: 4000 });
     const raw = extractJson<{ title?: string; concept?: string; hook?: string; character?: { name?: string; description?: string; prompt?: string }; scenes?: Partial<StudioScene>[]; caption?: string; hashtags?: string[] }>(res.text);
+    const lock = o.lockCharacter?.trim();
     const scenes: StudioScene[] = (raw.scenes ?? []).slice(0, 12).map((x, i) => ({
       n: i + 1,
       seconds: o.clipSeconds,
-      visual: String(x.visual ?? "").slice(0, 1500),
+      // 시리즈: 캐릭터 문장을 모든 장면에 똑같이 (AI가 빼먹어도 앞에 붙임) → 화가 바뀌어도 같은 캐릭터
+      visual: (lock && !String(x.visual ?? "").includes(lock) ? `${lock} ${String(x.visual ?? "")}` : String(x.visual ?? "")).slice(0, 1500),
       motion: String(x.motion ?? "").slice(0, 600),
       caption: String(x.caption ?? "").slice(0, 60),
       narration: String(x.narration ?? "").slice(0, 300),
@@ -116,7 +121,7 @@ ${s.plan?.title ? `[이전 기획 제목] ${s.plan.title}\n` : ""}${feedback ? `
     await save(id, {
       title: String(raw.title ?? s.prompt).slice(0, 80),
       plan: { title: String(raw.title ?? ""), concept: String(raw.concept ?? ""), hook: String(raw.hook ?? ""), caption: String(raw.caption ?? ""), hashtags: (raw.hashtags ?? []).map((h) => String(h).replace(/^#/, "").replace(/\s+/g, "")).filter(Boolean).slice(0, 5), style: style.id, ai: `${res.provider}/${res.model}` },
-      character: keepChar ? s.character : { name: String(raw.character?.name ?? "주인공"), description: String(raw.character?.description ?? ""), prompt: String(raw.character?.prompt ?? ""), image: {} },
+      character: keepChar ? s.character : { name: String(raw.character?.name ?? "주인공"), description: String(raw.character?.description ?? ""), prompt: lock || String(raw.character?.prompt ?? ""), image: {} },
       scenes,
       status: "planned",
       message: "",

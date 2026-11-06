@@ -533,6 +533,11 @@ function TextControls({ t, scopeAll, onText, onStyle }: { t: ReelText; scopeAll:
           {[["", "없음"], ["#000000", "검정"], ["#ffffff", "흰색"]].map(([v, l]) => <button key={l} className={s.stroke === v ? "on" : ""} onClick={() => onStyle({ stroke: v })}>{l}</button>)}
         </div>
       </div>
+      <div className="reel-row"><span>등장 효과</span>
+        <div className="seg">
+          {([["none", "없음"], ["fade", "페이드"], ["pop", "팝"], ["slide", "올라오기"], ["bounce", "통통"], ["type", "타자"]] as const).map(([v, l]) => <button key={v} className={(s.anim ?? "none") === v ? "on" : ""} onClick={() => onStyle({ anim: v })}>{l}</button>)}
+        </div>
+      </div>
       <div className="reel-row"><span>한 줄 맞춤</span><button className={`btn btn-sm ${s.fit ? "btn-primary" : ""}`} onClick={() => onStyle({ fit: !s.fit })}>{s.fit ? "넘치면 줄여요" : "줄바꿈"}</button></div>
       <div className="reel-row"><span>정렬</span>
         <div className="seg">{(["left", "center", "right"] as const).map((a) => <button key={a} className={s.align === a ? "on" : ""} onClick={() => onStyle({ align: a })}>{{ left: "왼쪽", center: "가운데", right: "오른쪽" }[a]}</button>)}</div>

@@ -29,6 +29,7 @@ export type ReelTextStyle = {
   y: number; // 가운데 기준 (0~1920)
   width: number; // 글 폭 (px)
   rotate: number; // 도
+  anim?: "none" | "fade" | "pop" | "slide" | "bounce" | "type"; // 등장 효과 (모션그래픽)
 };
 
 export type ReelText = { id: string; start: number; end: number; text: string; style: ReelTextStyle };
@@ -45,7 +46,7 @@ export type ReelDoc = {
 
 export type ReelProps = { doc: ReelDoc; srcs: Record<string, string>; fontUrl: string };
 
-export const DEFAULT_TEXT_STYLE: ReelTextStyle = { size: 64, bold: true, color: "#ffffff", box: "", stroke: "#000000", align: "center", fit: true, x: 540, y: 1500, width: 900, rotate: 0 };
+export const DEFAULT_TEXT_STYLE: ReelTextStyle = { size: 64, bold: true, color: "#ffffff", box: "", stroke: "#000000", align: "center", fit: true, x: 540, y: 1500, width: 900, rotate: 0, anim: "none" };
 
 export const sceneStarts = (doc: ReelDoc) => {
   const out: number[] = [];

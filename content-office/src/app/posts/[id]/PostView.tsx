@@ -7,12 +7,14 @@ import type { PostBundle } from "@/lib/post-bundle";
 import type { PostExtras, PostPlan } from "@/lib/posts-types";
 import { stageLabel, stageStep } from "@/lib/steps";
 import { placeholderNumbers, readiness, READY_LABEL, type Readiness } from "@/lib/readiness";
-import { api, useToast } from "@/components/client-utils";
+import { api, Modal, useToast } from "@/components/client-utils";
 import { BlogTag, fmtDate, fmtUsd, Steps } from "@/components/ui";
 import DocEditor from "@/components/DocEditor";
 import BackButton from "@/components/BackButton";
 import { IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel } from "@/lib/image-models";
 import RefPicker from "@/components/RefPicker";
+import RepurposeCard from "./RepurposeCard";
+import { CHANNELS } from "@/lib/repurpose-channels";
 
 type Review = {
   summary: string;
@@ -134,6 +136,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                   projectId={p.id}
                   outline={plan.outline}
                   onApprove={(outline) => act({ action: "approve_outline", outline }, "기획안을 승인했어요. 글 작성을 시작합니다.")}
+                  onVerify={(outline, indexes) => act({ action: "verify_claims", outline, indexes })}
                   onRedo={() => act({ action: "outline", title: titleDraft.trim() || title }, "기획안을 다시 만들고 있어요.")}
                 />
               )}
@@ -246,6 +249,13 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
             />
           )}
         </Section>
+
+        {doc?.content_html && (
+          <section className="card card-pad stack" style={{ gap: 8 }}>
+            <b>📣 다른 채널용으로 바꾸기</b>
+            <RepurposeCard projectId={p.id} channels={CHANNELS.map((c) => ({ id: c.id, label: c.label, hint: c.hint }))} copy={copy} />
+          </section>
+        )}
       </div>
 
       <div className="row" style={{ marginTop: 28, justifyContent: "flex-end" }}>
@@ -914,11 +924,21 @@ function WriteStart({ projectId, disabled, onOutline, onWrite }: { projectId: st
 }
 
 /** ③-2 기획안 확인·수정 → 승인하면 글 작성 */
-function OutlineCard({ projectId, outline, onApprove, onRedo }: { projectId: string; outline: NonNullable<PostPlan["outline"]>; onApprove: (o: NonNullable<PostPlan["outline"]>) => void; onRedo: () => void }) {
+function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { projectId: string; outline: NonNullable<PostPlan["outline"]>; onApprove: (o: NonNullable<PostPlan["outline"]>) => void; onRedo: () => void; onVerify: (o: NonNullable<PostPlan["outline"]>, indexes: number[]) => Promise<boolean> }) {
   const e = useEstimates(projectId);
   const [o, setO] = useState(outline);
   useEffect(() => setO(outline), [outline]);
-  const checks = o.claims.filter((c) => c.check && !c.source.trim()).length;
+  const [sel, setSel] = useState<number[]>([]);
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [showRemoved, setShowRemoved] = useState(false);
+  const removed = o.claims.map((c, i) => ({ c, i })).filter((x) => x.c.removed);
+  const needCheck = o.claims.map((c, i) => (c.check && !c.removed ? i : -1)).filter((i) => i >= 0);
+  const checks = o.claims.filter((c) => c.check && !c.removed && !c.source.trim()).length;
+  async function verify(indexes: number[]) {
+    setVerifying(indexes.length > 1 ? "all" : String(indexes[0]));
+    await onVerify(o, indexes);
+    setVerifying(null);
+  }
   return (
     <div className="card card-pad stack" style={{ gap: 12, borderColor: "var(--accent)" }}>
       <div className="row between">
@@ -935,14 +955,30 @@ function OutlineCard({ projectId, outline, onApprove, onRedo }: { projectId: str
         ))}
       </div>
       <div className="stack" style={{ gap: 6 }}>
-        <span className="label">핵심 주장 · 근거 · 출처 (☑ = 내가 확인해야 할 사실)</span>
-        {o.claims.map((c, i) => (
-          <div key={i} className="card card-pad stack" style={{ gap: 4, padding: 8 }}>
-            <input className="input" value={c.claim} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, claim: ev.target.value } : x)) })} aria-label={`주장 ${i + 1}`} />
-            <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
-              <input className="input" style={{ fontSize: 13 }} value={c.evidence} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, evidence: ev.target.value } : x)) })} placeholder="근거" aria-label={`근거 ${i + 1}`} />
-              <input className="input" style={{ fontSize: 13 }} value={c.source} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, source: ev.target.value } : x)) })} placeholder="출처 주소 (있으면)" aria-label={`출처 ${i + 1}`} />
-              <label className="tiny row" style={{ gap: 4, flexShrink: 0 }}><input type="checkbox" checked={c.check} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, check: ev.target.checked } : x)) })} />확인 필요</label>
+        <div className="row between" style={{ gap: 6 }}>
+          <span className="label" style={{ margin: 0 }}>핵심 주장 · 근거 · 출처 (☑ 확인 필요 = AI가 확인할 사실)</span>
+          <div className="row" style={{ gap: 6 }}>
+            {needCheck.length > 0 && <button className="btn btn-sm" disabled={verifying !== null} onClick={() => verify(needCheck)}>{verifying === "all" ? <><span className="spinner" /> 확인 중…</> : `🔎 확인 필요 ${needCheck.length}개 모두 AI 확인`}</button>}
+            {sel.length > 0 && <button className="btn btn-sm btn-danger" onClick={() => { setO({ ...o, claims: o.claims.map((x, k) => (sel.includes(k) ? { ...x, removed: true } : x)) }); setSel([]); }}>🗑 선택한 {sel.length}개 삭제</button>}
+          </div>
+        </div>
+        {o.claims.map((c, i) => c.removed ? null : (
+          <div key={i} className="row" style={{ gap: 8, flexWrap: "nowrap", alignItems: "flex-start" }}>
+            <input type="checkbox" style={{ marginTop: 14, flexShrink: 0 }} checked={sel.includes(i)} onChange={() => setSel(sel.includes(i) ? sel.filter((x) => x !== i) : [...sel, i])} aria-label={`주장 ${i + 1} 선택 (삭제)`} />
+            <div className={`card card-pad stack claim-box${c.verify ? ` ${c.verify.status}` : ""}`} style={{ gap: 4, padding: 8, flex: 1, minWidth: 0 }}>
+              <input className="input" value={c.claim} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, claim: ev.target.value, verify: undefined } : x)) })} aria-label={`주장 ${i + 1}`} />
+              <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                <input className="input" style={{ fontSize: 13 }} value={c.evidence} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, evidence: ev.target.value } : x)) })} placeholder="근거" aria-label={`근거 ${i + 1}`} />
+                <input className="input" style={{ fontSize: 13 }} value={c.source} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, source: ev.target.value } : x)) })} placeholder="출처 주소 (있으면)" aria-label={`출처 ${i + 1}`} />
+                <label className="tiny row" style={{ gap: 4, flexShrink: 0 }}><input type="checkbox" checked={c.check} onChange={(ev) => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, check: ev.target.checked } : x)) })} />확인 필요</label>
+              </div>
+              {(c.check || c.verify) && (
+                <div className="row" style={{ gap: 6 }}>
+                  {c.verify && <span className={`badge ${c.verify.status === "verified" ? "badge-ok" : "badge-bad"}`}>{c.verify.status === "verified" ? "✅ 확인완료" : "❌ 확인안됨"}</span>}
+                  {c.verify && <span className="tiny muted" style={{ flex: 1 }}>{c.verify.note}</span>}
+                  {c.check && <button className="btn btn-sm" disabled={verifying !== null} onClick={() => verify([i])}>{verifying === String(i) ? <span className="spinner" /> : c.verify ? "🔎 다시 확인" : "🔎 확인 요청"}</button>}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -955,10 +991,28 @@ function OutlineCard({ projectId, outline, onApprove, onRedo }: { projectId: str
           ))}
         </div>
       )}
-      {checks > 0 && <div className="notice notice-warn small">출처 없이 &apos;확인 필요&apos;인 사실 {checks}개 — 글에서는 단정하지 않고 [확인 필요]로 남겨요. 출처 주소를 적으면 그대로 근거로 써요.</div>}
+      {checks > 0 && <div className="notice notice-warn small">출처 없이 &apos;확인 필요&apos;인 사실 {checks}개 — 🔎 AI 확인을 눌러 보세요. 확인완료면 출처가 채워지고, 확인안됨은 지우거나 그대로 두면 글에서 단정하지 않고 [확인 필요]로 남겨요.</div>}
       <div className="row" style={{ gap: 8 }}>
         <button className="btn btn-primary" onClick={() => onApprove({ ...o, sections: o.sections.map((s) => ({ ...s, points: s.points.map((x) => x.trim()).filter(Boolean) })) })}>✅ 승인하고 글 쓰기{e?.write.total != null ? ` · 약 ${fmtUsd(e.write.total)}` : ""}</button>
+        {removed.length > 0 && <button className="btn" onClick={() => setShowRemoved(true)}>🗑 삭제한 내용 ({removed.length})</button>}
       </div>
+      {showRemoved && (
+        <Modal title={`삭제한 내용 ${removed.length}개`} onClose={() => setShowRemoved(false)}>
+          <div className="stack" style={{ gap: 8 }}>
+            <span className="tiny muted">삭제한 주장은 글에 들어가지 않아요. 되살리려면 원상복구를 누르세요.</span>
+            {removed.map(({ c, i }) => (
+              <div key={i} className="row between" style={{ gap: 8, flexWrap: "nowrap", borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+                <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+                  <span className="small">{c.claim}</span>
+                  {c.verify && <span className="tiny muted">{c.verify.status === "verified" ? "✅ 확인완료" : "❌ 확인안됨"} · {c.verify.note}</span>}
+                </div>
+                <button className="btn btn-sm" onClick={() => setO({ ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, removed: false } : x)) })}>↩ 원상복구</button>
+              </div>
+            ))}
+            <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => { setO({ ...o, claims: o.claims.map((x) => ({ ...x, removed: false })) }); setShowRemoved(false); }}>모두 원상복구</button>
+          </div>
+        </Modal>
+      )}
       <span className="tiny muted">승인하면 자동으로 이어져요: {estLine(e?.write) || "불러오는 중…"}</span>
     </div>
   );

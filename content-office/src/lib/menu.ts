@@ -13,6 +13,7 @@ export const MENU_GROUPS: MenuGroup[] = [
   { id: "research", label: "콘텐츠 리서치", items: [
     { href: "/trends", label: "트렌드 뷰어", short: "트렌드", sub: "유튜브 급상승·스크랩", mobile: true },
     { href: "/hot", label: "블로그 핫이슈", sub: "네이버 블로그 인기 주제 탐색" },
+    { href: "/study", label: "릴스 분석", sub: "링크로 첫 3초·구조·적용 아이디어" },
   ] },
   { id: "blog", label: "블로그 관리", items: [
     { href: "/posts", label: "업로드", short: "업로드", sub: "키워드 추천부터 발행 준비까지", badge: true, mobile: true },

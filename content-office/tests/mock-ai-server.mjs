@@ -228,6 +228,11 @@ http
 
     // ── 텍스트 AI 3사: 시스템 프롬프트 내용으로 단계별 응답 ──
     const answer = (system, prompt) => {
+      if (system.includes("꼼꼼한 한국어 팩트체커")) return JSON.stringify({ results: [{ i: 1, status: "verified", note: "뉴스에서 확인", source: "https://news.example.com/kimchi" }, { i: 2, status: "unverified", note: "뒷받침하는 결과 없음", source: "" }] });
+      if (system.includes("여러 채널용 콘텐츠로 바꾸는")) return JSON.stringify({ reel: "0~3초: 김장 실패 안 하는 법\n자막: 절임배추는 이렇게", cards: ["1장: 김장 황금비율", "2장: 절임배추 고르기"], threads: "김장 양념, 이것만 기억하세요" });
+      if (system.includes("릴스·쇼츠를 분석하는")) return JSON.stringify({ category: "요리·살림", summary: "김장 꿀팁 릴스", format: "튜토리얼", hook: { text: "김장 이렇게 하면 망해요", verdict: "실수 지적형 훅이라 강함", score: 8 }, structure: [{ t: "0~3초", part: "훅", desc: "실수 경고" }], scenes: [{ t: 0.3, desc: "배추" }], whyWorks: ["바로 쓸 정보"], apply: ["내 블로그 김장 글을 릴스로"] });
+      if (system.includes("쇼츠 애니메이션 시리즈 작가")) return JSON.stringify({ characters: "A small orange-furred bear with round ears and a tiny red frog friend", episodes: [{ title: "사과를 나눠요", synopsis: "곰이 사과를 찾는다\n개구리가 배고프다\n반으로 나눈다", scenePrompt: "Bear finds an apple in a sunny forest, 3D animation, 8 seconds", description: "나누기를 배우는 첫 이야기\n함께 보면 좋아요" }, { title: "우산 같이 써요", synopsis: "비가 온다\n개구리는 괜찮다\n곰이 우산을 씌워 준다", scenePrompt: "A small orange-furred bear with round ears and a tiny red frog friend share an umbrella in the rain", description: "비 오는 날\n같이 쓰는 우산" }].slice(0, prompt.includes("3화부터") ? 1 : 2) });
+      if (system.includes("쇼츠 시리즈 작가")) return JSON.stringify({ title: "사과를 반씩", synopsis: "더 단순하게", scenePrompt: "Bear holds one apple", description: "짧게" });
       if (system.includes("prompt writer for AI image generators")) {
         if (prompt.includes("Pick the 3 best models")) return JSON.stringify({ picks: [{ id: "google:gemini-3.1-flash-image", reason: "레퍼런스를 잘 따라요" }, { id: "no-such-model", reason: "x" }, { id: "soul-standard", reason: "사람 사진에 강해요" }] });
         if (prompt.includes("change request")) return JSON.stringify({ prompt: "A cute rabbit architect at night in a neon city", changed: "배경을 밤 도시로 바꿨어요" });

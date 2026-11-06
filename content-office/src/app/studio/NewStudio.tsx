@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/components/client-utils";
 
-export default function NewStudio({ styles, imageModels }: { styles: { id: string; label: string }[]; imageModels: { id: string; label: string; note?: string }[] }) {
+export default function NewStudio({ styles, imageModels, defaultPrompt = "" }: { defaultPrompt?: string; styles: { id: string; label: string }[]; imageModels: { id: string; label: string; note?: string }[] }) {
   const router = useRouter();
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(defaultPrompt);
   const [seconds, setSeconds] = useState(20);
   const [style, setStyle] = useState("3d");
   const [imageModel, setImageModel] = useState("google:gemini-3.1-flash-image");

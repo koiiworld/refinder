@@ -452,6 +452,36 @@ CREATE TABLE IF NOT EXISTS reel_projects (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- 🔍 릴스 분석기: 링크 → 받아쓰기·장면 사진 → AI 분석 (카테고리별 보관)
+CREATE TABLE IF NOT EXISTS study_reels (
+  id          TEXT PRIMARY KEY,
+  url         TEXT NOT NULL,
+  video_id    TEXT,
+  mine        BOOLEAN NOT NULL DEFAULT FALSE,     -- 내 릴스(첫 3초·개선점) / 참고 릴스(구조)
+  status      TEXT NOT NULL DEFAULT 'queued',     -- queued | running | done | error
+  message     TEXT NOT NULL DEFAULT '',
+  title       TEXT NOT NULL DEFAULT '',
+  uploader    TEXT NOT NULL DEFAULT '',
+  category    TEXT NOT NULL DEFAULT '',
+  transcript  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  frames      JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{t, img}]
+  analysis    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- 📺 시리즈 기획 (같은 캐릭터로 여러 화)
+CREATE TABLE IF NOT EXISTS studio_series (
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL DEFAULT '',
+  hero        TEXT NOT NULL DEFAULT '',
+  friend      TEXT NOT NULL DEFAULT '',
+  theme       TEXT NOT NULL DEFAULT '',
+  style       TEXT NOT NULL DEFAULT '3d',
+  characters  TEXT NOT NULL DEFAULT '',   -- 모든 장면 프롬프트에 그대로 넣는 캐릭터 생김새 문장 (영어)
+  episodes    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image_kit JSONB NOT NULL DEFAULT '{}'::jsonb;  -- 🎨 이미지 컨셉 키트 (레퍼런스·스타일 문구·Soul ID)
 ALTER TABLE carousels ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;        -- 게시함 (직접 표시)
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;

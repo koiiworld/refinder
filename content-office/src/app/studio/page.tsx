@@ -3,13 +3,17 @@ import { listStudio, STUDIO_STYLES } from "@/lib/studio";
 import { IMAGE_MODELS } from "@/lib/image-models";
 import { fmtDate } from "@/components/ui";
 import NewStudio from "./NewStudio";
+import NewSeries from "./NewSeries";
+import { listSeries } from "@/lib/series";
 
 export const dynamic = "force-dynamic";
 
 const STATUS: Record<string, string> = { planning: "기획 중", planned: "기획 완료", rendering: "합치는 중", done: "완성", error: "오류" };
 
-export default async function Studio() {
+export default async function Studio({ searchParams }: { searchParams: Promise<{ prompt?: string }> }) {
+  const sp = await searchParams;
   const list = await listStudio();
+  const series = await listSeries().catch(() => []);
   return (
     <div className="page">
       <div className="page-head">
@@ -18,7 +22,8 @@ export default async function Studio() {
           <p className="sub">만들고 싶은 쇼츠·릴스를 적으면 AI가 기획하고, 캐릭터 → 장면 이미지 → 장면 영상 → 합치기 순서로 만들어요. 이미지·영상은 버튼을 눌러야 만들어져요(비용 발생).</p>
         </div>
       </div>
-      <NewStudio styles={STUDIO_STYLES.map((s) => ({ id: s.id, label: s.label }))} imageModels={IMAGE_MODELS.filter((m) => m.provider !== "higgsfield").map((m) => ({ id: m.id, label: m.label, note: m.note }))} />
+      <NewSeries styles={STUDIO_STYLES.map((s) => ({ id: s.id, label: s.label }))} list={series.map((x) => ({ id: x.id, title: x.title, count: x.episodes.length, made: x.episodes.filter((e) => e.studioId).length }))} />
+      <NewStudio defaultPrompt={sp.prompt ?? ""} styles={STUDIO_STYLES.map((s) => ({ id: s.id, label: s.label }))} imageModels={IMAGE_MODELS.filter((m) => m.provider !== "higgsfield").map((m) => ({ id: m.id, label: m.label, note: m.note }))} />
       <section className="card">
         <div className="card-head"><h2 style={{ fontSize: 15 }}>만든 영상 프로젝트 ({list.length})</h2></div>
         <div className="card-pad stack" style={{ gap: 6 }}>

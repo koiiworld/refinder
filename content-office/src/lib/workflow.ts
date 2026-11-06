@@ -46,6 +46,35 @@ export async function requestOutline(projectId: string, input: { index?: number;
 }
 
 /** ③-2 기획안 승인(고친 내용 반영) → ④ 글 작성 시작 */
+type Claim = import("./posts-types").PostOutline["claims"][number];
+/** 화면에서 고친 주장 정리 (AI 확인 결과·삭제 표시 유지) */
+export function cleanClaims(list: Partial<Claim>[]): Claim[] {
+  return list
+    .map((c) => ({
+      claim: String(c.claim ?? "").slice(0, 200), evidence: String(c.evidence ?? "").slice(0, 200), source: String(c.source ?? "").slice(0, 300), check: !!c.check,
+      ...(c.verify && ["verified", "unverified"].includes(c.verify.status) ? { verify: { status: c.verify.status, note: String(c.verify.note ?? "").slice(0, 200), at: String(c.verify.at ?? "") } } : {}),
+      ...(c.removed ? { removed: true } : {}),
+    }))
+    .filter((c) => c.claim)
+    .slice(0, 12);
+}
+
+/** 승인 전 기획안 저장 (AI 확인 결과 반영용) */
+export async function saveOutlineDraft(projectId: string, edited: Partial<import("./posts-types").PostOutline>) {
+  const p = await getProject(projectId);
+  const plan = p?.plan as unknown as import("./posts-types").PostPlan | null;
+  if (!plan?.outline) throw new WorkflowError("기획안이 없습니다.");
+  const o = plan.outline;
+  const outline = {
+    ...o,
+    sections: Array.isArray(edited.sections) ? edited.sections.map((x) => ({ heading: String(x.heading ?? "").slice(0, 120), points: (x.points ?? []).map(String).slice(0, 4) })).filter((x) => x.heading).slice(0, 8) : o.sections,
+    claims: Array.isArray(edited.claims) ? cleanClaims(edited.claims) : o.claims,
+    images: Array.isArray(edited.images) ? edited.images.map((m, i) => ({ n: Number(m.n) || i + 1, what: String(m.what ?? "").slice(0, 160) })).filter((m) => m.what).slice(0, 5) : o.images,
+  };
+  await updateProject(projectId, { plan: { ...plan, outline } });
+  return outline;
+}
+
 export async function approveOutline(projectId: string, edited?: Partial<import("./posts-types").PostOutline>) {
   const p = await getProject(projectId);
   const plan = p?.plan as unknown as import("./posts-types").PostPlan | null;
@@ -54,7 +83,9 @@ export async function approveOutline(projectId: string, edited?: Partial<import(
   const outline = {
     ...o,
     sections: Array.isArray(edited?.sections) ? edited!.sections.map((s) => ({ heading: String(s.heading ?? "").slice(0, 120), points: (s.points ?? []).map(String).slice(0, 4) })).filter((s) => s.heading).slice(0, 8) : o.sections,
-    claims: Array.isArray(edited?.claims) ? edited!.claims.map((c) => ({ claim: String(c.claim ?? "").slice(0, 200), evidence: String(c.evidence ?? "").slice(0, 200), source: String(c.source ?? "").slice(0, 200), check: !!c.check })).filter((c) => c.claim).slice(0, 8) : o.claims,
+    // 체크해서 지운 주장은 글에 안 씀 (removed 로 따로 보관)
+    claims: (Array.isArray(edited?.claims) ? cleanClaims(edited!.claims) : o.claims).filter((c) => !c.removed),
+    removed: (Array.isArray(edited?.claims) ? cleanClaims(edited!.claims) : o.claims).filter((c) => c.removed),
     images: Array.isArray(edited?.images) ? edited!.images.map((m, i) => ({ n: Number(m.n) || i + 1, what: String(m.what ?? "").slice(0, 160) })).filter((m) => m.what).slice(0, 5) : o.images,
     approved: true,
   };

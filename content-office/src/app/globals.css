@@ -550,3 +550,24 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ref-thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 999px; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; line-height: 18px; padding: 0; cursor: pointer; }
 .rec-pick { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; font: inherit; color: inherit; }
 .rec-pick.on { border-color: var(--accent); background: var(--accent-soft); }
+
+/* 📣 다른 채널용 */
+.repurpose-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; cursor: pointer; background: var(--panel); user-select: none; }
+.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.repurpose-text { white-space: pre-wrap; word-break: keep-all; font: inherit; font-size: 13px; line-height: 1.6; background: var(--panel-2); padding: 10px; border-radius: 8px; margin: 8px 0; max-height: 360px; overflow: auto; }
+
+/* 🔍 릴스 분석 */
+.study-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.study-card { display: flex; flex-direction: column; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px; cursor: pointer; text-align: left; font: inherit; color: inherit; min-width: 0; }
+.study-card:hover { border-color: var(--accent); }
+.study-thumb { position: relative; aspect-ratio: 9 / 16; border-radius: 8px; overflow: hidden; background: var(--panel-2); display: grid; place-items: center; }
+.study-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.study-mine { position: absolute; top: 6px; left: 6px; }
+.study-score { position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,.7); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; }
+.study-frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.study-frames figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.study-frames img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 8px; }
+.claim-box.verified { border-color: var(--ok); }
+.claim-box.unverified { border-color: var(--bad); }
+.reel-ctl .seg { flex-wrap: wrap; }

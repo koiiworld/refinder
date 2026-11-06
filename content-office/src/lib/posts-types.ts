@@ -18,8 +18,10 @@ export interface PostPlan {
 
 export interface PostOutline {
   sections: { heading: string; points: string[] }[];
-  claims: { claim: string; evidence: string; source: string; check: boolean }[];
+  claims: { claim: string; evidence: string; source: string; check: boolean; verify?: { status: "verified" | "unverified"; note: string; at: string }; removed?: boolean }[];
   images: { n: number; what: string }[];
+  /** 체크해서 지운 주장 (글에는 안 씀) */
+  removed?: PostOutline["claims"];
   approved: boolean;
   ai?: { provider: string; model: string };
 }

@@ -54,6 +54,26 @@ export async function POST(req: Request, { params }: Ctx) {
       case "outline":
         await requestOutline(id, { index: b.index, title: b.title });
         break;
+      case "verify_claims": {
+        // ③-2 '확인 필요' 사실을 AI가 확인 (네이버 검색 + 무료 Gemini) → 확인완료면 출처를 채우고 '확인 필요' 해제
+        const { saveOutlineDraft } = await import("@/lib/workflow");
+        const { verifyClaims } = await import("@/lib/factcheck");
+        const outline = await saveOutlineDraft(id, b.outline ?? {});
+        const idx = (b.indexes ?? []).map(Number).filter((i) => outline.claims[i] && !outline.claims[i].removed);
+        if (!idx.length) return fail("확인할 사실을 골라 주세요.");
+        const p = await getProject(id);
+        const verdicts = await verifyClaims(id, p?.topic ?? "", idx.map((i) => outline.claims[i]));
+        const at = new Date().toISOString();
+        const claims = outline.claims.map((c, i) => {
+          const k = idx.indexOf(i);
+          if (k < 0) return c;
+          const v = verdicts[k];
+          return { ...c, source: v.source || c.source, check: v.status !== "verified", verify: { status: v.status, note: v.note, at } };
+        });
+        await saveOutlineDraft(id, { ...outline, claims });
+        const n = verdicts.filter((v) => v.status === "verified").length;
+        return ok({ ...(await postBundle(id)), notice: `확인완료 ${n}개 · 확인안됨 ${verdicts.length - n}개` });
+      }
       case "approve_outline":
         await approveOutline(id, b.outline);
         break;

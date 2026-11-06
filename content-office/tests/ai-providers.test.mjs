@@ -1064,11 +1064,25 @@ test("📋 기획안 승인: 제목 → 목차·근거·이미지 계획 → 고
   assert.ok(!(await mockLog()).some((l) => JSON.stringify(l.body ?? {}).includes("전속 작가")), "승인 전엔 글 안 씀");
   const list = (await (await fetch(`${BASE}/posts`)).text()).replace(/<!-- -->/g, "");
   assert.ok(list.includes("내 승인 필요"), "진행 목록: 내 승인 필요");
-  // 고쳐서 승인
-  const outline = { ...b.project.plan.outline, sections: [{ heading: "굴 손질부터 보쌈까지", points: ["굴 씻는 법"] }, ...b.project.plan.outline.sections.slice(1)], claims: [{ ...b.project.plan.outline.claims[0], source: "https://www.nifs.go.kr" }] };
+  // 🔎 '확인 필요' 사실을 AI가 확인 (네이버 검색 + 무료 Gemini): 1번 확인완료(출처 채움·확인 필요 해제), 2번 확인안됨
+  const draft = { ...b.project.plan.outline, claims: [b.project.plan.outline.claims[0], { claim: "굴은 하루 10kg 먹어도 된다", evidence: "", source: "", check: true }] };
+  const v = (await call(`/api/posts/${id}`, "POST", { action: "verify_claims", outline: draft, indexes: [0, 1] })).data;
+  const vc = v.project.plan.outline.claims;
+  assert.equal(vc[0].verify.status, "verified");
+  assert.equal(vc[0].source, "https://news.example.com/kimchi");
+  assert.equal(vc[0].check, false, "확인완료면 '확인 필요' 해제");
+  assert.equal(vc[1].verify.status, "unverified");
+  assert.equal(vc[1].check, true);
+  assert.match(v.notice, /확인완료 1개 · 확인안됨 1개/);
+  assert.equal(v.project.plan.outline.approved, false, "확인만 하고 승인은 안 함");
+  // 고쳐서 승인 (체크해서 지운 주장은 글에 안 씀, 따로 보관)
+  const outline = { ...b.project.plan.outline, sections: [{ heading: "굴 손질부터 보쌈까지", points: ["굴 씻는 법"] }, ...b.project.plan.outline.sections.slice(1)], claims: [{ ...b.project.plan.outline.claims[0], source: "https://www.nifs.go.kr" }, { ...vc[1], removed: true }] };
   await call(`/api/posts/${id}`, "POST", { action: "approve_outline", outline });
   b = await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "글·검수");
   assert.equal(b.project.plan.outline.approved, true);
+  assert.equal(b.project.plan.outline.claims.length, 1, "지운 주장 빠짐");
+  assert.equal(b.project.plan.outline.removed[0].claim, "굴은 하루 10kg 먹어도 된다");
+  assert.ok(!(await stepPrompt("전속 작가")).includes("10kg"), "지운 주장은 글에 안 들어감");
   const wp = await stepPrompt("전속 작가");
   assert.match(wp, /\[승인된 기획안[\s\S]*1\. 굴 손질부터 보쌈까지/);
   assert.match(wp, /출처: https:\/\/www\.nifs\.go\.kr/);
@@ -1265,10 +1279,12 @@ test("✂️ 릴스 편집기: 영상 → 받아쓰기로 장면·자막 초안 
   // ②③ 편집 저장: 둘째 장면 오로라 배경, 자막 상자·위치
   const doc = reel.doc;
   doc.scenes[1].bg = { type: "aurora", colors: ["#ff7eb3", "#7f7fff", "#ffd166", "#1a0b2e"] };
-  doc.texts[0].style = { ...doc.texts[0].style, box: "#ffd1e8", color: "#2b1630", y: 400 };
+  doc.texts[0].style = { ...doc.texts[0].style, box: "#ffd1e8", color: "#2b1630", y: 400, anim: "pop" };
+  doc.texts[1].style = { ...doc.texts[1].style, anim: "type" };
   const saved = await call(`/api/reels/${r.data.id}`, "PUT", { doc, title: "시험 릴스" });
   assert.equal(saved.status, 200, JSON.stringify(saved.data));
   assert.equal(saved.data.doc.scenes[1].bg.type, "aurora");
+  assert.equal(saved.data.doc.texts[0].style.anim, "pop", "자막 등장 효과 저장");
   assert.equal((await call(`/api/reels/${r.data.id}`, "PUT", { doc: { scenes: "x" } })).status, 400);
   const page = (await (await fetch(`${BASE}/reels/${r.data.id}`)).text()).replace(/<!-- -->/g, "");
   for (const w of ["가이드 (원본)", "편집 화면", "완성 영상", "내 파일", "글자", "장면", "배경", "자르기", "되돌리기", "내보내기"]) assert.ok(page.includes(w), w);
@@ -1373,4 +1389,65 @@ test("🎨 이미지 레퍼런스: 컨셉 키트·이번만 레퍼런스 → Gem
   const bal = (await call("/api/dashboard/balances")).data.find((x) => x.id === "google-image");
   assert.ok(bal.used > 0.05, String(bal.used));
   await call("/api/blogs/blog_algokitchen/kit", "PUT", { refs: [], style: "", on: true });
+});
+
+test("📣 블로그 글 → 다른 채널 · 🔍 릴스 분석(받아쓰기·장면 사진·AI 분석·카테고리) · 📺 시리즈 기획(같은 캐릭터 문장·이어서·대기열)", async () => {
+  // 📣 다른 채널용
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  const pid = posts[0].id;
+  assert.equal((await call(`/api/posts/${pid}/repurpose`, "POST", { channels: [] })).status, 400);
+  const rp = (await call(`/api/posts/${pid}/repurpose`, "POST", { channels: ["reel", "cards", "threads"] })).data;
+  assert.match(rp.reel, /김장/);
+  assert.match(rp.cards, /1장: 김장 황금비율\n\n2장/, "배열로 와도 글로 합침");
+  assert.ok(!rp.faq, "안 고른 채널은 안 만듦");
+  assert.equal((await call(`/api/posts/${pid}/repurpose`)).data.threads, "김장 양념, 이것만 기억하세요", "저장됨");
+  const pv = (await (await fetch(`${BASE}/posts/${pid}`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(pv.includes("다른 채널용으로 바꾸기") && pv.includes("당근 비즈프로필"), "글 화면");
+
+  // 🔍 릴스 분석
+  const add = await call("/api/study", "POST", { urls: ["http://localhost:4110/sample.mp4"], mine: true });
+  assert.equal(add.status, 200, JSON.stringify(add.data));
+  let st;
+  for (let i = 0; i < 120; i++) {
+    st = (await call(`/api/study/${add.data.ids[0]}`)).data;
+    if (["done", "error"].includes(st.status)) break;
+    await new Promise((x) => setTimeout(x, 1000));
+  }
+  assert.equal(st.status, "done", st.message);
+  assert.equal(st.category, "요리·살림");
+  assert.equal(st.analysis.hook.score, 8);
+  assert.equal(st.transcript.length, 3, "받아쓰기");
+  assert.ok(st.frames.length >= 3 && st.frames.slice(0, 3).every((f) => f.first), "첫 3초 사진");
+  const ai = (await mockLog()).filter((l) => JSON.stringify(l.body ?? {}).includes("릴스·쇼츠를 분석하는")).pop();
+  assert.ok(JSON.stringify(ai.body).includes("image/jpeg"), "사진을 같이 보냄");
+  assert.equal((await fetch(`${BASE}/api/img/${st.frames[0].img}.jpg`)).status, 200);
+  await call(`/api/study/${st.id}`, "PUT", { category: "마케팅·SNS" });
+  assert.equal((await call(`/api/study/${st.id}`)).data.category, "마케팅·SNS");
+  const sp = (await (await fetch(`${BASE}/study`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(sp.includes("릴스 분석") && sp.includes("마케팅·SNS"), "분석 화면");
+
+  // 📺 시리즈
+  const sr = await call("/api/series", "POST", { hero: "오렌지색 털의 작은 곰", friend: "작은 빨간 개구리", theme: "나누기를 배우는 이야기", count: 2 });
+  assert.equal(sr.status, 200, JSON.stringify(sr.data));
+  let s = (await call(`/api/series/${sr.data.id}`)).data;
+  assert.equal(s.episodes.length, 2);
+  const lock = "A small orange-furred bear with round ears and a tiny red frog friend";
+  assert.equal(s.characters, lock);
+  assert.ok(s.episodes.every((e) => e.scenePrompt.startsWith(lock)), "모든 화 장면 프롬프트에 같은 캐릭터 문장");
+  s = (await call(`/api/series/${s.id}`, "POST", { action: "continue", count: 1 })).data;
+  assert.deepEqual(s.episodes.map((e) => e.n), [1, 2, 3], "이어서 3화");
+  s = (await call(`/api/series/${s.id}`, "POST", { action: "edit", n: 1, request: "더 단순하게, 동작은 하나만" })).data;
+  assert.equal(s.episodes[0].scenePrompt, `${lock} Bear holds one apple`, "고쳐도 캐릭터 문장 유지");
+  const q = (await call(`/api/series/${s.id}`, "POST", { action: "queue", ns: [1] })).data;
+  assert.equal(q.queued, 1);
+  for (let i = 0; i < 40 && !s.episodes[0].studioId; i++) {
+    await new Promise((x) => setTimeout(x, 500));
+    s = (await call(`/api/series/${s.id}`)).data;
+  }
+  assert.ok(s.episodes[0].studioId, "걸어둔 화 → 영상 스튜디오 기획");
+  const studio = (await call(`/api/studio/${s.episodes[0].studioId}`)).data;
+  assert.equal(studio.character.prompt, lock, "스튜디오 캐릭터 = 고정 문장");
+  assert.ok(studio.scenes.every((x) => x.visual.startsWith(lock)), "스튜디오 장면마다 같은 캐릭터 문장");
+  const page = (await (await fetch(`${BASE}/studio`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(page.includes("시리즈로 만들기") && page.includes("나누기를 배우는 이야기"), "스튜디오 화면");
 });

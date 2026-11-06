@@ -55,6 +55,12 @@
 - ✂️ 릴스 편집기 `/reels` (`reels.ts`, `src/remotion/*`, `app/reels/[id]/ReelEditor.tsx`·`ops.ts`): 영상공장 영상/내 영상 올리기(`/api/videos/upload`) → 맥 작업 `reel_analyze`(faster-whisper 받아쓰기 `scripts/transcribe.py` + ffmpeg 화면 전환·소리 모양) → 문장별 장면·자막 초안 → 편집(가이드/편집/완성 3단, 탭 내 파일·글자·장면·배경, 타임라인 자르기·지우기·복제·되돌리기, 자동 저장) → 맥 작업 `reel_render`(`scripts/render-reel.mjs`, Remotion, 결과는 영상공장 kind=reel). 맥 전용 작업(`MAC_ONLY_JOBS`)은 Render가 안 가져감. 맥 도구: `~/.ai-content-office/whisper-venv`(python3.12, faster-whisper), `~/.ai-content-office/remotion-runtime`(@remotion/bundler·renderer 4.0.538), 번들 캐시 `~/.ai-content-office/remotion-cache`. Remotion은 개인·3명 이하 무료.
 - 🎨 이미지 레퍼런스 (`image-refs.ts`, `image-prompt.ts`, `RefPicker`·`KitCard`·`SoulCard`): 레퍼런스 사진은 generated_images(provider='reference', 공개 /api/img)에 저장. 블로그 컨셉 키트 `blogs.image_kit`(refs·style·soulId·on). 생성 시 `prepareImage`: 한국어→영어(무료 Gemini, step `imageprompt`), 키트+이번만 레퍼런스(최대 5), 스타일 문구. Gemini=inlineData, ChatGPT=/v1/images/edits, Higgsfield=공개 https 주소(SOUL image_reference_url 1장+custom_reference_id, Qwen 편집 3장, Grok 5장, Ideogram 1장). Soul ID: POST /v1/custom-references(학습 비용 문서에 없음 → 확인 후), 목록 settings `soul_ids`. 글 이미지: ✏️ 프롬프트 수정·🤖 모델 추천. 스튜디오도 같은 기능.
 - 💰 이미지 비용: 예전엔 Gemini·ChatGPT 이미지가 cost 0으로 기록됨 → `IMAGE_PRICING`(model-catalog) 기본 단가 추가 + 생성 때 비용 기록. 과거 기록도 토큰×단가로 다시 계산돼 잔액에 잡힘.
+- 📣 블로그 글 → 다른 채널 (`repurpose.ts`, `repurpose-channels.ts`, 글 화면 맨 아래): 릴스 대본·카드뉴스 7장·스레드·인스타 캡션·당근·네이버 플레이스·FAQ·카톡. 고른 것만 AI 1회(step carousel), `package.repurpose`에 저장.
+- 🔍 릴스 분석 `/study` (`reel-study.ts`, 표 `study_reels`): 링크 → 영상공장으로 받기 → 맥 작업 `reel_study`(whisper·첫 3초+장면 사진 → generated_images provider='study') → 무료 Gemini(step `reelstudy`, 사진 data URL) 분석·카테고리.
+- 📺 시리즈 기획 (`series.ts`, 표 `studio_series`, `/studio/series/[id]`): N화 한 번에, 캐릭터 생김새 문장을 모든 장면 프롬프트 맨 앞에 고정(`StudioOptions.lockCharacter`), 이어서·화별 고치기, 작업 `series_episode`로 화마다 스튜디오 기획 대기열. 스튜디오 기획 규칙에 "한 장면 한 동작" 추가.
+- ③-2 기획안 사실 확인: 'AI 확인 요청'(네이버 뉴스·블로그 검색 + 무료 Gemini, `factcheck.ts`, step `factcheck`) → 확인완료(출처 채움·확인 필요 해제)/확인안됨. 왼쪽 체크박스로 삭제 → 승인 시 `outline.removed`로 빠짐, '삭제한 내용' 팝업에서 원상복구.
+- 릴스 편집기 자막 등장 효과 `style.anim` (페이드·팝·올라오기·통통·타자).
+- Claude Code 스킬 `.claude/skills/reel-reader` (저장소 루트): 링크 → `/tmp/reel-read/<id>/`에 설명·받아쓰기·장면 사진.
 - **운영 규칙(사용자 지정, 2026-11-07)**: 운영 데이터 변경·실제 텔레그램 발송·유료 AI 호출·배포(푸시=Render 배포, 맥 앱 재시작=실제 DB 스키마 반영)는 **별도 승인 후**. 단, **사용자가 바꿔 달라고 요청한 변경은 승인 없이 배포**(2026-11-07 사용자 지시). 텔레그램 연결 완료(@Acontentofficebot).
 - 사용자 보류: 역할별 AI 직원(에이전트) 구성. 후속: 쿠팡 반품상품 검색기. 범위 밖: 지인 배포·상용화. 사무실 화면(대시보드 픽셀 오피스) 제안만 함.
 
