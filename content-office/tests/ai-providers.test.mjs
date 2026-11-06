@@ -1020,6 +1020,19 @@ test("💡📅 아이디어·달력: 김장철 → 김치 보관 글감 저장 �
   assert.ok(ideasPage.includes("김장철 → 김치 보관 글감") && ideasPage.includes("할 일 만들기"), "다시 열기(편집 상태로 열림)");
   await call(`/api/ideas/${idea.id}`, "PUT", { memo: "김장철 → 김치 보관법 글감 (김치냉장고 온도)" });
   assert.equal((await call(`/api/ideas/${idea.id}`)).data.memo, "김장철 → 김치 보관법 글감 (김치냉장고 온도)");
+  assert.equal((await call(`/api/ideas/${idea.id}`)).data.category, "blog", "블로그를 고르면 분류 = 블로그");
+  // 분류·세부: 인스타 + 릴스 / 기타 + 직접 입력 / 블로그가 아니면 blog_id 비움
+  const reel = (await call("/api/ideas", "POST", { memo: "김치 담그기 릴스", category: "insta", detail: "릴스", blog_id: "blog_algokitchen" })).data;
+  assert.equal(reel.category, "insta");
+  assert.equal(reel.detail, "릴스");
+  assert.equal(reel.blog_id, null);
+  const etc = (await call("/api/ideas", "POST", { memo: "뉴스레터 첫 호", category: "etc", detail: "뉴스레터" })).data;
+  assert.equal(etc.category, "etc");
+  assert.equal(etc.detail, "뉴스레터");
+  const ip = (await (await fetch(`${BASE}/ideas`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(ip.includes("인스타 · 릴스") && ip.includes("기타 · 뉴스레터") && ip.includes('aria-label="분류"') && ip.includes('aria-label="세부"'), "아이디어 화면 분류·세부");
+  await call(`/api/ideas/${reel.id}`, "DELETE");
+  await call(`/api/ideas/${etc.id}`, "DELETE");
   // 할 일 만들기: 아이디어 내용이 할 일 화면에 채워짐 → 레시피 사진 고르기 등록
   const todoPage = (await (await fetch(`${BASE}/todos?tab=today&title=${encodeURIComponent("레시피 사진 고르기")}&blog=blog_algokitchen&idea=${idea.id}&memo=${encodeURIComponent("참고: " + kimjang.link)}`)).text()).replace(/<!-- -->/g, "");
   assert.ok(todoPage.includes("아이디어에서 넘어온 내용") && todoPage.includes("레시피 사진 고르기"), "할 일 화면에 채움");

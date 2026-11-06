@@ -10,7 +10,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 
 export async function PUT(req: Request, ctx: Ctx) {
   return handle(async () => {
-    const b = await body<{ memo?: string; blog_id?: string | null; link?: string }>(req);
+    const b = await body<{ memo?: string; category?: string; detail?: string; blog_id?: string | null; link?: string }>(req);
     try {
       return ok(await updateIdea((await ctx.params).id, b));
     } catch (e) {
