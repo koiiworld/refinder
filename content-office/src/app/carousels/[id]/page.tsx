@@ -4,6 +4,8 @@ import { listBlogs } from "@/lib/repo";
 import { recentPosts } from "@/lib/blog-posts";
 import CarouselEditor from "./CarouselEditor";
 
+import PostedButton from "@/components/PostedButton";
+
 export const dynamic = "force-dynamic";
 
 export default async function CarouselPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,6 +21,7 @@ export default async function CarouselPage({ params }: { params: Promise<{ id: s
           <h1>📱 {c.title}</h1>
           <p className="sub">글자를 고치면 미리보기가 바로 바뀌어요. 다 되면 &apos;사진에 저장·공유&apos;로 폰 사진 앱에 저장한 뒤 인스타에 순서대로 올리세요.</p>
         </div>
+        <PostedButton type="carousel" id={c.id} postedAt={(c as { posted_at?: string | null }).posted_at ?? null} />
       </div>
       <CarouselEditor initial={JSON.parse(JSON.stringify(c))} recent={recent} types={CONTENT_TYPES.map((t) => ({ id: t.id, label: t.label, range: t.range }))} />
     </div>

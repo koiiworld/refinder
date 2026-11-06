@@ -38,10 +38,10 @@ export function BlogTag({ name, color }: { name: string; color: string }) {
 }
 
 /** 7단계 진행 표시. current = 지금 단계(1~7), done = 끝난 단계까지 */
-export function Steps({ current, error = false }: { current: number; error?: boolean }) {
+export function Steps({ current, error = false, names = STEP_NAMES }: { current: number; error?: boolean; names?: readonly string[] }) {
   return (
     <div className="pipeline" role="list" aria-label="진행 단계">
-      {STEP_NAMES.map((name, i) => {
+      {names.map((name, i) => {
         const n = i + 1;
         const state = n < current ? "done" : n === current ? `cur${error ? " err" : ""}` : "";
         return (

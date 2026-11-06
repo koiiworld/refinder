@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const P = {
+  chart: "M5 20V10M12 20V4M19 20v-7",
+  insta: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17.5 6.5h.01",
   home: "M4 13h6V4H4zM14 20h6v-9h-6zM14 4v4h6V4zM4 20h6v-4H4z",
   trend: "M3 17l6-6 4 4 8-8M15 7h6v6",
   pen: "M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4",
@@ -29,48 +32,104 @@ function Icon({ d }: { d: string }) {
   );
 }
 
-const ITEMS = [
-  { href: "/todos", label: "할 일", short: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림", icon: P.check, desktopOnly: true },
-  { href: "/ideas", label: "아이디어 노트", short: "아이디어", sub: "한 줄 메모 · 할 일·글 기획으로", icon: P.bulb, desktopOnly: true },
-  { href: "/calendar", label: "캘린더", short: "캘린더", sub: "시즌·행사·발행·업무 일정", icon: P.cal, desktopOnly: true },
-  { href: "/trends", label: "트렌드 뷰어", short: "트렌드", sub: "유튜브 급상승·스크랩", icon: P.trend },
-  { href: "/hot", label: "블로그 핫이슈", short: "핫이슈", sub: "네이버 블로그 주제별 반응 많은 글", icon: P.fire, desktopOnly: true },
-  { href: "/new", label: "글 만들기", short: "글쓰기", sub: "① 키워드 추천 · ② 선택", icon: P.pen },
-  { href: "/posts", label: "진행 현황", short: "진행", sub: "③~⑦ 제목·글·이미지·검수·발행", icon: P.list, badge: true },
-  { href: "/carousels", label: "인스타 캐러셀", short: "캐러셀", sub: "블로그 글·주제로 카드뉴스", icon: P.phone },
-  { href: "/studio", label: "영상 스튜디오", short: "스튜디오", sub: "프롬프트로 쇼츠·릴스 기획·제작", icon: P.clap, desktopOnly: true },
-  { href: "/videos", label: "영상공장", short: "영상", sub: "링크로 영상 받기·자막 지우기·편집", icon: P.film },
-  { href: "/diagnose", label: "블로그 진단", short: "진단", sub: "노출·제목·누락 점검", icon: P.pulse, desktopOnly: true },
-  { href: "/blogs", label: "블로그 설정", short: "블로그", sub: "말투 예시·문체", icon: P.blog },
-  { href: "/settings", label: "설정", short: "설정", sub: "AI 연결·단계별 AI", icon: P.gear },
-  { href: "/trash", label: "휴지통", short: "휴지통", sub: "삭제한 글 되살리기·완전 삭제", icon: P.trash, desktopOnly: true },
+type Item = { href: string; label: string; sub: string; short?: string; icon?: string; badge?: boolean; mobile?: boolean };
+type Group = { id: string; label: string; icon: string; items: Item[] };
+
+const TOP: Item = { href: "/work", label: "전체 작업 현황", short: "현황", sub: "블로그·인스타·영상 등 전체 업무 진행 상황", icon: P.chart, mobile: true };
+const GROUPS: Group[] = [
+  { id: "workspace", label: "워크스페이스", icon: P.home, items: [
+    { href: "/todos", label: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림" },
+    { href: "/ideas", label: "아이디어 노트", sub: "메모·할 일·글 기획" },
+    { href: "/calendar", label: "캘린더", sub: "시즌·행사별 일정" },
+  ] },
+  { id: "research", label: "콘텐츠 리서치", icon: P.trend, items: [
+    { href: "/trends", label: "트렌드 뷰어", short: "트렌드", sub: "유튜브 급상승·스크랩", icon: P.trend, mobile: true },
+    { href: "/hot", label: "블로그 핫이슈", sub: "네이버 블로그 인기 주제 탐색" },
+  ] },
+  { id: "blog", label: "블로그 관리", icon: P.blog, items: [
+    { href: "/posts", label: "업로드", short: "업로드", sub: "키워드 추천부터 발행 준비까지", icon: P.pen, badge: true, mobile: true },
+    { href: "/diagnose", label: "진단", sub: "노출·제목·누락 점검" },
+    { href: "/blogs", label: "설정", sub: "블로그별 말투·작성 규칙" },
+  ] },
+  { id: "video", label: "영상 제작", icon: P.clap, items: [
+    { href: "/studio", label: "영상 스튜디오", sub: "쇼츠·릴스 기획 및 제작" },
+    { href: "/videos", label: "영상공장", short: "영상", sub: "영상 다운로드·자막 제거·편집", icon: P.film, mobile: true },
+  ] },
+  { id: "insta", label: "인스타그램 관리", icon: P.insta, items: [
+    { href: "/carousels", label: "캐러셀", short: "캐러셀", sub: "블로그 글·주제로 카드뉴스 제작", icon: P.phone, mobile: true },
+  ] },
 ];
+const BOTTOM: Item[] = [
+  { href: "/settings", label: "설정", short: "설정", sub: "", icon: P.gear, mobile: true },
+  { href: "/trash", label: "휴지통", sub: "", icon: P.trash },
+];
+const MOBILE = [TOP, ...GROUPS.flatMap((g) => g.items), ...BOTTOM].filter((x) => x.mobile);
 
 function isOn(path: string, href: string) {
-  return href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
+  return path === href || path.startsWith(href + "/") || (href === "/posts" && path === "/new");
 }
+
+const KEY = "nav-open";
 
 export default function Nav({ pending, brand }: { pending: number; brand?: { name: string; mark: string; color: string } }) {
   const b = brand ?? { name: "콘텐츠 오피스", mark: "AI", color: "" };
   const markStyle = b.color ? { background: b.color, color: "#fff" } : undefined;
   const path = usePathname();
+  const activeGroup = GROUPS.find((g) => g.items.some((it) => isOn(path, it.href)))?.id;
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    try {
+      setOpen(JSON.parse(localStorage.getItem(KEY) ?? "{}"));
+    } catch {}
+  }, []);
+  const save = (next: Record<string, boolean>) => {
+    setOpen(next);
+    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
+  };
+  const isOpen = (id: string) => open[id] ?? id === activeGroup;
+  const allOpen = GROUPS.every((g) => isOpen(g.id));
   if (path === "/login") return null;
+
+  const link = (it: Item, child = false) => (
+    <Link key={it.href} href={it.href} className={`nav-link${child ? " nav-child" : ""} ${isOn(path, it.href) ? "on" : ""}`} style={{ alignItems: "flex-start" }}>
+      {!child && it.icon && <Icon d={it.icon} />}
+      <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <span>{it.label}</span>
+        {it.sub && <span className="tiny" style={{ opacity: 0.7, fontWeight: 400 }}>{it.sub}</span>}
+      </span>
+      {it.badge && pending > 0 && <span className="count" title="발행 대기">{pending}</span>}
+    </Link>
+  );
+
   return (
     <>
       <aside className="side">
         <Link href="/" className={`brand${path === "/" ? " on" : ""}`} title="대시보드로" aria-label={`${b.name} 대시보드`}>
           <span className="brand-mark" style={markStyle}>{b.mark}</span> {b.name}
         </Link>
-        {ITEMS.map((it) => (
-          <Link key={it.href} href={it.href} className={`nav-link ${isOn(path, it.href) ? "on" : ""}`} style={{ alignItems: "flex-start" }}>
-            <Icon d={it.icon} />
-            <span style={{ display: "flex", flexDirection: "column" }}>
-              <span>{it.label}</span>
-              <span className="tiny" style={{ opacity: 0.7, fontWeight: 400 }}>{it.sub}</span>
-            </span>
-            {it.badge && pending > 0 && <span className="count" title="발행 대기">{pending}</span>}
-          </Link>
-        ))}
+        <div className="row between nav-tools">
+          <span className="tiny muted">메뉴</span>
+          <button type="button" className="nav-all" onClick={() => save(Object.fromEntries(GROUPS.map((g) => [g.id, !allOpen])))}>{allOpen ? "모두 접기" : "모두 펼치기"}</button>
+        </div>
+        {link(TOP)}
+        <div className="nav-sep" />
+        {GROUPS.map((g) => {
+          const o = isOpen(g.id);
+          const hasBadge = g.items.some((it) => it.badge) && pending > 0;
+          return (
+            <div key={g.id} className={`nav-grp${o ? " open" : ""}`}>
+              <button type="button" className={`nav-link nav-grp-head${g.id === activeGroup ? " has-on" : ""}`} onClick={() => save({ ...open, [g.id]: !o })} aria-expanded={o}>
+                <Icon d={g.icon} />
+                <span style={{ flex: 1, textAlign: "left" }}>{g.label}</span>
+                {!o && hasBadge && <span className="count">{pending}</span>}
+                <span className="nav-chev" aria-hidden>›</span>
+              </button>
+              {o && <div className="nav-children">{g.items.map((it) => link(it, true))}</div>}
+            </div>
+          );
+        })}
+        <div className="nav-sep" />
+        {BOTTOM.map((it) => link(it))}
       </aside>
 
       <header className="topbar">
@@ -79,11 +138,11 @@ export default function Nav({ pending, brand }: { pending: number; brand?: { nam
         </Link>
       </header>
 
-      <nav className="bottomnav" aria-label="주요 메뉴" style={{ gridTemplateColumns: `repeat(${ITEMS.filter((x) => !("desktopOnly" in x)).length}, 1fr)` }}>
-        {ITEMS.filter((x) => !("desktopOnly" in x)).map((it) => (
+      <nav className="bottomnav" aria-label="주요 메뉴" style={{ gridTemplateColumns: `repeat(${MOBILE.length}, 1fr)` }}>
+        {MOBILE.map((it) => (
           <Link key={it.href} href={it.href} className={isOn(path, it.href) ? "on" : ""}>
-            <Icon d={it.icon} />
-            {it.short}
+            <Icon d={it.icon ?? P.list} />
+            {it.short ?? it.label}
             {it.badge && pending > 0 && <span className="dot">{pending}</span>}
           </Link>
         ))}

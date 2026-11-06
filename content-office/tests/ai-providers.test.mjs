@@ -1187,3 +1187,31 @@ test("🏷 설정: 로고 아이콘·이름 바꾸기 → 왼쪽 위·탭 제목
   assert.deepEqual(r, { name: "콘텐츠 오피스", mark: "AI", color: "" });
   assert.ok((await (await fetch(`${BASE}/`)).text()).includes("<title>AI 콘텐츠 오피스</title>"));
 });
+
+test("📊 전체 작업 현황: 블로그·캐러셀·영상 5단계 칸반 · 게시함 직접 표시 · 메뉴 그룹", async () => {
+  let items = (await call("/api/work")).data;
+  assert.ok(Array.isArray(items) && items.length > 0, "작업이 모임");
+  assert.ok(items.every((i) => ["plan", "make", "review", "ready", "done"].includes(i.col) && i.steps.length >= 4 && i.href), "공통 모양");
+  assert.ok(items.some((i) => i.type === "blog"), "블로그 글 포함");
+  const car = items.find((i) => i.type === "carousel" && i.col === "ready");
+  assert.ok(car, JSON.stringify(items.map((i) => [i.type, i.col])));
+  // 게시함 표시 → 완료, 취소 → 다시 발행 대기
+  assert.equal((await call("/api/work/posted", "POST", { type: "blog", id: "x" })).status, 400, "블로그는 발행 단계에서 처리");
+  const r = await call("/api/work/posted", "POST", { type: "carousel", id: car.id, posted: true });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.ok(r.data.posted_at);
+  items = (await call("/api/work")).data;
+  assert.equal(items.find((i) => i.key === car.key).col, "done");
+  const cp = (await (await fetch(`${BASE}/carousels/${car.id}`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(cp.includes("✅ 게시함 ·"), "캐러셀 화면에 게시함 표시");
+  await call("/api/work/posted", "POST", { type: "carousel", id: car.id, posted: false });
+  assert.equal((await call("/api/work")).data.find((i) => i.key === car.key).col, "ready");
+  const page = (await (await fetch(`${BASE}/work`)).text()).replace(/<!-- -->/g, "");
+  for (const t of ["전체 작업 현황", "기획", "제작 중", "발행 대기", "칸반", "목록", "막힌 것"]) assert.ok(page.includes(t), t);
+  // 메뉴: 그룹 이름과 새 이름 (업로드·진단·설정·캐러셀)
+  for (const t of ["워크스페이스", "콘텐츠 리서치", "블로그 관리", "영상 제작", "인스타그램 관리", "모두 펼치기"]) assert.ok(page.includes(t), `메뉴 ${t}`);
+  const up = (await (await fetch(`${BASE}/posts`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(up.includes("블로그 업로드") && up.includes("새 글 만들기") && up.includes("키워드 추천"), "업로드 = 새 글 + 진행");
+  const nw = await fetch(`${BASE}/new?blog=blog_algokitchen`, { redirect: "manual" });
+  assert.ok([307, 308].includes(nw.status) && nw.headers.get("location").includes("/posts?new=1"), "예전 글 만들기 주소 → 업로드");
+});

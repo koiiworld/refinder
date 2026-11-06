@@ -438,5 +438,8 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS publish_date TEXT;
 -- 할 일 업무내용(인스타·유튜브·블로그·개인일정)과 연결 대상(캐러셀·영상 등)
 ALTER TABLE todos ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '';
 ALTER TABLE todos ADD COLUMN IF NOT EXISTS ref_id TEXT;
+ALTER TABLE carousels ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;        -- 게시함 (직접 표시)
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;
+ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;
 ALTER TABLE ideas_notes ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '';  -- blog | insta | youtube | etc
 ALTER TABLE ideas_notes ADD COLUMN IF NOT EXISTS detail TEXT NOT NULL DEFAULT '';    -- 세부 (블로그 이름·릴스·쇼츠·직접 입력)

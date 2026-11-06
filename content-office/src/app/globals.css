@@ -447,3 +447,29 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .idea-fields > select { flex: 0 0 150px; }
 .idea-fields > input { flex: 1 1 160px; min-width: 0; }
 @media (max-width: 640px) { .idea-fields { flex-wrap: wrap; } .idea-fields > select { flex: 1 1 45%; } .idea-fields > input { flex: 1 1 100%; font-size: 16px; } }
+
+/* 📊 전체 작업 현황 */
+.work-sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.work-sum b { font-size: 22px; }
+.kanban { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.kanban-col { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px; min-width: 0; display: flex; flex-direction: column; gap: 8px; max-height: 70vh; overflow-y: auto; }
+.kanban-head { padding: 2px 4px 4px; }
+.kanban-card { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; cursor: pointer; font: inherit; color: inherit; min-width: 0; }
+.kanban-card:hover { border-color: var(--accent); }
+.kanban-card.stuck { border-color: var(--warn); }
+.kanban-card.err { border-color: var(--bad); }
+.kanban-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 860px) { .work-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kanban { grid-template-columns: repeat(5, 78vw); scroll-snap-type: x mandatory; } .kanban-col { scroll-snap-align: start; } }
+
+/* 메뉴 그룹 (접기·펼치기) */
+.nav-tools { padding: 0 10px 6px; }
+.nav-all { background: none; border: 0; color: var(--muted); font-size: 11px; cursor: pointer; padding: 2px 4px; }
+.nav-all:hover { color: var(--text); }
+.nav-sep { height: 1px; background: var(--line); margin: 8px 6px; }
+.nav-grp-head { width: 100%; background: none; border: 0; font: inherit; cursor: pointer; align-items: center !important; color: var(--text); font-weight: 600; }
+.nav-grp.open > .nav-grp-head { background: var(--panel-2); }
+.nav-grp-head.has-on { color: var(--accent); }
+.nav-chev { color: var(--muted); transition: transform .15s; font-size: 16px; line-height: 1; }
+.nav-grp.open .nav-chev { transform: rotate(90deg); }
+.nav-children { margin: 4px 0 6px 22px; border-left: 2px solid var(--line); padding-left: 6px; display: flex; flex-direction: column; gap: 2px; }
+.nav-child { padding: 6px 8px; }
