@@ -23,6 +23,17 @@ const PRESETS: { label: string; v: Partial<Routine> }[] = [
   { label: "블로그 유입 지표 확인", v: { name: "블로그 유입 지표 확인", category: "blog", time: "18:00", completion: "button", schedule: { type: "daily" }, link: "/", checklist: [{ id: "", label: "방문·유입 현황 점검", kind: "check", required: false }] } },
 ];
 
+/** 재알림 횟수만큼 시각 칸 (모자라면 앞 시각 +2시간으로 채움, 넘치면 자름) */
+function fitTimes(times: string[], n: number, first: string) {
+  const out = times.filter((x) => /^\d{2}:\d{2}$/.test(x)).slice(0, n);
+  while (out.length < n) {
+    const prev = out[out.length - 1] ?? first;
+    const [h, m] = prev.split(":").map(Number);
+    out.push(`${String(Math.min(23, h + 2)).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+  }
+  return out;
+}
+
 const EMPTY: Partial<Routine> = { name: "", category: "blog", blog_id: null, link: "", schedule: { type: "daily", days: [1], day: 1, baseOffset: 0 }, time: "09:00", deadline: "23:59", notify: true, remind: { mode: "interval", minutes: 120, times: ["11:00", "18:00"], max: 2 }, completion: "button", checklist: [], skip_holidays: false, paused: false, priority: "normal" };
 
 export default function RoutineBoard({ initialRoutines, initialToday, blogs, cats, telegram }: { initialRoutines: Routine[]; initialToday: RunRow[]; blogs: { id: string; name: string }[]; cats: { id: string; label: string }[]; telegram: boolean }) {
@@ -199,11 +210,25 @@ function RoutineForm({ v, setV, blogs, cats, err, onSave }: { v: Partial<Routine
             <span className="tiny muted">미완료 시 재알림</span>
             <div className="seg" style={{ flexWrap: "wrap" }}>
               {([[30, "30분"], [60, "1시간"], [120, "2시간"]] as const).map(([m, l]) => <button key={m} className={rm.mode === "interval" && rm.minutes === m ? "on" : ""} onClick={() => set({ remind: { ...rm, mode: "interval", minutes: m } })}>{l} 간격</button>)}
-              <button className={rm.mode === "times" ? "on" : ""} onClick={() => set({ remind: { ...rm, mode: "times", times: rm.times?.length ? rm.times : ["11:00", "18:00"] } })}>정한 시각</button>
+              <button className={rm.mode === "times" ? "on" : ""} onClick={() => set({ remind: { ...rm, mode: "times", times: fitTimes(rm.times?.length ? rm.times : ["11:00", "18:00"], rm.max ?? 2, v.time ?? "09:00") } })}>정한 시각</button>
               <button className={rm.mode === "none" ? "on" : ""} onClick={() => set({ remind: { ...rm, mode: "none" } })}>재알림 없음</button>
             </div>
-            {rm.mode === "times" && <input className="input" value={(rm.times ?? []).join(", ")} placeholder="11:00, 18:00" onChange={(e) => set({ remind: { ...rm, times: e.target.value.split(/[,\s]+/).filter(Boolean) } })} aria-label="재알림 시각" />}
-            {rm.mode !== "none" && <label className="small row" style={{ gap: 6 }}>최대 <input className="input" type="number" min={1} max={6} style={{ width: 60 }} value={rm.max ?? 2} onChange={(e) => set({ remind: { ...rm, max: Number(e.target.value) } })} />회 · 마감 전까지만</label>}
+            {rm.mode !== "none" && (
+              <label className="small row" style={{ gap: 6 }}>
+                {rm.mode === "times" ? "재알림" : "최대"}
+                <select className="select" style={{ width: 80 }} value={rm.max ?? 2} onChange={(e) => set({ remind: { ...rm, max: Number(e.target.value), times: fitTimes(rm.times ?? [], Number(e.target.value), v.time ?? "09:00") } })}>{[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}회</option>)}</select>
+                <span className="tiny muted">마감 전까지만</span>
+              </label>
+            )}
+            {rm.mode === "times" && (
+              <div className="row" style={{ gap: 6 }}>
+                {fitTimes(rm.times ?? [], rm.max ?? 2, v.time ?? "09:00").map((tm, k, arr) => (
+                  <label key={k} className="tiny stack" style={{ gap: 2 }}>{k + 1}회차
+                    <input className="input" type="time" style={{ width: 120 }} value={tm} onChange={(e) => set({ remind: { ...rm, times: arr.map((x, j) => (j === k ? e.target.value : x)) } })} aria-label={`재알림 ${k + 1}회차 시각`} />
+                  </label>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>

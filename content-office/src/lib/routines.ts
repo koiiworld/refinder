@@ -62,9 +62,18 @@ function clean(input: Partial<Routine>, cur?: Routine) {
   const remind = {
     mode,
     minutes: [30, 60, 120, 180].includes(Number(rm.minutes)) ? Number(rm.minutes) : 120,
-    times: (rm.times ?? []).filter(isTime).sort().slice(0, 6),
+    times: Array.from(new Set((rm.times ?? []).filter(isTime))).sort().slice(0, 6),
     max: Math.max(1, Math.min(6, Number(rm.max) || 2)),
   };
+  // 정한 시각: 횟수만큼 시각이 있게 (모자라면 앞 시각 +2시간)
+  if (remind.mode === "times") {
+    while (remind.times.length < remind.max) {
+      const [h, m] = (remind.times[remind.times.length - 1] ?? time).split(":").map(Number);
+      remind.times.push(`${String(Math.min(23, h + 2)).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+    }
+    remind.times = Array.from(new Set(remind.times)).sort().slice(0, remind.max);
+    if (remind.times.some((x) => x <= time)) throw new Error("재알림 시각은 첫 알림보다 늦어야 해요.");
+  }
   const completion = ["button", "checklist", "system"].includes(String(input.completion ?? cur?.completion)) ? (input.completion ?? cur?.completion)! : "button";
   const checklist: ChecklistItem[] = (input.checklist ?? cur?.checklist ?? [])
     .map((c) => ({ id: c.id || sid(), label: String(c.label ?? "").trim().slice(0, 80), kind: (["capture", "views", "check"].includes(String(c.kind)) ? c.kind : "check") as ChecklistItem["kind"], required: c.required !== false }))
