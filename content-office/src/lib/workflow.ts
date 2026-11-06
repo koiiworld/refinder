@@ -1,6 +1,6 @@
 import "server-only";
 import { q, q1, newId, j } from "./db";
-import { addEvent, getDocument, getProject, updateProject } from "./repo";
+import { addEvent, createVersion, getDocument, getProject, updateProject } from "./repo";
 import { enqueue } from "./jobs";
 import type { PostExtras, PostPlan } from "./posts-types";
 
@@ -121,9 +121,21 @@ export async function insertImage(projectId: string, index: number) {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
   const tag = `<img src="${esc(im.url)}" alt="${esc(im.alt)}">${im.credit ? `<p>${esc(im.credit)}</p>` : ""}`;
   const marker = new RegExp(`<p>\\s*\\[이미지\\s*${index + 1}(?:[^\\]]*)\\]\\s*</p>`);
-  const next = marker.test(html) ? html.replace(marker, tag) : `${html}\n${tag}`;
-  await q("UPDATE documents SET content_html=$2, last_editor='user', user_edited_at=NOW(), revision=revision+1, updated_at=NOW() WHERE project_id=$1", [projectId, next]);
-  await setImage(projectId, index, { inserted: true });
+  // 이미 넣은 이미지를 바꾸는 경우: 그 자리(이미지 + 바로 뒤 출처 문단)를 새 이미지로 교체
+  const oldUrl = im.insertedUrl ? esc(im.insertedUrl).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : null;
+  const placed = oldUrl ? new RegExp(`<img[^>]*src="${oldUrl}"[^>]*>(\\s*<p>[^<]*</p>)?`) : null;
+  let next: string;
+  if (placed && placed.test(html)) next = html.replace(placed, im.credit ? tag : `${tag}`);
+  else if (marker.test(html)) next = html.replace(marker, tag);
+  else if (html.includes(`src="${esc(im.url)}"`)) next = html; // 이미 같은 이미지가 들어가 있음
+  else next = `${html}\n${tag}`;
+  if (next !== html) {
+    await createVersion({ projectId, kind: "draft", title: doc?.title ?? "", content: html, source: "user", label: `이미지 ${index + 1} 넣기 전` }).catch(() => {});
+    await q("UPDATE documents SET content_html=$2, last_editor='user', user_edited_at=NOW(), revision=revision+1, updated_at=NOW() WHERE project_id=$1", [projectId, next]);
+  }
+  await setImage(projectId, index, { inserted: true, insertedUrl: im.url });
+  // 검수 뒤 이미지가 바뀌면 재검수 필요
+  if (p.review && (p.stage === "ready" || p.stage === "published") && next !== html) await updateProject(projectId, { needs_rereview: true });
   await addEvent(projectId, "image", `⑤ 이미지 ${index + 1} 본문에 넣음`);
 }
 

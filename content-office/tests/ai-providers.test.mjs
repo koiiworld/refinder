@@ -1051,3 +1051,44 @@ test("📋 기획안 승인: 제목 → 목차·근거·이미지 계획 → 고
   assert.match(wp, /\[승인된 기획안[\s\S]*1\. 굴 손질부터 보쌈까지/);
   assert.match(wp, /출처: https:\/\/www\.nifs\.go\.kr/);
 });
+
+test("🖼 이미지 교체 → 같은 자리에 들어감(중복 없음) · 재검수 필요 · 같은 글로 캐러셀: 사진·순서·문구·캡션 고쳐 저장 · 사진 파일로 열림", async () => {
+  const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
+  const id = posts[posts.length - 1].id;
+  let b = (await call(`/api/posts/${id}`)).data;
+  const n = b.project.package.images.length;
+  assert.ok(n >= 1);
+  await call(`/api/posts/${id}`, "POST", { action: "image_manual", index: 0, manual: false });
+  // 첫 이미지 넣기
+  assert.equal((await call(`/api/posts/${id}`, "POST", { action: "pick_image", index: 0, url: "http://localhost:4110/img/old.jpg" })).status, 200);
+  await call(`/api/posts/${id}`, "POST", { action: "insert_image", index: 0 });
+  let html = (await call(`/api/projects/${id}/document`)).data.content_html;
+  assert.ok(html.includes('src="http://localhost:4110/img/old.jpg"'), "첫 이미지");
+  assert.ok(!/\[이미지\s*1\]/.test(html), "자리 표시 대신 이미지");
+  // 기존 이미지로 교체 → 같은 자리, 중복 없음
+  await call(`/api/posts/${id}`, "POST", { action: "pick_image", index: 0, url: "http://localhost:4110/img/new.jpg" });
+  await call(`/api/posts/${id}`, "POST", { action: "insert_image", index: 0 });
+  const html2 = (await call(`/api/projects/${id}/document`)).data.content_html;
+  assert.ok(html2.includes('src="http://localhost:4110/img/new.jpg"'), "새 이미지");
+  assert.ok(!html2.includes("old.jpg"), "옛 이미지는 빠짐");
+  assert.equal((html2.match(/new\.jpg/g) ?? []).length, 1, "한 번만");
+  assert.equal(html2.indexOf("new.jpg") > 0 && html2.length - html.length < 40 && html2.length - html.length > -40, true, "본문 끝에 덧붙이지 않음 (같은 자리 교체)");
+  b = (await call(`/api/posts/${id}`)).data;
+  assert.equal(b.project.needs_rereview, true, "이미지 바꾸면 재검수 필요");
+  assert.ok((await call(`/api/projects/${id}/versions`)).data.some((v) => /이미지 1 넣기 전/.test(v.label)), "넣기 전 원고 버전");
+  // 같은 원고로 캐러셀
+  await call("/__reset", "POST", undefined, MOCK);
+  const c = (await call("/api/carousels", "POST", { projectId: id })).data;
+  let car = (await call(`/api/carousels/${c.id}`)).data;
+  const k = car.images.findIndex((im) => im.url === "http://localhost:4110/img/new.jpg");
+  assert.ok(k >= 0, "글에 넣은 사진을 캐러셀 사진으로");
+  const slides = [...car.slides].reverse().map((s, i) => ({ ...s, headline: i === 0 ? "바꾼 순서 첫 장" : s.headline, image: i === 0 ? k : s.image }));
+  car = (await call(`/api/carousels/${c.id}`, "PUT", { slides, caption: "고친 캡션", hashtags: ["#김장", "보쌈"] })).data;
+  assert.equal(car.slides[0].headline, "바꾼 순서 첫 장");
+  assert.equal(car.slides[0].image, k);
+  assert.equal(car.caption, "고친 캡션");
+  assert.deepEqual(car.hashtags, ["김장", "보쌈"]);
+  const img = await fetch(`${BASE}/api/carousels/${c.id}/img/${k}`);
+  assert.equal(img.status, 200, "내보내기용 사진 파일");
+  assert.equal(img.headers.get("content-type"), "image/jpeg");
+});

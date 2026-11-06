@@ -53,6 +53,8 @@ export interface PostImage {
   model?: string;
   url?: string | null;
   inserted?: boolean;
+  /** 본문에 넣은 이미지 주소 (교체할 때 같은 자리를 바꾸기 위해) */
+  insertedUrl?: string | null;
 }
 
 export interface PostExtras {

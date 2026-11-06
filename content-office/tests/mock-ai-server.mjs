@@ -100,6 +100,12 @@ http
         { logNo: 224000000003, sympathyCnt: 9, commentCnt: 1, readCount: null, titleWithInspectMessage: "김장 준비" },
       ] } });
     }
+    // 시험용 이미지 파일
+    if (/^\/img\/[\w-]+\.jpg$/.test(url.pathname)) {
+      const buf = Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==", "base64");
+      res.writeHead(200, { "content-type": "image/jpeg", "content-length": String(buf.length) });
+      return res.end(buf);
+    }
     // 한국 공휴일 달력(ICS) — 선거일 포함
     if (url.pathname === "/kr-holidays.ics") {
       const y = new Date().getUTCFullYear();
