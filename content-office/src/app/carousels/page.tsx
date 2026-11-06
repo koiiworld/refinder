@@ -14,8 +14,8 @@ export default async function Carousels({ searchParams }: { searchParams: Promis
   const allBlogs = await listBlogs();
   const blogs = allBlogs.map((b) => ({ id: b.id, name: b.name, category: b.category }));
   const published = (await Promise.all(allBlogs.map(async (b) => (await recentPosts(b, 15)).map((p) => ({ title: p.title, url: p.url, blogId: b.id, blog_name: b.name }))))).flat();
-  const posts = await q<{ id: string; title: string; blog_name: string; stage: string }>(
-    `SELECT p.id, COALESCE(NULLIF(d.title,''), p.title) AS title, b.name AS blog_name, p.stage
+  const posts = await q<{ id: string; title: string; blog_id: string; blog_name: string; stage: string }>(
+    `SELECT p.id, COALESCE(NULLIF(d.title,''), p.title) AS title, p.blog_id, b.name AS blog_name, p.stage
        FROM projects p JOIN blogs b ON b.id=p.blog_id LEFT JOIN documents d ON d.project_id=p.id
       WHERE p.deleted_at IS NULL AND p.stage IN ('reviewing','ready','published') ORDER BY p.created_at DESC LIMIT 40`,
   );

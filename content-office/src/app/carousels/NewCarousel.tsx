@@ -6,16 +6,13 @@ import { api } from "@/components/client-utils";
 
 type Idea = { topic: string; format: string; hook: string; why: string };
 
-export default function NewCarousel({ posts, published, blogs, formats, defaultFrom }: { posts: { id: string; title: string; blog_name: string }[]; published: { title: string; url: string; blogId: string; blog_name: string }[]; blogs: { id: string; name: string; category: string }[]; formats: { id: string; label: string }[]; defaultFrom?: string }) {
+export default function NewCarousel({ posts, published, blogs, formats, defaultFrom }: { posts: { id: string; title: string; blog_id: string; blog_name: string }[]; published: { title: string; url: string; blogId: string; blog_name: string }[]; blogs: { id: string; name: string; category: string }[]; formats: { id: string; label: string }[]; defaultFrom?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"post" | "topic">(defaultFrom === "topic" ? "topic" : "post");
-  const [postId, setPostId] = useState(published[0] ? `u:${published[0].url}` : posts[0] ? `p:${posts[0].id}` : "");
+  const [pickBlog, setPickBlog] = useState(blogs[0]?.id ?? "");
+  const [creating, setCreating] = useState("");
   const [postUrl, setPostUrl] = useState("");
-  const pick = () => {
-    if (postId.startsWith("p:")) return { projectId: postId.slice(2) };
-    const pub = published.find((p) => `u:${p.url}` === postId);
-    return { url: postId.slice(2), blogId: pub?.blogId ?? null };
-  };
+
   const [niche, setNiche] = useState("생활 꿀팁");
   const [blogId, setBlogId] = useState("");
   const [topic, setTopic] = useState("");
@@ -25,6 +22,7 @@ export default function NewCarousel({ posts, published, blogs, formats, defaultF
   const [err, setErr] = useState("");
 
   async function create(payload: Record<string, unknown>) {
+    setCreating(String(payload.url ? `u:${payload.url}` : payload.projectId ? `p:${payload.projectId}` : ""));
     setBusy("create");
     setErr("");
     try {
@@ -58,29 +56,40 @@ export default function NewCarousel({ posts, published, blogs, formats, defaultF
       </div>
 
       {mode === "post" ? (
-        <div className="stack" style={{ gap: 8 }}>
-          {posts.length + published.length ? (
-            <div className="row" style={{ flexWrap: "nowrap", gap: 8 }}>
-              <select className="input" value={postId} onChange={(e) => setPostId(e.target.value)} aria-label="블로그 글">
-                {!!published.length && (
-                  <optgroup label="📷 블로그에 올린 글 (올린 사진 그대로 사용)">
-                    {published.map((p) => <option key={p.url} value={`u:${p.url}`}>[{p.blog_name}] {p.title}</option>)}
-                  </optgroup>
-                )}
-                {!!posts.length && (
-                  <optgroup label="✍️ 앱에서 쓴 글">
-                    {posts.map((p) => <option key={p.id} value={`p:${p.id}`}>[{p.blog_name}] {p.title}</option>)}
-                  </optgroup>
-                )}
-              </select>
-              <button className="btn btn-primary" disabled={!!busy || !postId} onClick={() => create(pick())}>{busy === "create" ? <><span className="spinner" /> AI가 장면을 나누는 중…</> : "만들기"}</button>
-            </div>
-          ) : null}
+        <div className="stack" style={{ gap: 10 }}>
+          <nav className="trend-tabs" aria-label="블로그" style={{ marginBottom: 0 }}>
+            {blogs.map((bl) => {
+              const n = published.filter((p) => p.blogId === bl.id).length + posts.filter((p) => p.blog_id === bl.id).length;
+              return (
+                <button key={bl.id} type="button" className={`trend-tab ${pickBlog === bl.id ? "on" : ""}`} onClick={() => setPickBlog(bl.id)}>
+                  {bl.name} <span className="badge" style={{ padding: "0 6px" }}>{n}</span>
+                </button>
+              );
+            })}
+          </nav>
+          {(() => {
+            const pub = published.filter((p) => p.blogId === pickBlog);
+            const mine = posts.filter((p) => p.blog_id === pickBlog && !pub.some((x) => x.title.trim() === p.title.trim()));
+            const row = (key: string, title: string, payload: Record<string, unknown>, tag: string) => (
+              <div key={key} className="row" style={{ flexWrap: "nowrap", gap: 8, padding: "8px 10px", borderBottom: "1px solid var(--line)" }}>
+                <span className="tiny muted" style={{ flexShrink: 0, width: 54 }}>{tag}</span>
+                <span className="small ellipsis" style={{ flex: 1 }} title={title}>{title}</span>
+                <button className="btn btn-sm btn-primary" disabled={!!busy} onClick={() => create(payload)}>{busy === "create" && creating === key ? <span className="spinner" /> : "만들기"}</button>
+              </div>
+            );
+            if (!pub.length && !mine.length) return <p className="small muted" style={{ margin: 0 }}>이 블로그에는 아직 고를 글이 없어요. 아래에 글 주소를 넣거나 &apos;주제로 따로 만들기&apos;를 써 보세요.</p>;
+            return (
+              <div className="card" style={{ maxHeight: 360, overflowY: "auto" }}>
+                {pub.map((p) => row(`u:${p.url}`, p.title, { url: p.url, blogId: p.blogId }, "📷 발행"))}
+                {mine.map((p) => row(`p:${p.id}`, p.title, { projectId: p.id }, "✍️ 앱 글"))}
+              </div>
+            );
+          })()}
           <div className="row" style={{ flexWrap: "nowrap", gap: 8 }}>
             <input className="input" value={postUrl} onChange={(e) => setPostUrl(e.target.value)} placeholder="또는 블로그 글 주소 붙여넣기 (네이버·티스토리)" aria-label="블로그 글 주소" />
-            <button className="btn" disabled={!!busy || !/^https?:\/\//.test(postUrl.trim())} onClick={() => create({ url: postUrl.trim() })}>주소로 만들기</button>
+            <button className="btn" disabled={!!busy || !/^https?:\/\//.test(postUrl.trim())} onClick={() => create({ url: postUrl.trim(), blogId: pickBlog || null })}>주소로 만들기</button>
           </div>
-          <p className="tiny muted" style={{ margin: 0 }}>블로그에 올린 글을 고르면 그 글에 올린 사진을 캐러셀에 그대로 써요.</p>
+          <p className="tiny muted" style={{ margin: 0 }}>📷 발행 = 블로그에 올린 글 (올린 사진 그대로 사용) · ✍️ 앱 글 = 앱에서 쓰고 아직 안 올린 글</p>
         </div>
       ) : (
         <div className="stack" style={{ gap: 10 }}>
