@@ -42,14 +42,15 @@ test("① 키워드 추천: AI 후보 + 네이버 실제 검색량·연관 키�
   await call("/__reset", "POST", undefined, MOCK);
   const r = await call("/api/keywords", "POST", { action: "recommend", blogId: "blog_algokitchen", hint: "겨울" });
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.equal(r.data.provider, "openai", "기본 담당: ChatGPT");
+  assert.equal(r.data.provider, "google", "기본 담당: 무료 Gemini");
   const picks = (await call("/api/keywords?blogId=blog_algokitchen")).data.filter((p) => p.batch_id === r.data.batch);
   const ai = picks.find((p) => p.keyword === "김장 양념");
   assert.ok(ai.volume && ai.volume.total > 0, "네이버 검색량 부착");
   assert.ok(picks.some((p) => p.origin === "naver_related"), "네이버 연관 키워드 추가");
   assert.ok(ai.trend && ["up", "flat", "down"].includes(ai.trend.dir), "데이터랩 추세");
   const log = await mockLog();
-  const prompt = log.find((l) => l.path === "/v1/chat/completions").body.messages.find((m) => m.role === "user").content;
+  assert.ok(!log.some((l) => l.path === "/v1/chat/completions" || l.path === "/v1/messages"), "키워드 추천에 유료 AI 안 씀");
+  const prompt = await stepPrompt("SEO 키워드 전문가");
   assert.match(prompt, /유튜브 한국 인기 급상승/);
   assert.match(prompt, /다가오는 시즌/);
   assert.ok(log.some((l) => l.path === "/keywordstool"));
@@ -78,6 +79,9 @@ test("② 여러 키워드 → 글 1개 · ③ 제목 후보에서 대기 → �
   assert.ok(b.document.content_html.includes("말투반영"), "④ 말투 예시 반영");
   assert.ok(!b.document.content_html.includes("<script"), "④ 위험 태그 제거");
   assert.deepEqual(b.project.package.hashtags, ["김장", "절임배추", "김장양념"], "④ 해시태그 정리");
+  const hl = (await mockLog()).find((l) => JSON.stringify(l.body ?? {}).includes("해시태그 담당자"));
+  assert.ok(hl && /generateContent/.test(hl.path), "④ 해시태그는 무료 Gemini가 따로 뽑음");
+  assert.doesNotMatch(await stepPrompt("전속 작가"), /hashtags/, "글쓰기(유료)에는 해시태그 요청 없음");
   assert.equal(b.project.package.images.length, 2, "⑤ 이미지 프롬프트");
   assert.equal(b.project.review.provider, "anthropic", "⑥ Claude 검수");
   assert.equal(b.project.review.score, 88);

@@ -5,7 +5,7 @@ import { addEvent, getBlogForAi, getDocument, getProject, updateProject, writeAi
 import { extractJson, runStep, sanitizeHtml } from "./ai/run";
 import { AiError } from "./ai/providers";
 import { reviewTemplate } from "./ai/prompts";
-import { fixPrompt, postReviewPrompt, titlesPrompt, writePrompt } from "./ai/step-prompts";
+import { fixPrompt, hashtagsPrompt, postReviewPrompt, titlesPrompt, writePrompt } from "./ai/step-prompts";
 import { keywordStats, naverAdConnected } from "./searchad";
 import type { PostExtras, PostPlan } from "./posts-types";
 import { recentPosts, writtenTitles } from "./blog-posts";
@@ -222,8 +222,19 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const html = sanitizeHtml(String(raw.html ?? ""));
     if (!html) throw new AiError("AI가 본문을 돌려주지 않았습니다.", true);
     const prevExtras = (project.package as unknown as PostExtras | null) ?? null;
+    // 해시태그는 글쓰기(유료)와 따로, 가벼운 무료 모델이 뽑음. 실패하면 키워드로 대신
+    let tags: unknown[] = arr(raw.hashtags);
+    try {
+      const hp = hashtagsPrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, html });
+      const hr = await runStep({ step: "hashtags", role: "ideas", purpose: "hashtags", blog, projectId: project.id, jobId: job.id, system: hp.system, prompt: hp.prompt, json: true, maxTokens: 800, retries: 0 });
+      const got = arr(extractJson<{ hashtags?: string[] }>(hr.text).hashtags);
+      if (got.length) tags = got;
+    } catch {
+      /* 아래 키워드 대체 */
+    }
+    if (!tags.length) tags = [plan.keyword, ...plan.subKeywords];
     const extras: PostExtras = {
-      hashtags: Array.from(new Set(arr(raw.hashtags).map((h) => String(h).replace(/^#/, "").replace(/\s+/g, "")).filter(Boolean))).slice(0, 20),
+      hashtags: Array.from(new Set(tags.map((h) => String(h).replace(/^#/, "").replace(/\s+/g, "")).filter(Boolean))).slice(0, 20),
       images: arr(raw.images)
         .map((im: RawImage) => {
           const base = { prompt: String(im?.prompt ?? ""), alt: String(im?.alt ?? ""), aspect: ["1:1", "4:3", "3:4", "2:3", "3:2", "16:9", "9:16"].includes(String(im?.aspect)) ? String(im?.aspect) : "4:3" };

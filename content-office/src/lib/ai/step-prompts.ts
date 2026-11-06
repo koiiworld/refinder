@@ -66,7 +66,6 @@ ${posts.length ? `\n[내 블로그의 실제 글 목록 - 블로그 RSS에서 �
   - 글 끝에서 다른 글을 소개할 때는(블로그 문체의 마무리 규칙이 있으면 그대로 따름) 위 '내 블로그의 실제 글 목록'에서 이 글 주제와 관련 깊은 글 2~3개만 골라 <a href="주소">제목</a> 으로 넣으세요. 목록에 없는 글 제목·주소는 절대 만들지 마세요.` : ""}
   - 메인 키워드를 도입부와 소제목에 자연스럽게 넣으세요.
   - 이미지가 들어갈 자리에는 정확히 <p>[이미지 1]</p>, <p>[이미지 2]</p> 처럼 번호만 적은 문단을 넣으세요 (2~4곳).
-- hashtags: 해시태그 8~15개 (# 없이 단어만, 띄어쓰기 없이)
 ${
     blog.image_source === "official"
       ? `- images: 위 이미지 자리 번호 순서대로. 이 블로그는 AI 이미지를 만들지 않고 **제조사 공식 홈페이지의 제품 이미지**를 씁니다.
@@ -75,17 +74,35 @@ ${
   - credit: 본문에 붙일 출처 표기 (예: "출처: Apple", "출처: 삼성전자 뉴스룸")
   - alt: 한국어 이미지 설명 (대체 텍스트)
   - prompt: 빈 문자열
-형식: {"html": "...", "hashtags": ["..."], "images": [{"product": "...", "pageUrl": "https://...", "credit": "출처: ...", "alt": "...", "prompt": ""}]}`
+형식: {"html": "...", "images": [{"product": "...", "pageUrl": "https://...", "credit": "출처: ...", "alt": "...", "prompt": ""}]}`
       : `- images: 위 이미지 자리 번호 순서대로, Higgsfield 이미지 생성용 프롬프트
   - prompt: 영어. [주체] + [배경] + [구도·카메라] + [조명] + [스타일]. 블로그 이미지 스타일 "${blog.image_style}"를 반영. 글자·손·복잡한 동작은 피함
   - alt: 한국어 이미지 설명 (대체 텍스트)
   - aspect: "1:1", "4:3", "3:4", "2:3", "3:2", "16:9", "9:16" 중 하나 (블로그 이미지 스타일에 비율 규칙이 있으면 그대로 따름. 이미지 1번이 대표(메인) 이미지)
-형식: {"html": "...", "hashtags": ["..."], "images": [{"prompt": "...", "alt": "...", "aspect": "4:3"}]}`
+형식: {"html": "...", "images": [{"prompt": "...", "alt": "...", "aspect": "4:3"}]}`
   }`;
   return { system, prompt };
 }
 
 // ───────── ⑥ 글·이미지 검수 ─────────
+/** ④ 해시태그: 글을 다 쓴 뒤 가벼운(무료) 모델이 따로 뽑음 */
+export function hashtagsPrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; html: string }) {
+  const text = input.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 3000);
+  const system = `당신은 "${blog.name}" 블로그의 해시태그 담당자입니다. 반드시 JSON 객체 하나만 출력합니다.`;
+  const prompt = `[플랫폼] ${blog.platform === "tistory" ? "티스토리" : "네이버 블로그"}
+[제목] ${input.title}
+[메인 키워드] ${input.keyword}
+[보조 키워드] ${input.subKeywords.join(", ") || "(없음)"}
+[본문 요약용 텍스트] ${text}
+
+이 글에 붙일 해시태그 8~15개를 뽑으세요.
+- 메인 키워드는 반드시 포함, 실제로 검색할 만한 한국어 단어 위주
+- # 없이 단어만, 띄어쓰기 없이 (예: 김장양념)
+- 본문과 관계없는 인기 태그·중복 태그 금지
+형식: {"hashtags": ["...", "..."]}`;
+  return { system, prompt };
+}
+
 export function postReviewPrompt(blog: Blog, input: { title: string; keyword: string; html: string; hashtags: string[]; images: { alt: string; prompt: string; url?: string | null; kind?: string; product?: string; credit?: string }[] }) {
   const system = `당신은 까다로운 블로그 편집장이자 팩트체커입니다. 다른 AI가 쓴 글과 이미지를 검수합니다. 반드시 JSON 객체 하나만 출력합니다.
 - 인터넷 검색은 하지 않습니다. 확실하지 않은 사실은 "확인 필요"로 둡니다.
