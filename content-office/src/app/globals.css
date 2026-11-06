@@ -407,3 +407,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .goal-bar { position: relative; height: 12px; border-radius: 6px; background: var(--panel-2); overflow: visible; }
 .goal-fill { height: 100%; border-radius: 6px; transition: width .3s; }
 .goal-pace { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .5; }
+
+/* ✅ 할 일 */
+.todo-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.todo-row { align-items: flex-start !important; gap: 10px; flex-wrap: nowrap !important; }
+.todo-check { width: 22px; height: 22px; margin-top: 1px; flex-shrink: 0; }
+.todo-today-btn { font-weight: 800; white-space: nowrap; min-width: 150px; justify-content: center; }
+@media (max-width: 640px) { .todo-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .todo-fields input, .todo-fields select { font-size: 16px; } }
+.todo-today-btn { background: var(--bad); color: #fff !important; border-color: transparent; }
+.todo-today-btn:hover { filter: brightness(1.08); }

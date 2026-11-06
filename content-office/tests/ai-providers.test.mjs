@@ -909,3 +909,73 @@ test("💾 저장 안전성: 직접 수정 → 다시 열기 → 늦게 도착�
   const other = (await call("/api/posts")).data.find((x) => x.id !== id && x.blog_id !== "blog_algokitchen");
   if (other) assert.equal((await call(`/api/projects/${other.id}/versions/${base.id}`, "POST")).status, 400, "다른 글 버전 차단");
 });
+
+const kstNow = () => new Date(Date.now() + 9 * 3600 * 1000);
+const kstDate = (addDays = 0) => new Date(kstNow().getTime() + addDays * 86400000).toISOString().slice(0, 10);
+const kstTime = (addMin) => new Date(kstNow().getTime() + addMin * 60000).toISOString().slice(11, 16);
+const tgSends = async () => (await mockLog()).filter((l) => l.path === "/bottest-tg-token/sendMessage");
+
+test("✅ 할 일: 대시보드 🚨오늘할일🚨 → 오늘 탭 · 추가·다시 열기·예정·완료·수정·삭제 (한국 날짜)", async () => {
+  const home = (await (await fetch(`${BASE}/`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(home.includes('href="/todos?tab=today"') && home.includes("🚨오늘할일🚨"), "대시보드 버튼");
+  const t1 = await call("/api/todos", "POST", { title: "김장 레시피 사진 고르기", due_date: kstDate(0), blog_id: "blog_algokitchen" });
+  assert.equal(t1.status, 200, JSON.stringify(t1.data));
+  const t2 = (await call("/api/todos", "POST", { title: "다음 주 글감 정리", due_date: kstDate(3) })).data;
+  assert.equal((await call("/api/todos", "POST", { title: " " })).status, 400);
+  assert.equal((await call("/api/todos", "POST", { title: "x", due_time: "25:99" })).status, 400);
+  // 다시 열기
+  let today = (await call("/api/todos?tab=today")).data;
+  assert.ok(today.some((t) => t.title === "김장 레시피 사진 고르기" && t.blog_name === "네이버 알고키친"));
+  assert.ok(!today.some((t) => t.id === t2.id), "미래는 예정 탭");
+  assert.ok((await call("/api/todos?tab=upcoming")).data.some((t) => t.id === t2.id));
+  const page = (await (await fetch(`${BASE}/todos?tab=today`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(page.includes("김장 레시피 사진 고르기"), "오늘 탭 화면");
+  // 완료 → 완료 탭, 되돌리기
+  await call(`/api/todos/${t1.data.id}`, "PUT", { done: true });
+  assert.ok((await call("/api/todos?tab=done")).data.some((t) => t.id === t1.data.id));
+  assert.ok(!(await call("/api/todos?tab=today")).data.some((t) => t.id === t1.data.id));
+  await call(`/api/todos/${t1.data.id}`, "PUT", { done: false, title: "김장 사진 고르기(수정)" });
+  today = (await call("/api/todos?tab=today")).data;
+  assert.ok(today.some((t) => t.title === "김장 사진 고르기(수정)"));
+  await call(`/api/todos/${t2.id}`, "DELETE");
+  assert.ok(!(await call("/api/todos?tab=upcoming")).data.some((t) => t.id === t2.id));
+});
+
+test("🔔 텔레그램 알림: 서버 예약 · 시간 변경 시 갱신 · 완료/삭제/끄기 취소 · 재시도해도 한 번만 · 과거 시각 예약 안 함", async () => {
+  // 지난 시각 → 예약 안 함
+  const past = (await call("/api/todos", "POST", { title: "지난 알림", due_date: kstDate(-1), due_time: "09:00", notify: true })).data;
+  assert.equal(past.notify, true);
+  let row = (await call("/api/todos?tab=today")).data.find((t) => t.id === past.id);
+  assert.equal(row.notice, null, "지난 시각은 예약 없음");
+  // 2분 뒤 → 예약, 시간 바꾸면 새 예약(이전은 취소)
+  const t = (await call("/api/todos", "POST", { title: "알림 시험", due_date: kstDate(0), due_time: kstTime(120), notify: true })).data;
+  row = (await call("/api/todos?tab=today")).data.find((x) => x.id === t.id) ?? (await call("/api/todos?tab=upcoming")).data.find((x) => x.id === t.id);
+  assert.equal(row.notice.status, "pending");
+  await call(`/api/todos/${t.id}`, "PUT", { due_time: kstTime(180) });
+  // 끄기 → 취소, 다시 켜기 → 예약, 완료 → 취소
+  await call(`/api/todos/${t.id}`, "PUT", { notify: false });
+  await call(`/api/todos/${t.id}`, "PUT", { notify: true });
+  await call(`/api/todos/${t.id}`, "PUT", { done: true });
+  await call(`/api/todos/${t.id}`, "DELETE");
+  // 곧 울릴 알림 (1분 뒤 이내로 시각을 맞춤): 텔레그램이 한 번 실패해도 재시도 후 1번만 발송
+  await call("/__reset", "POST", undefined, MOCK);
+  await call("/__tgfail?n=1", "GET", undefined, MOCK);
+  const soon = (await call("/api/todos", "POST", { title: "곧 울림", due_date: kstDate(0), due_time: kstTime(0), notify: true, blog_id: "blog_algokitchen" })).data;
+  for (let i = 0; i < 90; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    const st = (await call("/api/todos?tab=today")).data.find((x) => x.id === soon.id)?.notice?.status;
+    if (st === "sent" || st === "failed") break;
+  }
+  await new Promise((r) => setTimeout(r, 2000)); // 그 뒤에 또 보내지 않는지
+  const all = (await mockLog()).filter((l) => l.path === "/bottest-tg-token/sendMessage" && l.body?.text?.includes("곧 울림"));
+  assert.equal(all.length, 2, "실패 1번 + 성공 1번");
+  row = (await call("/api/todos?tab=today")).data.find((x) => x.id === soon.id);
+  assert.equal(row.notice.status, "sent", JSON.stringify(row.notice));
+  assert.match(all[1].body.text, /곧 울림[\s\S]*네이버 알고키친/);
+  assert.equal(String(all[1].body.chat_id), "987654");
+  // 이전에 만든(취소된) 알림은 하나도 안 감
+  assert.ok(!(await tgSends()).some((l) => /알림 시험|지난 알림/.test(l.body?.text ?? "")), "취소된 예약은 발송 안 됨");
+  // 설정 도우미: 채팅 ID 찾기 (메시지 안 보냄)
+  const f = await call("/api/telegram", "POST", { action: "find_chat" });
+  assert.deepEqual(f.data.chats, [{ id: "987654", name: "민" }]);
+});

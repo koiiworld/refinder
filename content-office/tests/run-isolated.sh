@@ -24,7 +24,7 @@ env -i PATH="$PATH" HOME="$HOME" PGLITE_DIR=./data/ai \
   OPENAI_BASE_URL=http://localhost:4110 ANTHROPIC_BASE_URL=http://localhost:4110 GOOGLE_AI_BASE_URL=http://localhost:4110 HIGGSFIELD_BASE_URL=http://localhost:4110 \
   NAVER_AD_API_KEY=test-ad-key NAVER_AD_SECRET_KEY=test-ad-secret NAVER_AD_CUSTOMER_ID=12345 NAVER_AD_BASE_URL=http://localhost:4110 \
   NAVER_CLIENT_ID=test-dl-id NAVER_CLIENT_SECRET=test-dl-key NAVER_DATALAB_URL=http://localhost:4110/search-trend/v1/search \
-  YOUTUBE_API_KEY=test-yt-key YOUTUBE_BASE_URL=http://localhost:4110 NAVER_BLOG_BASE_URL=http://localhost:4110 NAVER_RSS_BASE_URL=http://localhost:4110 NAVER_MBLOG_BASE_URL=http://localhost:4110 OFFICIAL_IMAGES_ALLOW_LOCAL=1 VIDEO_ALLOW_LOCAL=1 PUBLIC_BASE_URL=https://app.example.test \
+  YOUTUBE_API_KEY=test-yt-key YOUTUBE_BASE_URL=http://localhost:4110 NAVER_BLOG_BASE_URL=http://localhost:4110 NAVER_RSS_BASE_URL=http://localhost:4110 NAVER_MBLOG_BASE_URL=http://localhost:4110 OFFICIAL_IMAGES_ALLOW_LOCAL=1 VIDEO_ALLOW_LOCAL=1 PUBLIC_BASE_URL=https://app.example.test TELEGRAM_BOT_TOKEN=test-tg-token TELEGRAM_CHAT_ID=987654 TELEGRAM_API_BASE=http://localhost:4110 YTDLP_NO_UPDATE=1 \
   COUPANG_ACCESS_KEY=test-coupang-access COUPANG_SECRET_KEY=test-coupang-secret COUPANG_API_BASE_URL=http://localhost:4110 NAVER_SEARCH_URL=http://localhost:4110/v1/search/blog.json NAVER_SECTION_BASE_URL=http://localhost:4110 GOOGLE_TRENDS_RSS_URL=http://localhost:4110/trending/rss \
   ./node_modules/.bin/next start -p 3102 > ai.log 2>&1 &
 AI=$!

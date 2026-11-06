@@ -15,6 +15,9 @@ const P = {
   film: "M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4",
   phone: "M7 2h10v20H7zM11 18h2",
   pulse: "M3 12h4l2-6 4 12 2-6h6",
+  check: "M4 12l5 5L20 6",
+  bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z",
+  cal: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   gear: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.6 4.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5.3z",
 };
 
@@ -28,6 +31,9 @@ function Icon({ d }: { d: string }) {
 
 const ITEMS = [
   { href: "/", label: "대시보드", short: "홈", sub: "성과·비용·운영 상태", icon: P.home },
+  { href: "/todos", label: "할 일", short: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림", icon: P.check, desktopOnly: true },
+  { href: "/ideas", label: "아이디어 노트", short: "아이디어", sub: "한 줄 메모 · 할 일·글 기획으로", icon: P.bulb, desktopOnly: true },
+  { href: "/calendar", label: "마케팅 달력", short: "달력", sub: "시즌·행사·발행 예정일", icon: P.cal, desktopOnly: true },
   { href: "/trends", label: "트렌드 뷰어", short: "트렌드", sub: "유튜브 급상승·스크랩", icon: P.trend },
   { href: "/hot", label: "블로그 핫이슈", short: "핫이슈", sub: "네이버 블로그 주제별 반응 많은 글", icon: P.fire, desktopOnly: true },
   { href: "/new", label: "글 만들기", short: "글쓰기", sub: "① 키워드 추천 · ② 선택", icon: P.pen },

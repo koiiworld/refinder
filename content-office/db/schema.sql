@@ -384,3 +384,54 @@ CREATE TABLE IF NOT EXISTS studio_projects (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- ✅ 할 일 (날짜·시간은 한국 시간 기준 문자열로 저장)
+CREATE TABLE IF NOT EXISTS todos (
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL,
+  due_date    TEXT NOT NULL,              -- YYYY-MM-DD (한국)
+  due_time    TEXT,                       -- HH:MM (한국, 선택)
+  blog_id     TEXT REFERENCES blogs(id) ON DELETE SET NULL,
+  project_id  TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  idea_id     TEXT,
+  memo        TEXT NOT NULL DEFAULT '',
+  notify      BOOLEAN NOT NULL DEFAULT FALSE,
+  done_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS todos_due_idx ON todos(due_date);
+-- 🔔 텔레그램 알림 예약 (할 일 하나에 대기 중 예약은 하나만)
+CREATE TABLE IF NOT EXISTS todo_notifications (
+  id          TEXT PRIMARY KEY,
+  todo_id     TEXT NOT NULL,
+  send_at     TIMESTAMPTZ NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'pending',   -- pending | sending | sent | canceled | failed
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  error       TEXT,
+  sent_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS todo_notifications_one_pending ON todo_notifications(todo_id) WHERE status = 'pending';
+-- 💡 아이디어 노트
+CREATE TABLE IF NOT EXISTS ideas_notes (
+  id          TEXT PRIMARY KEY,
+  memo        TEXT NOT NULL,
+  blog_id     TEXT REFERENCES blogs(id) ON DELETE SET NULL,
+  link        TEXT NOT NULL DEFAULT '',
+  source      TEXT NOT NULL DEFAULT '',          -- calendar:<이벤트 키> 등
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- 📅 마케팅 달력: 직접 넣은 행사(비정기·비공식 포함)
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL,
+  start_date  TEXT NOT NULL,
+  end_date    TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'irregular',  -- official | irregular
+  link        TEXT NOT NULL DEFAULT '',
+  memo        TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- 글 발행 예정일 (달력 표시용, 한국 날짜)
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS publish_date TEXT;

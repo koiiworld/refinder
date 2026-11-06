@@ -29,12 +29,12 @@ const g = globalThis as unknown as {
 
 export async function enqueue(
   type: string,
-  opts: { projectId?: string | null; blogId?: string | null; payload?: Record<string, unknown>; maxAttempts?: number },
+  opts: { projectId?: string | null; blogId?: string | null; payload?: Record<string, unknown>; maxAttempts?: number; runAfter?: Date },
 ): Promise<string> {
   const id = newId("job_");
   await q(
-    `INSERT INTO jobs (id, project_id, blog_id, type, payload, max_attempts) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [id, opts.projectId ?? null, opts.blogId ?? null, type, j(opts.payload ?? {}), opts.maxAttempts ?? 6],
+    `INSERT INTO jobs (id, project_id, blog_id, type, payload, max_attempts, run_after) VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::timestamptz, NOW()))`,
+    [id, opts.projectId ?? null, opts.blogId ?? null, type, j(opts.payload ?? {}), opts.maxAttempts ?? 6, opts.runAfter ? opts.runAfter.toISOString() : null],
   );
   ensureWorker();
   setTimeout(() => void tick(), 10);
@@ -190,6 +190,11 @@ const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, 
 const arr = (v: unknown) => (Array.isArray(v) ? v : []);
 
 const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
+  // 🔔 할 일 텔레그램 알림 (예약 시각에 실행, 중복 발송 방지)
+  async todo_notify(job) {
+    const { sendTodoNotification } = await import("./todos");
+    await sendTodoNotification(String(job.payload.notificationId));
+  },
   // 🩺 블로그 진단 (화면을 떠나도 서버에서 계속)
   async diagnose(job) {
     const { diagnoseBlog, setDiagnoseState } = await import("./diagnose");

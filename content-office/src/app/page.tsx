@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { dashboardData, PASS_SCORE } from "@/lib/dashboard";
+import { todayCount } from "@/lib/todos";
 import { ensureWorker } from "@/lib/jobs";
 import { fmtDate, fmtUsd, KRW_PER_USD } from "@/components/ui";
 import { AiBalances, BlogTopButton, CostDays, HealthBanner, RevenueCard, TopKeywordsCard, TrendChart } from "./DashboardParts";
@@ -10,6 +11,7 @@ const pct = (v: number | null) => (v == null ? "-" : `${Math.round(v * 100)}%`);
 const num = (v: number | null) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
 
 export default async function Dashboard() {
+  const todoN = await todayCount().catch(() => 0);
   ensureWorker();
   const d = await dashboardData();
   const [y, m] = d.month.split("-").map(Number);
@@ -25,7 +27,10 @@ export default async function Dashboard() {
             {y}년 {m}월 기준 · 앱에 실제로 기록된 숫자만 보여 줍니다. 수익은 각 정산 화면의 숫자를 직접 입력하세요.
           </p>
         </div>
-        <Link href="/new" className="btn btn-primary">+ 글 만들기</Link>
+        <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
+          <Link href="/todos?tab=today" className="btn btn-danger todo-today-btn" aria-label={`오늘 할 일 ${todoN}개`}>🚨오늘할일🚨{todoN > 0 && <span className="badge" style={{ marginLeft: 6, background: "rgba(255,255,255,.25)", color: "inherit" }}>{todoN > 99 ? "99+" : todoN}</span>}</Link>
+          <Link href="/new" className="btn btn-primary">+ 글 만들기</Link>
+        </div>
       </div>
 
       <div className="stack" style={{ gap: 16 }}>

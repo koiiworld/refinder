@@ -100,6 +100,20 @@ http
         { logNo: 224000000003, sympathyCnt: 9, commentCnt: 1, readCount: null, titleWithInspectMessage: "김장 준비" },
       ] } });
     }
+    // 텔레그램 봇 API (모의 발송 — 실제로 보내지 않음)
+    const tg = url.pathname.match(/^\/bottest-tg-token\/(sendMessage|getUpdates)$/);
+    if (tg) {
+      if (tg[1] === "getUpdates") return send(res, 200, { ok: true, result: [{ message: { chat: { id: 987654, first_name: "민" } } }] });
+      if (globalThis.__tgFail) {
+        globalThis.__tgFail--;
+        return send(res, 502, { ok: false, description: "Bad Gateway" });
+      }
+      return send(res, 200, { ok: true, result: { message_id: 1 } });
+    }
+    if (url.pathname === "/__tgfail") {
+      globalThis.__tgFail = Number(url.searchParams.get("n") ?? 1);
+      return send(res, 200, { ok: true });
+    }
     // 영상공장: 직접 받을 수 있는 영상 파일
     if (url.pathname === "/sample.mp4" && process.env.SAMPLE_MP4) {
       const buf = (await import("node:fs")).readFileSync(process.env.SAMPLE_MP4);

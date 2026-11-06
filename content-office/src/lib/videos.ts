@@ -95,6 +95,7 @@ const clean = (dir: string) => fs.rmSync(dir, { recursive: true, force: true });
 const gy = globalThis as unknown as { __ytdlpUpdated?: number };
 export async function updateYtdlp(force = false): Promise<string> {
   if (!fs.existsSync(ytdlpPath())) return "받기 도구 없음";
+  if (process.env.YTDLP_NO_UPDATE === "1") return "자동 업데이트 꺼짐";
   if (!force && gy.__ytdlpUpdated && Date.now() - gy.__ytdlpUpdated < 7 * 86400000) return "최근에 확인함";
   gy.__ytdlpUpdated = Date.now();
   const r = await run(ytdlpPath(), ["-U"], { timeoutMs: 120_000 });
@@ -236,9 +237,8 @@ export async function runVideoFetch(videoId: string, removeSubs: boolean) {
   try {
     await setVideo(videoId, { status: "running", message: "영상 받는 중…" });
     if (!fs.existsSync(ytdlpPath())) throw new Error("영상 받기 도구(yt-dlp)가 설치되지 않았어요.");
-    await updateYtdlp().catch(() => "");
     const args = [
-      "--no-playlist", "--no-warnings", "--no-progress", "-j", "--no-simulate",
+      "--no-playlist", "--no-warnings", "--no-progress", "-j", "--no-simulate", "--retries", "2", "--extractor-retries", "1", "--socket-timeout", "20",
       "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]/b",
       "--merge-output-format", "mp4", "--ffmpeg-location", ffmpegPath(), "--max-filesize", "300M",
       "-o", "src.%(ext)s", v.source_url,
@@ -247,10 +247,14 @@ export async function runVideoFetch(videoId: string, removeSubs: boolean) {
     let src = fs.readdirSync(dir).find((f) => /^src\.(mp4|mkv|webm|mov)$/.test(f));
     // 사이트가 바뀌어 실패한 것 같으면: 받기 도구를 최신으로 바꾸고 한 번 더
     if ((r.code !== 0 || !src) && /Unable to extract|Unsupported|HTTP Error 4\d\d|Failed to parse|Requested format|nsig|Sign in to confirm/i.test(r.err)) {
-      await setVideo(videoId, { message: "받기 도구를 최신으로 바꾸고 다시 시도 중…" });
-      await updateYtdlp(true).catch(() => "");
-      r = await run(ytdlpPath(), args, { cwd: dir, timeoutMs: 10 * 60 * 1000 });
-      src = fs.readdirSync(dir).find((f) => /^src\.(mp4|mkv|webm|mov)$/.test(f));
+      await setVideo(videoId, { message: "받기 도구를 최신으로 바꾸는 중…" });
+      const up = await updateYtdlp(true).catch(() => "");
+      // 실제로 새 버전으로 바뀌었을 때만 다시 시도
+      if (/Updated yt-dlp|Updating to/i.test(up)) {
+        await setVideo(videoId, { message: "새 버전으로 다시 받는 중…" });
+        r = await run(ytdlpPath(), args, { cwd: dir, timeoutMs: 10 * 60 * 1000 });
+        src = fs.readdirSync(dir).find((f) => /^src\.(mp4|mkv|webm|mov)$/.test(f));
+      }
     }
     const { markFail, markOk } = await import("./health");
     if (r.code !== 0 || !src) {
