@@ -5,6 +5,7 @@ import { getBlogForAi, getDocument, getProject } from "./repo";
 import { extractJson, runStep } from "./ai/run";
 import type { PostExtras } from "./posts-types";
 import { seasonEvents } from "./seasons";
+import { importPostWithImages } from "./sample-html";
 
 /**
  * 📱 인스타 캐러셀(카드뉴스)
@@ -26,7 +27,7 @@ export type Carousel = {
   caption: string;
   hashtags: string[];
   images: CarouselImage[];
-  style: CarouselStyle & { hooks?: string[]; format?: string; niche?: string };
+  style: CarouselStyle & { hooks?: string[]; format?: string; niche?: string; sourceText?: string; sourceUrl?: string };
   ai: { provider?: string; model?: string; at?: string };
   created_at: string;
   updated_at: string;
@@ -77,6 +78,41 @@ export async function createFromProject(projectId: string) {
   return id;
 }
 
+async function allowedHosts() {
+  return (await q<{ url: string }>("SELECT url FROM blogs WHERE COALESCE(url,'') <> ''")).map((r) => {
+    try {
+      return new URL(r.url).hostname.toLowerCase();
+    } catch {
+      return "";
+    }
+  });
+}
+
+/** 이미 발행한 블로그 글 주소에서 만들기 (본문 + 글에 올린 사진) */
+export async function createFromBlogUrl(url: string, blogId?: string | null) {
+  const post = await importPostWithImages(url, await allowedHosts());
+  if (post.text.length < 100) throw new Error("글 본문을 읽지 못했어요 (비공개 글이거나 지원하지 않는 형식).");
+  const id = newId("car_");
+  await q("INSERT INTO carousels (id, blog_id, title, topic, images, style) VALUES ($1,$2,$3,$4,$5,$6)", [
+    id, blogId || null, post.title, post.title, j(post.images.slice(0, 20).map((u, i) => ({ url: u, alt: `블로그 사진 ${i + 1}` }))),
+    j({ ...DEFAULT_STYLE, sourceText: post.text.slice(0, 8000), sourceUrl: url }),
+  ]);
+  await generate(id);
+  return id;
+}
+
+/** 블로그 글 주소의 사진을 이 캐러셀 사진 목록에 추가 */
+export async function importBlogImages(id: string, url: string) {
+  const c = await getCarousel(id);
+  if (!c) throw new Error("캐러셀을 찾을 수 없습니다.");
+  const post = await importPostWithImages(url, await allowedHosts());
+  const add = post.images.filter((u) => !c.images.some((x) => x.url === u)).map((u, i) => ({ url: u, alt: `${post.title.slice(0, 20)} ${i + 1}` }));
+  if (!add.length) throw new Error("이 글에서 새로 가져올 사진을 찾지 못했어요.");
+  const images = [...c.images, ...add].slice(0, 40);
+  await q("UPDATE carousels SET images=$2, updated_at=NOW() WHERE id=$1", [id, j(images)]);
+  return images.length - c.images.length;
+}
+
 /** 블로그와 별개로 주제만으로 만들기 */
 export async function createFromTopic(input: { topic: string; niche?: string; format?: string; blogId?: string | null }) {
   const topic = input.topic.trim().slice(0, 200);
@@ -96,11 +132,12 @@ export async function generate(id: string, feedback = "") {
   const blog = c.blog_id ? await getBlogForAi(c.blog_id) : null;
   const doc = c.project_id ? await getDocument(c.project_id) : null;
   const fmt = FORMATS.find((f) => f.id === c.style?.format)?.label ?? "";
-  const source = doc?.content_html ? text(doc.content_html).slice(0, 6000) : "";
+  const source = doc?.content_html ? text(doc.content_html).slice(0, 6000) : (c.style?.sourceText ?? "").slice(0, 6000);
   const system = `당신은 저장·공유·친구 태그가 많이 나오는 인스타그램 캐러셀(카드뉴스) 카피라이터입니다. 짧고 리듬감 있게, 해요체로 씁니다. 확인할 수 없는 수치·효과를 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.`;
   const prompt = `${blog ? `[계정 분야] ${blog.name} · ${blog.category}\n` : ""}${c.style?.niche ? `[계정 분야] ${c.style.niche}\n` : ""}[주제] ${c.title}
 ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내용만 근거로]\n${source}\n` : ""}${c.images.length ? `\n[쓸 수 있는 사진 (번호: 설명)]\n${c.images.map((im, i) => `${i}: ${im.alt || "(설명 없음)"}`).join("\n")}\n` : ""}${feedback ? `\n[수정 요청 - 반드시 반영]\n${feedback}\n` : ""}
 인스타 캐러셀 6~9장을 만드세요.
+- 사진이 있으면 되도록 많은 장에 서로 다른 사진을 배치하세요 (같은 사진 반복은 최소로).
 - 1장(cover): 스크롤을 멈추게 하는 후킹. headline 18자 이내(줄바꿈 \\n 1번 가능), body 는 한 줄 보조 문구(20자 이내).
   잘 먹히는 틀: 숫자+결과("10분이면 김밥집 맛"), 실수 경고("이렇게 하면 다 터져요"), 저장 유도("저장 안 하면 후회해요"), 반전·호기심("○○ 넣으면 달라져요").
 - 2장: 끝까지 넘기게 만드는 이유(결과 미리보기·공감).
@@ -108,7 +145,7 @@ ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내�
 - 마지막 장(cta): 저장 + 친구 태그 + 팔로우 유도. 주제에 맞는 태그 문구 (예: "김밥 좋아하는 친구 태그 🍙", "같이 갈 친구 소환").
 - image: 그 장에 어울리는 사진 번호, 없으면 null. 표지는 가장 먹음직스럽거나 결과가 보이는 사진.
 - hooks: 표지 headline 대안 3개 (서로 다른 틀)
-- caption: 첫 줄은 후킹 한 줄(40자 이내) → 빈 줄 → 핵심 요약 3~5줄(이모지 조금) → 저장·태그 유도 한 줄${doc ? ' → "전체 내용은 프로필 링크에서"' : ""}
+- caption: 첫 줄은 후킹 한 줄(40자 이내) → 빈 줄 → 핵심 요약 3~5줄(이모지 조금) → 저장·태그 유도 한 줄${doc || c.style?.sourceUrl ? ' → "전체 내용은 프로필 링크에서"' : ""}
 - hashtags: 3~5개 (# 없이, 띄어쓰기 없이, 주제와 직접 관련된 것만)
 형식: {"slides": [{"kind": "cover", "headline": "", "body": "", "image": 0}], "hooks": ["", "", ""], "caption": "", "hashtags": [""]}`;
   const res = await runStep({ step: "carousel", purpose: "carousel", blog, projectId: c.project_id, system, prompt, json: true, maxTokens: 4000 });

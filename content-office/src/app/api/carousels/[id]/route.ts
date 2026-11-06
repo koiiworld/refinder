@@ -1,5 +1,5 @@
 import { body, fail, handle, ok, type Ctx } from "@/lib/api";
-import { addUpload, deleteCarousel, generate, getCarousel, saveCarousel, type CarouselStyle, type Slide } from "@/lib/carousel";
+import { addUpload, deleteCarousel, generate, getCarousel, importBlogImages, saveCarousel, type CarouselStyle, type Slide } from "@/lib/carousel";
 
 export async function GET(_req: Request, ctx: Ctx) {
   return handle(async () => {
@@ -26,12 +26,15 @@ export async function PUT(req: Request, ctx: Ctx) {
 export async function POST(req: Request, ctx: Ctx) {
   return handle(async () => {
     const id = (await ctx.params).id;
-    const b = await body<{ action?: string; feedback?: string; dataUrl?: string }>(req);
+    const b = await body<{ action?: string; feedback?: string; dataUrl?: string; url?: string }>(req);
     try {
       if (b.action === "regenerate") await generate(id, String(b.feedback ?? "").slice(0, 2000));
       else if (b.action === "upload") {
         const index = await addUpload(id, String(b.dataUrl ?? ""));
         return ok({ index, carousel: await getCarousel(id) });
+      } else if (b.action === "import_images") {
+        const added = await importBlogImages(id, String(b.url ?? ""));
+        return ok({ added, carousel: await getCarousel(id) });
       } else return fail("알 수 없는 작업입니다.");
       return ok(await getCarousel(id));
     } catch (e) {

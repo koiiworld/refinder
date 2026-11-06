@@ -371,3 +371,15 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .carousel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .carousel-ideas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 @media (max-width: 640px) { .carousel-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* 📋 핫이슈 리포트 */
+.hot-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.hot-step { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 10px 8px; border-radius: 12px; background: var(--panel-2); position: relative; }
+.hot-step:not(.last)::after { content: "→"; position: absolute; right: -9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; }
+.hot-step.last { background: transparent; border: 1px solid var(--line); }
+.hot-report { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+@media (max-width: 640px) {
+  .hot-flow { grid-template-columns: minmax(0, 1fr); }
+  .hot-step:not(.last)::after { content: "↓"; right: auto; left: 50%; top: auto; bottom: -11px; transform: translateX(-50%); }
+  .hot-report { grid-template-columns: minmax(0, 1fr); }
+}

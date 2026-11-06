@@ -29,13 +29,16 @@ ${ctx.hint || "(없음)"}
 }
 
 // ───────── ③ SEO 제목 추천·선택 ─────────
-export function titlesPrompt(blog: Blog, keywords: string[], related: { keyword: string; total: number }[], written: string[] = []) {
+const briefText = (b?: import("../posts-types").PostBrief) =>
+  b ? `\n[이 글의 기획 - 핫이슈 리포트에서 블로그 주인이 승인한 글감]\n이슈: ${b.issue}\n추천 제목: ${b.title}\n선정 이유: ${b.why}\n콘텐츠 방향: ${b.direction}\n원출처: ${b.sources.map((s) => `${s.title} (${s.url})`).join(" / ") || "(없음)"}\n` : "";
+
+export function titlesPrompt(blog: Blog, keywords: string[], related: { keyword: string; total: number }[], written: string[] = [], brief?: import("../posts-types").PostBrief) {
   const system = `당신은 네이버·구글 SEO 제목 전문가입니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
   const prompt = `${blogContext(blog)}
 ${styleSamplesText(blog)}
 [사용자가 고른 키워드 - 첫 번째가 메인]
 ${keywords.join(", ")}
-
+${briefText(brief)}
 [네이버 연관 키워드와 월간 검색수 - 네이버 검색광고 실제 데이터]
 ${related.length ? related.map((r) => `${r.keyword}: ${r.total.toLocaleString()}`).join("\n") : "(데이터 없음)"}
 
@@ -52,7 +55,7 @@ best 는 candidates 의 번호(0부터)입니다.`;
 }
 
 // ───────── ④ 글 작성 (해시태그·이미지 프롬프트 포함) ─────────
-export function writePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; feedback?: string; previousHtml?: string; myPosts?: { title: string; url: string }[]; titleByUser?: boolean }) {
+export function writePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; feedback?: string; previousHtml?: string; myPosts?: { title: string; url: string }[]; titleByUser?: boolean; brief?: import("../posts-types").PostBrief }) {
   const posts = (input.myPosts ?? []).filter((p) => p.title.trim() !== input.title.trim());
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 블로그 문체를 정확히 따릅니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
   const prompt = `${blogContext(blog)}
@@ -60,7 +63,7 @@ ${styleSamplesText(blog)}
 [제목] ${input.title}${input.titleByUser ? "\n(사용자가 직접 고친 제목입니다. 제목에 나온 제품·모델·주제·각도를 기준으로 본문을 쓰세요. 메인 키워드와 다르면 제목을 따르세요.)" : ""}
 [메인 키워드] ${input.keyword}
 [함께 넣을 키워드] ${input.subKeywords.join(", ") || "(없음)"}
-${posts.length ? `\n[내 블로그의 실제 글 목록 - 블로그 RSS에서 가져옴 (제목 | 주소)]\n${posts.map((p) => `- ${p.title} | ${p.url}`).join("\n")}\n` : ""}${input.previousHtml ? `\n[이전 원고]\n${input.previousHtml}\n` : ""}${input.feedback ? `\n[수정 요청 - 반드시 반영]\n${input.feedback}\n` : ""}
+${input.brief ? `${briefText(input.brief)}- 위 기획의 방향을 따르되, 원출처에서 확인되는 사실만 쓰고 확실하지 않은 숫자·날짜는 [확인 필요]로 두세요. 본문 끝에 참고한 원출처를 '참고:' 로 짧게 밝히세요.\n` : ""}${posts.length ? `\n[내 블로그의 실제 글 목록 - 블로그 RSS에서 가져옴 (제목 | 주소)]\n${posts.map((p) => `- ${p.title} | ${p.url}`).join("\n")}\n` : ""}${input.previousHtml ? `\n[이전 원고]\n${input.previousHtml}\n` : ""}${input.feedback ? `\n[수정 요청 - 반드시 반영]\n${input.feedback}\n` : ""}
 블로그 본문을 작성하세요.
 - html: 본문 HTML 조각 (h2, h3, p, ul, ol, li, strong, table, blockquote, a 만 사용, 제목 h1 은 쓰지 않음)${posts.length ? `
   - 글 끝에서 다른 글을 소개할 때는(블로그 문체의 마무리 규칙이 있으면 그대로 따름) 위 '내 블로그의 실제 글 목록'에서 이 글 주제와 관련 깊은 글 2~3개만 골라 <a href="주소">제목</a> 으로 넣으세요. 목록에 없는 글 제목·주소는 절대 만들지 마세요.` : ""}

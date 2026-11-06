@@ -19,6 +19,7 @@ export default async function Trends({ searchParams }: { searchParams: Promise<{
           <h1>트렌드 뷰어</h1>
           <p className="sub">유튜브 한국 인기 급상승 영상입니다. 마음에 드는 건 📌 스크랩해 두고, ✍️ 글감으로 누르면 그 주제로 키워드 추천을 시작합니다.</p>
         </div>
+        <Link href="/hot" className="btn btn-sm">📰 블로그 핫이슈</Link>
       </div>
 
       <nav className="trend-tabs" aria-label="카테고리">

@@ -71,6 +71,42 @@ export async function fetchNaverPostHtml(p: { blogId: string; logNo: string }) {
  * 허용: 네이버 블로그, *.tistory.com, 앱에 등록한 블로그 주소의 도메인 (그 외 주소는 내부망 접근 방지를 위해 차단)
  */
 export async function importPostFromUrl(raw: string, allowedHosts: string[]) {
+  const { title, html } = await loadPost(raw, allowedHosts);
+  return { title, text: sampleHtmlToText(html) };
+}
+
+/** 블로그 글 주소 → { 제목, 본문, 본문 사진 주소들 } (캐러셀 등에서 사진 재사용) */
+export async function importPostWithImages(raw: string, allowedHosts: string[]) {
+  const { title, html, url } = await loadPost(raw, allowedHosts);
+  return { title, text: sampleHtmlToText(html), images: postImages(html, url) };
+}
+
+/** 글 본문 사진만 골라냄 (프로필·아이콘·스티커 제외) */
+export function postImages(html: string, url: URL): string[] {
+  const start = Math.max(0, html.search(/se-main-container|class="(?:tt_article_useless_p_margin|entry-content|article-view|contents_style)"|<article\b/i));
+  const body = html.slice(start, start + 1_500_000);
+  const out: string[] = [];
+  for (const m of body.matchAll(/<img\b[^>]*>/gi)) {
+    const tag = m[0];
+    let src = (/\bdata-lazy-src=["']([^"']+)["']/i.exec(tag) ?? /\bdata-src=["']([^"']+)["']/i.exec(tag) ?? /\bsrc=["']([^"']+)["']/i.exec(tag))?.[1];
+    if (!src || src.startsWith("data:")) continue;
+    src = src.replace(/&amp;/g, "&");
+    try {
+      src = new URL(src, url).href;
+    } catch {
+      continue;
+    }
+    if (/storep-phinf|sticker|blogpfthumb|profile|icon|emoji|static\/(?:www|blog)|ssl\.pstatic\.net\/static/i.test(src)) continue;
+    // 네이버 본문 사진: 흐린 미리보기 크기를 큰 크기로
+    if (/postfiles\.pstatic\.net|blogfiles\.pstatic\.net|mblogthumb-phinf\.pstatic\.net/i.test(src)) src = src.replace(/\?type=[^&]*/, "?type=w966");
+    else if (!/daumcdn\.net|kakaocdn\.net|tistory|\.(jpe?g|png|webp)(\?|$)/i.test(src)) continue;
+    if (!out.includes(src)) out.push(src);
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+
+async function loadPost(raw: string, allowedHosts: string[]) {
   let u: URL;
   try {
     u = new URL(raw.trim());
@@ -88,7 +124,7 @@ export async function importPostFromUrl(raw: string, allowedHosts: string[]) {
     /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i.exec(html)?.[1] ??
     /<title[^>]*>([^<]+)<\/title>/i.exec(html)?.[1] ??
     u.pathname;
-  return { title: title.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/\s*[:|]\s*네이버\s*블로그\s*$/, "").trim(), text: sampleHtmlToText(html) };
+  return { title: title.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/\s*[:|]\s*네이버\s*블로그\s*$/, "").trim(), html, url: u };
 }
 
 export function isHtmlFile(name: string) {

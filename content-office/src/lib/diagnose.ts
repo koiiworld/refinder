@@ -16,30 +16,35 @@ import { blogContext } from "./ai/prompts";
 
 type SearchItem = { title: string; link: string; bloggerlink: string; postdate: string };
 
-/** 네이버 블로그 검색 API (개발자센터 앱에 '검색' API 권한 필요) */
+/** 네이버 블로그 검색 API */
 export async function naverBlogSearch(query: string, display = 10): Promise<{ total: number; items: SearchItem[] }> {
+  return naverSearch("blog", query, display, "sim") as Promise<{ total: number; items: SearchItem[] }>;
+}
+
+/** 네이버 검색 API (블로그·뉴스) — NAVER API HUB 키 우선, 기존 개발자센터 키도 지원 */
+export async function naverSearch(kind: "blog" | "news", query: string, display = 10, sort: "sim" | "date" = "sim"): Promise<{ total: number; items: (SearchItem & { description?: string; originallink?: string; pubDate?: string })[] }> {
   const id = process.env.NAVER_CLIENT_ID?.trim();
   const secret = process.env.NAVER_CLIENT_SECRET?.trim();
   if (!id || !secret) throw new Error("네이버 검색 API 키(NAVER_CLIENT_ID / NAVER_CLIENT_SECRET)가 없습니다.");
   // 2026-07-31 이후 키: NAVER API HUB 주소·헤더. 기존 개발자센터 키: openapi.naver.com
   const both = { "X-NCP-APIGW-API-KEY-ID": id, "X-NCP-APIGW-API-KEY": secret, "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret };
   const attempts: [string, Record<string, string>][] = process.env.NAVER_SEARCH_URL?.trim()
-    ? [[process.env.NAVER_SEARCH_URL.trim(), both]]
+    ? [[process.env.NAVER_SEARCH_URL.trim().replace(/\/blog(\.json)?$/, `/${kind}$1`), both]]
     : [
-        ["https://naverapihub.apigw.ntruss.com/search/v1/blog", { "X-NCP-APIGW-API-KEY-ID": id, "X-NCP-APIGW-API-KEY": secret }],
-        ["https://openapi.naver.com/v1/search/blog.json", { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret }],
+        [`https://naverapihub.apigw.ntruss.com/search/v1/${kind}`, { "X-NCP-APIGW-API-KEY-ID": id, "X-NCP-APIGW-API-KEY": secret }],
+        [`https://openapi.naver.com/v1/search/${kind}.json`, { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret }],
       ];
   let res: Response | null = null;
   let data: { total?: number; items?: SearchItem[]; errorMessage?: string } = {};
   for (const [base, headers] of attempts) {
-    res = await fetch(`${base}?query=${encodeURIComponent(query)}&display=${display}&sort=sim`, { headers, signal: AbortSignal.timeout(10_000) });
+    res = await fetch(`${base}?query=${encodeURIComponent(query)}&display=${display}&sort=${sort}`, { headers, signal: AbortSignal.timeout(10_000) });
     data = await res.json().catch(() => ({}));
     if (![401, 403, 404].includes(res.status)) break;
   }
   if (!res) throw new Error("네이버 검색 API에 연결하지 못했습니다.");
   if (res.status === 401 || res.status === 403) throw new Error("네이버 검색 API 권한이 없습니다. NAVER API HUB(또는 개발자센터) 앱에서 '블로그 검색'을 추가해 주세요.");
   if (!res.ok) throw new Error(`네이버 검색 API 오류 (HTTP ${res.status}) ${data.errorMessage ?? ""}`.trim());
-  return { total: Number(data.total ?? 0), items: (data.items ?? []).map((i) => ({ ...i, title: String(i.title ?? "").replace(/<[^>]+>/g, "") })) };
+  return { total: Number(data.total ?? 0), items: (data.items ?? []).map((i) => ({ ...i, title: String(i.title ?? "").replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&"), description: String((i as { description?: string }).description ?? "").replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&") })) };
 }
 
 /** 글 주소 → 비교용 키 (네이버: 아이디/글번호, 그 외: 호스트+경로) */

@@ -47,7 +47,7 @@ function Preview({ slide, index, total, img, style, fontReady, onCanvas }: { sli
   return <canvas ref={ref} style={{ width: "100%", height: "auto", borderRadius: 10, display: "block", border: "1px solid var(--line)" }} aria-label={`${index + 1}장 미리보기`} />;
 }
 
-export default function CarouselEditor({ initial }: { initial: Carousel }) {
+export default function CarouselEditor({ initial, recent = [] }: { initial: Carousel; recent?: { title: string; url: string; blog: string }[] }) {
   const router = useRouter();
   const [c, setC] = useState(initial);
   const [slides, setSlides] = useState<Slide[]>(initial.slides);
@@ -55,7 +55,8 @@ export default function CarouselEditor({ initial }: { initial: Carousel }) {
   const [caption, setCaption] = useState(initial.caption);
   const [tags, setTags] = useState(initial.hashtags.map((h) => "#" + h).join(" "));
   const [feedback, setFeedback] = useState("");
-  const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload">("");
+  const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload" | "import">("");
+  const [importUrl, setImportUrl] = useState(recent[0]?.url ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [imgVer, setImgVer] = useState(0);
@@ -135,6 +136,21 @@ export default function CarouselEditor({ initial }: { initial: Carousel }) {
     }
     setBusy("");
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function importPhotos() {
+    if (!importUrl.trim()) return;
+    setBusy("import");
+    setMsg(null);
+    try {
+      const r = await api<{ added: number; carousel: Carousel }>(`/api/carousels/${c.id}`, "POST", { action: "import_images", url: importUrl.trim() });
+      setC((cur) => ({ ...cur, images: r.carousel.images }));
+      setImgVer((v) => v + 1);
+      setMsg({ ok: true, text: `블로그 사진 ${r.added}장을 가져왔어요. 장마다 '사진'에서 고르거나, AI 다시 만들기를 누르면 AI가 사진을 배치해요.` });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+    setBusy("");
   }
 
   async function exportAll(mode: "share" | "download") {
@@ -221,6 +237,18 @@ export default function CarouselEditor({ initial }: { initial: Carousel }) {
           <b className="small">사진 ({c.images.length})</b>
           <button className="btn btn-sm" disabled={!!busy} onClick={() => fileRef.current?.click()}>{busy === "upload" ? <span className="spinner" /> : "📷 내 사진 올리기"}</button>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => e.target.files && void upload(Array.from(e.target.files))} />
+        </div>
+        <div className="row" style={{ flexWrap: "nowrap", gap: 6 }}>
+          {recent.length ? (
+            <select className="input" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} aria-label="사진 가져올 블로그 글">
+              {recent.map((p) => <option key={p.url} value={p.url}>[{p.blog}] {p.title}</option>)}
+              <option value="">직접 주소 넣기…</option>
+            </select>
+          ) : null}
+          {(!recent.length || !importUrl || !recent.some((p) => p.url === importUrl)) && (
+            <input className="input" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="블로그 글 주소" aria-label="블로그 글 주소" />
+          )}
+          <button className="btn btn-sm" disabled={!!busy || !importUrl.trim()} onClick={importPhotos}>{busy === "import" ? <span className="spinner" /> : "📥 블로그 글 사진 가져오기"}</button>
         </div>
         {c.images.length ? (
           <div className="row" style={{ gap: 6 }}>

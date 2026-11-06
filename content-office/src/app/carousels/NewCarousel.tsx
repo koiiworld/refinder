@@ -6,10 +6,16 @@ import { api } from "@/components/client-utils";
 
 type Idea = { topic: string; format: string; hook: string; why: string };
 
-export default function NewCarousel({ posts, blogs, formats, defaultFrom }: { posts: { id: string; title: string; blog_name: string }[]; blogs: { id: string; name: string; category: string }[]; formats: { id: string; label: string }[]; defaultFrom?: string }) {
+export default function NewCarousel({ posts, published, blogs, formats, defaultFrom }: { posts: { id: string; title: string; blog_name: string }[]; published: { title: string; url: string; blogId: string; blog_name: string }[]; blogs: { id: string; name: string; category: string }[]; formats: { id: string; label: string }[]; defaultFrom?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"post" | "topic">(defaultFrom === "topic" ? "topic" : "post");
-  const [postId, setPostId] = useState(posts[0]?.id ?? "");
+  const [postId, setPostId] = useState(published[0] ? `u:${published[0].url}` : posts[0] ? `p:${posts[0].id}` : "");
+  const [postUrl, setPostUrl] = useState("");
+  const pick = () => {
+    if (postId.startsWith("p:")) return { projectId: postId.slice(2) };
+    const pub = published.find((p) => `u:${p.url}` === postId);
+    return { url: postId.slice(2), blogId: pub?.blogId ?? null };
+  };
   const [niche, setNiche] = useState("생활 꿀팁");
   const [blogId, setBlogId] = useState("");
   const [topic, setTopic] = useState("");
@@ -52,16 +58,30 @@ export default function NewCarousel({ posts, blogs, formats, defaultFrom }: { po
       </div>
 
       {mode === "post" ? (
-        posts.length ? (
+        <div className="stack" style={{ gap: 8 }}>
+          {posts.length + published.length ? (
+            <div className="row" style={{ flexWrap: "nowrap", gap: 8 }}>
+              <select className="input" value={postId} onChange={(e) => setPostId(e.target.value)} aria-label="블로그 글">
+                {!!published.length && (
+                  <optgroup label="📷 블로그에 올린 글 (올린 사진 그대로 사용)">
+                    {published.map((p) => <option key={p.url} value={`u:${p.url}`}>[{p.blog_name}] {p.title}</option>)}
+                  </optgroup>
+                )}
+                {!!posts.length && (
+                  <optgroup label="✍️ 앱에서 쓴 글">
+                    {posts.map((p) => <option key={p.id} value={`p:${p.id}`}>[{p.blog_name}] {p.title}</option>)}
+                  </optgroup>
+                )}
+              </select>
+              <button className="btn btn-primary" disabled={!!busy || !postId} onClick={() => create(pick())}>{busy === "create" ? <><span className="spinner" /> AI가 장면을 나누는 중…</> : "만들기"}</button>
+            </div>
+          ) : null}
           <div className="row" style={{ flexWrap: "nowrap", gap: 8 }}>
-            <select className="input" value={postId} onChange={(e) => setPostId(e.target.value)} aria-label="블로그 글">
-              {posts.map((p) => <option key={p.id} value={p.id}>[{p.blog_name}] {p.title}</option>)}
-            </select>
-            <button className="btn btn-primary" disabled={!!busy || !postId} onClick={() => create({ projectId: postId })}>{busy === "create" ? <><span className="spinner" /> AI가 장면을 나누는 중…</> : "만들기"}</button>
+            <input className="input" value={postUrl} onChange={(e) => setPostUrl(e.target.value)} placeholder="또는 블로그 글 주소 붙여넣기 (네이버·티스토리)" aria-label="블로그 글 주소" />
+            <button className="btn" disabled={!!busy || !/^https?:\/\//.test(postUrl.trim())} onClick={() => create({ url: postUrl.trim() })}>주소로 만들기</button>
           </div>
-        ) : (
-          <p className="small muted" style={{ margin: 0 }}>아직 완성된 블로그 글이 없어요. &apos;주제로 따로 만들기&apos;를 써 보세요.</p>
-        )
+          <p className="tiny muted" style={{ margin: 0 }}>블로그에 올린 글을 고르면 그 글에 올린 사진을 캐러셀에 그대로 써요.</p>
+        </div>
       ) : (
         <div className="stack" style={{ gap: 10 }}>
           <div className="row" style={{ gap: 8 }}>

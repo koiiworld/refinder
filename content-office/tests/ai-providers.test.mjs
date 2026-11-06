@@ -454,7 +454,7 @@ test("인기 글 분석: 주소로 글 읽기 → 구조 수치 + AI 분석 + �
   assert.equal(r.data.analysis.apply.titleIdeas[0].keyword, "굴보쌈");
   assert.equal(r.data.volumes["굴보쌈"], 10000, "제안 키워드 실제 검색량");
   const bp = await stepPrompt("콘텐츠 전략가");
-  assert.match(bp, /소제목 1개, 이미지 0장, 목록 줄 3개/);
+  assert.match(bp, /소제목 1개, 이미지 \d+장, 목록 줄 3개/);
   assert.match(bp, /방식/);
   const last = (await call("/api/research/benchmark?blogId=blog_algokitchen")).data;
   assert.equal(last.analysis.apply.titleIdeas.length, 1, "마지막 분석 다시 보기");
@@ -559,4 +559,73 @@ test("🩺 블로그 진단: 발행 리듬·제목·검색 누락·키워드 순
   assert.match(await stepPrompt("블로그 성장 컨설턴트"), /\[점검표\]/);
   const last = (await call("/api/diagnose?blogId=blog_algokitchen")).data;
   assert.equal(last.at, d.at, "마지막 진단 저장");
+});
+
+test("📰 블로그 핫이슈: 주제별 글을 반응(공감+댓글×3) 순으로 · 자주 나온 단어 · 1시간 캐시", async () => {
+  const res = await fetch(`${BASE}/hot?c=food`);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  const order = ["굴보쌈 김장 날 메뉴", "김장 양념 황금비율", "김장 김치 담그는 법 후기", "붕어빵 만들기 &amp; 팁"].map((t) => html.indexOf(t));
+  assert.ok(order.every((x) => x > 0), "글 표시 · 태그 제거");
+  assert.ok(order[0] < order[1] && order[1] < order[2] && order[2] < order[3], "공감 50 > 공감3+댓글9 > 공감10+댓글1 > 1");
+  assert.ok(html.includes(`/new?hint=${encodeURIComponent("김장")}`), "자주 나온 단어 '김장' → 키워드 추천");
+  assert.ok(!html.includes(`hint=${encodeURIComponent("후기")}"`), "흔한 말 제외");
+  await call("/__reset", "POST", undefined, MOCK);
+  await fetch(`${BASE}/hot?c=food`);
+  assert.ok(!(await mockLog()).some((l) => l.path === "/ajax/DirectoryPostList.naver"), "1시간 안에는 다시 안 부름");
+});
+
+test("📱 캐러셀: 블로그에 올린 글 주소로 만들기 → 글에 올린 사진 그대로 · 다른 글 사진 가져오기", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  const r = await call("/api/carousels", "POST", { url: "https://blog.naver.com/algo_kitchen/224458356410", blogId: "blog_algokitchen" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  let c = (await call(`/api/carousels/${r.data.id}`)).data;
+  assert.deepEqual(c.images.map((i) => i.url), ["https://postfiles.pstatic.net/MjAy/cabbage1.jpg?type=w966", "https://postfiles.pstatic.net/MjAy/cabbage2.jpg?type=w966"], "본문 사진만, 큰 크기로 · 스티커 제외");
+  assert.equal(c.title, "양배추 두부전 만들기");
+  const cp = await stepPrompt("카드뉴스) 카피라이터");
+  assert.match(cp, /\[원본 블로그 글[\s\S]*양배추는 채 썰고/);
+  assert.match(cp, /0: 블로그 사진 1/);
+  assert.equal(c.slides[0].image, 0, "표지에 블로그 사진");
+  // 이미 있는 사진은 중복으로 안 가져옴
+  const again = await call(`/api/carousels/${c.id}`, "POST", { action: "import_images", url: "https://blog.naver.com/algo_kitchen/224458356410" });
+  assert.equal(again.status, 502);
+  assert.match(again.data.error, /새로 가져올 사진/);
+  // 주제형 캐러셀에 블로그 사진 가져오기
+  const t = await call("/api/carousels", "POST", { topic: "양배추 요리 모음", format: "save" });
+  const imp = await call(`/api/carousels/${t.data.id}`, "POST", { action: "import_images", url: "https://blog.naver.com/algo_kitchen/224458356410" });
+  assert.equal(imp.status, 200, JSON.stringify(imp.data));
+  assert.equal(imp.data.added, 2);
+  assert.equal((await call("/api/carousels", "POST", { url: "https://example.com/x" })).status, 400, "허용 안 된 주소");
+});
+
+test("📋 글감 추천 리포트: 구글 트렌드·네이버 뉴스·블로그 홈 수집 → AI 검증(근거 없는 추천 제외) → 승인하면 그 기획으로 ③ 제목 추천", async () => {
+  await call("/__reset", "POST", undefined, MOCK);
+  const r = await call("/api/hot", "POST", { blogId: "blog_algokitchen" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.collected["구글 트렌드"], 2);
+  assert.ok(r.data.collected["네이버 뉴스"] >= 1);
+  assert.ok(!JSON.stringify(r.data).includes("오래된 뉴스"), "3일 지난 뉴스 제외");
+  assert.equal(r.data.items.length, 2, "근거 번호 없는 추천은 뺌");
+  const it = r.data.items[0];
+  assert.deepEqual(it.sources.map((s) => s.url).slice(0, 1), ["https://news.example.com/kimchi"], "출처 번호 → 원출처 링크");
+  assert.equal(it.sources.length, 2, "없는 번호(x99)는 무시");
+  const rp = await stepPrompt("블로그 글감 기획자");
+  assert.match(rp, /g1: \(구글 트렌드 · .* · 검색 2000\+\) 김장 배추값 — 올해 배추값 'ㄸ?뚝'/);
+  assert.match(rp, /\(네이버 뉴스 · .*\) 제철 음식 관련 새 소식 — 요약 "내용"/);
+  assert.match(rp, /\(블로그 홈 · .* · 공감 50 · 댓글 0\) 굴보쌈 김장 날 메뉴/);
+  // 승인 → ③ 제목 추천(대기)까지, 기획이 제목 프롬프트로 전달
+  await call("/__reset", "POST", undefined, MOCK);
+  const a = await call("/api/hot", "POST", { action: "approve", reportId: r.data.id, index: 0, keyword: "배추값" });
+  assert.equal(a.status, 200, JSON.stringify(a.data));
+  const p = await waitPost(a.data.projectId, (x) => x.project.stage === "titles" && idle(x), "제목 선택 대기");
+  assert.equal(p.project.topic, "배추값", "고친 키워드로");
+  assert.equal(p.project.plan.brief.title, it.title, "기획 저장");
+  const tp = await stepPrompt("SEO 제목 전문가");
+  assert.match(tp, /\[이 글의 기획 - 핫이슈 리포트에서 블로그 주인이 승인한 글감\][\s\S]*추천 제목: 김장 배추값 내렸다/);
+  assert.match(tp, /원출처: .*https:\/\/news\.example\.com\/kimchi/);
+  // 다시 승인해도 같은 글 · 넘기기
+  assert.equal((await call("/api/hot", "POST", { action: "approve", reportId: r.data.id, index: 0 })).data.projectId, a.data.projectId);
+  await call("/api/hot", "POST", { action: "skip", reportId: r.data.id, index: 1 });
+  const last = (await call("/api/hot?blogId=blog_algokitchen")).data;
+  assert.deepEqual(last.items.map((x) => x.status), ["approved", "skipped"]);
 });

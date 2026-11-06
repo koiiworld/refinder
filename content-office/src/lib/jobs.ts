@@ -180,7 +180,8 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
         /* 검색량은 선택 데이터 */
       }
     }
-    const { system, prompt } = titlesPrompt(blog, keywords, related, await writtenTitles(blog, project.id));
+    const brief = (job.payload?.brief as PostPlan["brief"]) ?? (project.plan as unknown as PostPlan | null)?.brief;
+    const { system, prompt } = titlesPrompt(blog, keywords, related, await writtenTitles(blog, project.id), brief);
     const res = await runStep({
       step: "titles", role: "planner", purpose: "titles", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 6000,
       template: () => JSON.stringify({ candidates: [{ title: `${keyword} 총정리`, reason: "템플릿" }, { title: `${keyword} 알아보기`, reason: "템플릿" }], best: 0, bestReason: "⚠ AI 미연결: 템플릿 제목", subKeywords: [] }),
@@ -190,6 +191,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     if (!candidates.length) throw new AiError("AI가 제목 후보를 돌려주지 않았습니다.", true);
     const best = Math.min(Math.max(0, Number(raw.best) || 0), candidates.length - 1);
     const plan: PostPlan = {
+      ...(brief ? { brief } : {}),
       keyword,
       candidates,
       best,
@@ -211,7 +213,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const feedback = job.payload.feedback as string | undefined;
     const doc = await getDocument(project.id);
     const myPosts = await recentPosts(blog);
-    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined, myPosts, titleByUser: !plan.candidates.some((c) => c.title.trim() === plan.selectedTitle.trim()) });
+    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined, myPosts, titleByUser: !plan.candidates.some((c) => c.title.trim() === plan.selectedTitle.trim()), brief: plan.brief });
     const res = await runStep({
       step: "writing", role: "writer", purpose: "write", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
       template: () => JSON.stringify({ html: `<p><strong>⚠ AI 미연결: 템플릿 원고입니다.</strong></p><h2>${esc(plan.keyword)}</h2><p>[작성 필요]</p><p>[이미지 1]</p><h2>정리</h2><p>[작성 필요]</p>`, hashtags: [plan.keyword.replace(/\s+/g, "")], images: [{ prompt: plan.keyword, alt: plan.keyword, aspect: "4:3" }] }),

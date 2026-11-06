@@ -74,6 +74,30 @@ http
       const data = cp[1] === "commission" ? [{ date: "20261101", commission: 1200 }, { date: "20261102", commission: 3400 }] : cp[1] === "clicks" ? [{ date: "20261101", click: 50 }, { date: "20261102", click: 70 }] : [{ date: "20261102", quantity: 3 }];
       return send(res, 200, { rCode: "0", rMessage: "", data });
     }
+    // 네이버 블로그 홈 주제별 글 (블로그 핫이슈)
+    if (url.pathname === "/ajax/DirectoryPostList.naver") {
+      const seq = url.searchParams.get("directorySeq");
+      const pg = Number(url.searchParams.get("pageNo"));
+      const mk = (i, title, likes, comments) => ({ domainIdOrBlogId: `u${seq}_${pg}_${i}`, logNo: 100 + i, nickname: `닉${i}`, title, briefContents: "요약 <b>내용</b>", postUrl: `https://blog.naver.com/u${seq}_${pg}_${i}/${100 + i}`, sympathyCnt: likes, commentCnt: comments, addDate: Date.now() - i * 3600000, thumbnails: [{ url: `https://blogthumb.pstatic.net/t${i}.jpg` }] });
+      const list = pg === 1 ? [mk(1, "김장 김치 담그는 법 후기", 10, 1), mk(2, "김장 양념 황금비율", 3, 9), mk(3, "굴보쌈 김장 날 메뉴", 50, 0), mk(4, "<b>붕어빵</b> 만들기 &amp; 팁", 1, 0)] : [];
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      return res.end(`)]}',\n` + JSON.stringify({ result: { totalCount: list.length, postList: list } }));
+    }
+    // 구글 트렌드 한국 RSS
+    if (url.pathname === "/trending/rss") {
+      res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8" });
+      const item = (t, traffic, nt, nu) => `<item><title>${t}</title><ht:approx_traffic>${traffic}</ht:approx_traffic><pubDate>${new Date().toUTCString()}</pubDate><ht:news_item><ht:news_item_title>${nt}</ht:news_item_title><ht:news_item_url>${nu}</ht:news_item_url><ht:news_item_source>모의뉴스</ht:news_item_source></ht:news_item></item>`;
+      return res.end(`<?xml version="1.0"?><rss xmlns:ht="https://trends.google.com/trending/rss"><channel>${item("김장 배추값", "2000+", "올해 배추값 &apos;뚝&apos;", "https://news.example.com/kimchi")}${item("야구", "1000+", "야구 결승", "https://news.example.com/baseball")}</channel></rss>`);
+    }
+    // 네이버 뉴스 검색 API
+    if (url.pathname === "/v1/search/news.json") {
+      if (req.headers["x-naver-client-id"] !== "test-dl-id") return send(res, 401, { errorMessage: "auth" });
+      const qy = url.searchParams.get("query") ?? "";
+      return send(res, 200, { total: 2, items: [
+        { title: `<b>${qy}</b> 관련 새 소식`, originallink: `https://news.example.com/${encodeURIComponent(qy)}`, link: "https://n.news.naver.com/x", description: "요약 &quot;내용&quot;", pubDate: new Date().toUTCString() },
+        { title: "오래된 뉴스", originallink: "https://news.example.com/old", link: "", description: "", pubDate: new Date(Date.now() - 10 * 86400000).toUTCString() },
+      ] });
+    }
     // 네이버 블로그 검색 API
     if (url.pathname === "/v1/search/blog.json") {
       if (req.headers["x-naver-client-id"] !== "test-dl-id") return send(res, 401, { errorMessage: "auth" });
@@ -103,7 +127,7 @@ http
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       return res.end(`<html><head><meta property="og:title" content="양배추 두부전 만들기 : 네이버 블로그"></head><body><div class="blog_menu">카테고리 이웃추가</div>
         <div class="se-main-container"><div class="se-component"><p class="se-text-paragraph">안녕하세요 : ) 알고키친입니다. 오늘은 밀가루 없이 만드는 양배추 두부전을 소개해 드릴게요. 양배추는 채 썰고 두부는 물기를 꼭 짜 주세요 ㅎㅎ</p>
-        <h3>양배추 두부전 재료</h3><ul><li>양배추 200g</li><li>두부 반 모</li><li>달걀 2개</li></ul><p>약불에서 앞뒤로 노릇하게 구우면 완성이에요 !</p></div></div>
+        <img src="https://postfiles.pstatic.net/a/b.jpg?type=w80_blur" data-lazy-src="https://postfiles.pstatic.net/MjAy/cabbage1.jpg?type=w80_blur" alt=""><img src="https://storep-phinf.pstatic.net/sticker.png"><h3>양배추 두부전 재료</h3><img data-lazy-src="https://postfiles.pstatic.net/MjAy/cabbage2.jpg?type=w773"><ul><li>양배추 200g</li><li>두부 반 모</li><li>달걀 2개</li></ul><p>약불에서 앞뒤로 노릇하게 구우면 완성이에요 !</p></div></div>
         <div class="comment">댓글 3</div></body></html>`);
     }
     // YouTube Data API
@@ -150,6 +174,11 @@ http
       if (system.includes("콘텐츠 전략가")) return JSON.stringify({ posts: [{ title: "양배추 두부전", titlePattern: "메뉴명 + 만들기 + 효익", hook: "인사 후 공감 질문", structure: "재료→순서→팁", whyPopular: "검색 의도에 바로 답함", keywords: ["양배추두부전"] }], common: ["재료를 목록으로"], apply: { titleIdeas: [{ title: "굴보쌈 집에서 만들기｜실패 없는 황금 비율", keyword: "굴보쌈", reason: "제철" }], keywords: [{ keyword: "굴보쌈", reason: "제철" }, { keyword: "깍두기", reason: "김장철" }], tips: ["사진 8장 이상"] } });
       if (system.includes("카드뉴스) 카피라이터")) return JSON.stringify({ slides: [{ kind: "cover", headline: "김밥 옆구리\\n안 터지는 법", body: "저장 필수", image: 0 }, { kind: "content", headline: "밥은 식혀서", body: "뜨거운 밥은 김을 찢어요", image: 7 }, { kind: "content", headline: "재료 준비", body: "단무지·햄·계란", image: null }, { kind: "cta", headline: "김밥 좋아하는 친구 태그 🍙", body: "저장해두고 주말에", image: null }], hooks: ["10분 김밥집 맛", "이렇게 하면 다 터져요", "저장 안 하면 후회"], caption: "김밥 안 터지는 비법 🍙\n\n밥은 식혀서!", hashtags: ["#김밥", "김밥 만들기", "도시락"] });
       if (system.includes("인스타그램 성장 전략가")) return JSON.stringify({ ideas: [{ topic: "자취생 냉장고 정리 7가지", format: "save", hook: "이것만 알면 냉장고가 2배", why: "나중에 다시 볼 정보" }, { topic: "택배 반품 실수 TOP5", format: "mistake", hook: "이러면 반품비 다 내요", why: "친구에게 공유" }, { topic: "", format: "save", hook: "", why: "" }] });
+      if (system.includes("블로그 글감 기획자")) return JSON.stringify({ items: [
+        { issue: "배추값 하락", keyword: "김장 배추값", title: "김장 배추값 내렸다, 올해 김장 비용 아끼는 법", why: "구글 트렌드 2000+, 뉴스 동시", direction: "가격 비교표 + 절임배추 팁", hotness: 5, timing: "이번 주", sources: ["g1", "n3", "x99"] },
+        { issue: "근거 없는 글감", keyword: "아무거나", title: "근거 없음", why: "", direction: "", hotness: 3, timing: "오늘 바로", sources: ["zz"] },
+        { issue: "제철 레시피", keyword: "제철 레시피", title: "11월 제철 레시피 모음", why: "뉴스", direction: "목록", hotness: 2, timing: "시즌 미리", sources: ["n3"] },
+      ] });
       if (system.includes("블로그 성장 컨설턴트")) return JSON.stringify({ score: 62, summary: "발행은 꾸준하지만 누락 글이 있어요.", good: ["제목 길이 적당"], problems: [{ title: "검색 누락", why: "최근 글 1개가 안 나옴", fix: "비슷한 글 다시 쓰지 말고 새 각도로" }], titleTips: ["깍두기 담그는 법 & 양념 비율 → 깍두기 양념 비율 실패 없는 황금 공식"], next: ["주 3회 발행"] });
       if (system.includes("광고 수익 화면")) return JSON.stringify({ krw: 12345, usd: null, period: "2026-11-01~2026-11-06", metric: "노출 1,000 · 클릭 20", found: true });
       if (system.includes("크리에이터 어드바이저 화면")) return "1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW";

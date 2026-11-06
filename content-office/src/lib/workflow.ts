@@ -7,7 +7,7 @@ import type { PostExtras, PostPlan } from "./posts-types";
 export class WorkflowError extends Error {}
 
 /** ② 고른 키워드(1개 또는 여러 개)로 글 1개를 만들고 ③ 제목 후보만 뽑음 — 글쓰기는 사용자가 버튼으로 시작 */
-export async function createPosts(blogId: string, pickIds: string[]) {
+export async function createPosts(blogId: string, pickIds: string[], brief?: import("./posts-types").PostBrief) {
   if (!pickIds.length) throw new WorkflowError("키워드를 하나 이상 선택하세요.");
   const rows = await q<{ id: string; keyword: string; status: string }>("SELECT id, keyword, status FROM keyword_picks WHERE blog_id=$1 AND id = ANY($2)", [blogId, pickIds]);
   // 고른 순서대로 (첫 번째가 메인 키워드)
@@ -18,7 +18,7 @@ export async function createPosts(blogId: string, pickIds: string[]) {
   await q(`INSERT INTO projects (id, blog_id, title, topic, stage, status) VALUES ($1,$2,$3,$4,'titles','running')`, [id, blogId, keywords[0], keywords.join(", ")]);
   await q("UPDATE keyword_picks SET status='used', project_id=$2 WHERE id = ANY($1)", [picks.map((p) => p.id), id]);
   await addEvent(id, "create", `② 키워드 선택: ${keywords.join(", ")}`);
-  await enqueue("titles", { projectId: id });
+  await enqueue("titles", { projectId: id, payload: brief ? { brief } : {} });
   return [id];
 }
 

@@ -10,6 +10,16 @@ export interface PostPlan {
   related: { keyword: string; total: number }[];
   ai: { provider: string; model: string; substitutedFor: string | null };
   userPicked?: boolean;
+  /** 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) */
+  brief?: PostBrief;
+}
+
+export interface PostBrief {
+  issue: string;
+  title: string;
+  why: string;
+  direction: string;
+  sources: { title: string; url: string }[];
 }
 
 export interface PostImage {
