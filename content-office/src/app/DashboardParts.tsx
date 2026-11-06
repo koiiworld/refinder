@@ -6,6 +6,8 @@ import { api, Modal } from "@/components/client-utils";
 import { fmtUsd, KRW_PER_USD } from "@/components/ui";
 import type { MonthRevenue, RevenueChannel } from "@/lib/dashboard";
 
+/** 입력칸 숫자에 천 단위 쉼표 */
+const commas = (v: string) => (v ? String(v).replace(/[^\d]/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "");
 const krw = (n: number) => `₩${Math.round(n).toLocaleString("ko-KR")}`;
 const seriesVar = (i: number) => `var(--series-${(i % 3) + 1})`;
 
@@ -294,7 +296,7 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang }: {
               <div key={c.id} className="rev-row">
                 <b className="small" style={{ width: 140 }}>{c.name}</b>
                 {c.usd && <input className="input" inputMode="decimal" placeholder="달러 (예: 18.60)" value={f[c.id].usd} onChange={(e) => setF({ ...f, [c.id]: { ...f[c.id], usd: e.target.value } })} aria-label={`${c.name} 달러`} />}
-                <input className="input" inputMode="numeric" placeholder={c.usd ? "원화 (비우면 자동 환산)" : "원화 (예: 212000)"} value={f[c.id].krw} onChange={(e) => setF({ ...f, [c.id]: { ...f[c.id], krw: e.target.value } })} aria-label={`${c.name} 원화`} />
+                <input className="input" inputMode="numeric" placeholder={c.usd ? "원화 (비우면 자동 환산)" : "원화 (예: 212,000)"} value={commas(f[c.id].krw)} onChange={(e) => setF({ ...f, [c.id]: { ...f[c.id], krw: e.target.value.replace(/[^\d]/g, "") } })} aria-label={`${c.name} 원화`} />
                 <input className="input" placeholder={c.metricHint} value={f[c.id].metric} onChange={(e) => setF({ ...f, [c.id]: { ...f[c.id], metric: e.target.value } })} aria-label={`${c.name} 메모`} />
               </div>
             ))}
