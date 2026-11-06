@@ -7,13 +7,11 @@ import { api, Modal } from "@/components/client-utils";
 import type { CalCat, CalEvent } from "@/lib/calendar";
 
 const COLOR: Record<CalCat, string> = { season: "var(--series-1)", official: "var(--series-2)", irregular: "var(--bad)", publish: "var(--ok)", todo: "#8b5cf6" };
-/** 연간 시즌 행사는 행사마다 다른 색 (같은 행사는 어느 달에서나 같은 색) */
-const EVENT_PALETTE = ["#2563eb", "#0891b2", "#db2777", "#a16207", "#4f46e5", "#0d9488", "#9d174d", "#475569", "#0369a1", "#b45309"];
+/** 연간 시즌 행사는 행사마다 확실히 다른 색 (그 달에 보이는 순서대로 하나씩 → 같이 보이는 행사끼리는 안 겹침) */
+const EVENT_PALETTE = ["#2563eb", "#ec4899", "#f59e0b", "#06b6d4", "#84cc16", "#92400e", "#475569"];
+let seasonColor: Record<string, string> = {};
 function evColor(e: CalEvent) {
-  if (e.cat !== "season") return COLOR[e.cat];
-  let h = 0;
-  for (const ch of e.title) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return EVENT_PALETTE[h % EVENT_PALETTE.length];
+  return e.cat === "season" ? seasonColor[e.id] ?? COLOR.season : COLOR[e.cat];
 }
 /** 명절은 기간 내내 글자로 표시 */
 const isHoliday = (e: CalEvent) => /설날|설 연휴|추석|연휴|명절/.test(e.title);
@@ -51,6 +49,12 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
     const d = i - first + 1;
     return d >= 1 && d <= days ? `${ym}-${String(d).padStart(2, "0")}` : null;
   });
+  seasonColor = Object.fromEntries(
+    events
+      .filter((e) => e.cat === "season")
+      .sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title))
+      .map((e, i) => [e.id, EVENT_PALETTE[i % EVENT_PALETTE.length]]),
+  );
   const shown = events.filter((e) => show[e.cat]);
   const on = (d: string) => shown.filter((e) => e.start <= d && e.end >= d);
   const list = useMemo(() => (day ? on(day) : shown), [day, shown]); // eslint-disable-line react-hooks/exhaustive-deps
