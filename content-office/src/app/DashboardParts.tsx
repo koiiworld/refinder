@@ -9,18 +9,21 @@ import type { MonthRevenue, RevenueChannel } from "@/lib/dashboard";
 const krw = (n: number) => `₩${Math.round(n).toLocaleString("ko-KR")}`;
 const seriesVar = (i: number) => `var(--series-${(i % 3) + 1})`;
 
-// ───────── 최근 10주 추이: 선 그래프 + 마우스/터치 위치 안내 ─────────
-export function TrendChart({ weeks, series }: { weeks: string[]; series: { id: string; name: string; values: number[] }[] }) {
+// ───────── 선 그래프 (주간 완성 글 · 일별 방문자 공용) + 마우스/터치 위치 안내 ─────────
+// 값이 null 인 지점(기록 없는 날)은 선을 끊고 안내에 '-' 로 표시
+export function TrendChart({ weeks, series, unit = "건", label = "최근 5주 블로그별 주간 완성 글 수", emptyText = "최근 5주 동안 완성한 글이 아직 없습니다.", tipSuffix = " 주" }: { weeks: string[]; series: { id: string; name: string; values: (number | null)[] }[]; unit?: string; label?: string; emptyText?: string; tipSuffix?: string }) {
   const [hover, setHover] = useState<number | null>(null);
-  const W = 560, H = 220, L = 28, R = 72, T = 12, B = 26;
-  const max = Math.max(2, ...series.flatMap((s) => s.values));
-  const top = Math.ceil(max / 2) * 2;
-  const x = (i: number) => L + (i * (W - L - R)) / (weeks.length - 1);
+  const W = 560, H = 220, L = 36, R = 72, T = 12, B = 26;
+  const max = Math.max(2, ...series.flatMap((s) => s.values.map((v) => v ?? 0)));
+  const step = niceStep(max / 2);
+  const top = step * Math.ceil(max / step);
+  const x = (i: number) => L + (i * (W - L - R)) / Math.max(1, weeks.length - 1);
   const yv = (v: number) => T + (1 - v / top) * (H - T - B);
-  const ticks = [0, top / 2, top];
-  const empty = series.every((s) => s.values.every((v) => v === 0));
+  const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, k) => k * step);
+  const empty = series.every((s) => s.values.every((v) => !v));
+  const lastIdx = (vals: (number | null)[]) => { for (let i = vals.length - 1; i >= 0; i--) if (vals[i] != null) return i; return -1; };
   // 선 끝 이름표가 겹치지 않게 살짝 띄움
-  const ends = series.map((s, i) => ({ i, y: yv(s.values[s.values.length - 1]) })).sort((a, b) => a.y - b.y);
+  const ends = series.map((s, i) => { const li = lastIdx(s.values); return { i, y: yv(li >= 0 ? s.values[li]! : 0) }; }).sort((a, b) => a.y - b.y);
   for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 14) ends[k].y = ends[k - 1].y + 14;
   // 아래로 넘치면 위로 밀어 올림 (값이 모두 0일 때 이름표가 축 아래로 내려가지 않게)
   const bottom = H - B;
@@ -29,15 +32,25 @@ export function TrendChart({ weeks, series }: { weeks: string[]; series: { id: s
     for (let k = ends.length - 2; k >= 0; k--) if (ends[k + 1].y - ends[k].y < 14) ends[k].y = ends[k + 1].y - 14;
   }
   const labelY = (i: number) => ends.find((e) => e.i === i)!.y;
+  // null 로 끊긴 구간별 선
+  const segments = (vals: (number | null)[]) => {
+    const out: string[][] = [];
+    let cur: string[] = [];
+    vals.forEach((v, i) => { if (v == null) { if (cur.length) out.push(cur); cur = []; } else cur.push(`${x(i)},${yv(v)}`); });
+    if (cur.length) out.push(cur);
+    return out;
+  };
+  const every = weeks.length <= 6 ? 1 : Math.ceil(weeks.length / 6);
+  const fmtX = (w: string) => w.slice(5).replace("-", "/");
 
   return (
     <div style={{ position: "relative" }}>
-      {empty && <p className="small muted" style={{ margin: "0 0 6px" }}>최근 5주 동안 완성한 글이 아직 없습니다.</p>}
+      {empty && <p className="small muted" style={{ margin: "0 0 6px" }}>{emptyText}</p>}
       <svg
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
         role="img"
-        aria-label="최근 5주 블로그별 주간 완성 글 수"
+        aria-label={label}
         onMouseLeave={() => setHover(null)}
         onPointerMove={(e) => {
           const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -50,26 +63,31 @@ export function TrendChart({ weeks, series }: { weeks: string[]; series: { id: s
         {ticks.map((t) => (
           <g key={t}>
             <line x1={L} x2={W - R} y1={yv(t)} y2={yv(t)} stroke="var(--line)" strokeWidth={1} />
-            <text x={L - 8} y={yv(t) + 4} textAnchor="end" fontSize={11} fill="var(--muted)">{t}</text>
+            <text x={L - 8} y={yv(t) + 4} textAnchor="end" fontSize={11} fill="var(--muted)">{t.toLocaleString("ko-KR")}</text>
           </g>
         ))}
-        {weeks.map((w, i) => (weeks.length <= 6 || i % 3 === 0 || i === weeks.length - 1 ? <text key={w} x={x(i)} y={H - 6} textAnchor="middle" fontSize={11} fill="var(--muted)">{w.slice(5).replace("-", "/")}</text> : null))}
+        {weeks.map((w, i) => ((weeks.length - 1 - i) % every === 0 ? <text key={w} x={x(i)} y={H - 6} textAnchor="middle" fontSize={11} fill="var(--muted)">{fmtX(w)}</text> : null))}
         {hover != null && <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="var(--muted)" strokeWidth={1} strokeDasharray="3 3" />}
-        {series.map((s, si) => (
-          <g key={s.id}>
-            <polyline fill="none" stroke={seriesVar(si)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" points={s.values.map((v, i) => `${x(i)},${yv(v)}`).join(" ")} />
-            <circle cx={x(s.values.length - 1)} cy={yv(s.values[s.values.length - 1])} r={4} fill={seriesVar(si)} stroke="var(--panel)" strokeWidth={2} />
-            {hover != null && <circle cx={x(hover)} cy={yv(s.values[hover])} r={4} fill={seriesVar(si)} stroke="var(--panel)" strokeWidth={2} />}
-            <text x={W - R + 8} y={labelY(si) + 4} fontSize={11} fill="var(--text)">{s.name.length > 6 ? s.name.slice(0, 6) + "…" : s.name}</text>
-          </g>
-        ))}
+        {series.map((s, si) => {
+          const li = lastIdx(s.values);
+          return (
+            <g key={s.id}>
+              {segments(s.values).map((pts, k) => (pts.length > 1
+                ? <polyline key={k} fill="none" stroke={seriesVar(si)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" points={pts.join(" ")} />
+                : <circle key={k} cx={pts[0].split(",")[0]} cy={pts[0].split(",")[1]} r={2.5} fill={seriesVar(si)} />))}
+              {li >= 0 && <circle cx={x(li)} cy={yv(s.values[li]!)} r={4} fill={seriesVar(si)} stroke="var(--panel)" strokeWidth={2} />}
+              {hover != null && s.values[hover] != null && <circle cx={x(hover)} cy={yv(s.values[hover]!)} r={4} fill={seriesVar(si)} stroke="var(--panel)" strokeWidth={2} />}
+              <text x={W - R + 8} y={labelY(si) + 4} fontSize={11} fill="var(--text)">{s.name.length > 6 ? s.name.slice(0, 6) + "…" : s.name}</text>
+            </g>
+          );
+        })}
       </svg>
       {hover != null && (
         <div className="chart-tip" style={{ left: `${(x(hover) / W) * 100}%` }}>
-          <div className="tiny muted">{weeks[hover].slice(5).replace("-", "/")} 주</div>
+          <div className="tiny muted">{fmtX(weeks[hover])}{tipSuffix}</div>
           {series.map((s, si) => (
             <div key={s.id} className="tiny row" style={{ gap: 6, flexWrap: "nowrap" }}>
-              <span className="dot" style={{ background: seriesVar(si) }} /> {s.name} <b>{s.values[hover]}건</b>
+              <span className="dot" style={{ background: seriesVar(si) }} /> {s.name} <b>{s.values[hover] == null ? "-" : `${s.values[hover]!.toLocaleString("ko-KR")}${unit}`}</b>
             </div>
           ))}
         </div>
@@ -83,6 +101,14 @@ export function TrendChart({ weeks, series }: { weeks: string[]; series: { id: s
       </div>
     </div>
   );
+}
+
+/** 눈금 간격을 1·2·5 단위로 */
+function niceStep(raw: number) {
+  if (raw <= 1) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
 }
 
 // ───────── 최근 7일 AI 비용 막대 ─────────

@@ -2,7 +2,7 @@ import "server-only";
 import { q, q1, j } from "./db";
 import { todayUsage } from "./usage";
 import { getSettings } from "./settings";
-import { collectVisits, visitSummary } from "./visits";
+import { collectVisits, visitDaily, visitSummary } from "./visits";
 
 /**
  * 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음)
@@ -159,6 +159,7 @@ export async function dashboardData() {
   // 방문자 수 (1시간마다 수집 — 오래됐으면 지금 한 번 시도)
   await collectVisits().catch(() => {});
   const vis = await visitSummary();
+  const visitDays = await visitDaily(30);
   const blogUrls = await q<{ id: string; url: string }>("SELECT id, url FROM blogs");
 
   const revenueAll = await getRevenue();
@@ -184,6 +185,7 @@ export async function dashboardData() {
         const v = vis.rows.find((r) => r.blog_id === b.id);
         return { id: b.id, name: b.name, hasUrl: !!blogUrls.find((x) => x.id === b.id)?.url, today: v?.today ?? null, week: v?.week ?? null, month: v?.month ?? null, total: v?.total ?? null, since: v?.since ?? null, days: v?.days ?? 0 };
       }),
+      daily: { days: visitDays.days, series: blogs.map((b) => ({ id: b.id, name: b.name, values: visitDays.days.map((d) => visitDays.value(b.id, d)) })) },
     },
     perBlog: blogs.map((b) => {
       const r = perBlog.find((x) => x.blog_id === b.id);

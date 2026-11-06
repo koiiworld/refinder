@@ -86,6 +86,16 @@ export async function collectVisits(force = false) {
   }
 }
 
+/** 최근 N일(오늘 포함) 블로그별 일별 방문자. 기록 없는 날은 null */
+export async function visitDaily(days = 30) {
+  const list = Array.from({ length: days }, (_, i) => kstDay(days - 1 - i));
+  const rows = await q<{ blog_id: string; d: string; n: number }>(
+    "SELECT blog_id, to_char(day, 'YYYY-MM-DD') AS d, today::int AS n FROM blog_visits WHERE day >= $1::date",
+    [list[0]],
+  );
+  return { days: list, value: (blogId: string, d: string) => rows.find((r) => r.blog_id === blogId && r.d === d)?.n ?? null };
+}
+
 /** 블로그별 방문자: 오늘 · 최근 7일 합 · 이번 달 합 · 누적 · 수집 시작일 */
 export async function visitSummary() {
   const rows = await q<{ blog_id: string; today: number; week: number; month: number; total: number | null; since: string | null; days: number }>(

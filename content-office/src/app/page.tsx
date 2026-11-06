@@ -98,22 +98,16 @@ export default async function Dashboard() {
           </div>
         </section>
 
-        {/* 추이(좁게) + 방문자 성과 비교(넓게) */}
-        <div className="dash-2col">
-          <section className="card">
-            <div className="card-head"><h2 style={{ fontSize: 15 }}>최근 5주 완성 글 추이</h2></div>
-            <div className="card-pad">
-              <p className="tiny muted" style={{ marginTop: 0 }}>블로그별 주간 완성 글 수 (⑥ 검수까지 끝난 글, 월요일 시작 주)</p>
-              <TrendChart weeks={d.trend.weeks} series={d.trend.series} />
-            </div>
-          </section>
+        {/* 방문자 비교(위, 넓게) → 완성 글 추이(아래) */}
           <section className="card">
             <div className="card-head" style={{ flexWrap: "wrap" }}>
               <h2 style={{ fontSize: 15 }}>블로그별 방문자 비교</h2>
               <span className="tiny muted">{d.visits.updatedAt ? `${fmtDate(d.visits.updatedAt)} 수집 · 1시간마다 갱신` : "아직 수집 전"}</span>
             </div>
             <div className="card-pad stack" style={{ gap: 10 }}>
-              <div className="tiny muted">최근 7일 방문자 (수집한 날만 합산)</div>
+              <div className="tiny muted">최근 30일 일별 방문자 (기록한 날만 표시)</div>
+              <TrendChart weeks={d.visits.daily.days} series={d.visits.daily.series} unit="명" tipSuffix="" label="최근 30일 블로그별 일별 방문자 수" emptyText="아직 기록된 방문자 수가 없습니다." />
+              <div className="tiny muted" style={{ marginTop: 6 }}>최근 7일 방문자 (수집한 날만 합산)</div>
               {d.visits.blogs.map((b, i) => (
                 <div key={b.id} className="row" style={{ flexWrap: "nowrap", gap: 10 }}>
                   <span className="small ellipsis" style={{ width: 130, flexShrink: 0 }}>
@@ -142,11 +136,17 @@ export default async function Dashboard() {
                 </table>
               </div>
               <p className="tiny muted" style={{ margin: 0 }}>
-                네이버 블로그 정보와 티스토리 방문자 카운터의 공개 숫자입니다. 맥이 켜져 있을 때 1시간마다 기록해서, 기록을 시작한 날({d.visits.blogs.map((b) => b.since).filter(Boolean).sort()[0] ?? "오늘"})부터 쌓입니다. 글별 조회수는 공개되지 않아 표시하지 않습니다.
+                네이버 블로그 정보와 티스토리 방문자 카운터의 공개 숫자입니다. 서버가 1시간마다 기록해서, 기록을 시작한 날({d.visits.blogs.map((b) => b.since).filter(Boolean).sort()[0] ?? "오늘"})부터 쌓입니다. 글별 조회수는 공개되지 않아 표시하지 않습니다.
               </p>
             </div>
           </section>
-        </div>
+          <section className="card">
+            <div className="card-head"><h2 style={{ fontSize: 15 }}>최근 5주 완성 글 추이</h2></div>
+            <div className="card-pad">
+              <p className="tiny muted" style={{ marginTop: 0 }}>블로그별 주간 완성 글 수 (⑥ 검수까지 끝난 글, 월요일 시작 주)</p>
+              <TrendChart weeks={d.trend.weeks} series={d.trend.series} />
+            </div>
+          </section>
 
         {/* 블로그별 글 작업 */}
         <section className="card">
