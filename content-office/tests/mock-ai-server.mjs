@@ -56,6 +56,15 @@ http
         <img data-src="https://cdn.example.com/ports.webp"></body></html>`);
     }
     // 네이버 블로그 정보 (방문자 수) · 티스토리 첫 화면 방문자 카운터
+    // 고장 흉내: /__break?visits=1 이면 방문자 화면이 깨진 것처럼
+    if (url.pathname === "/__break") {
+      globalThis.__brokenVisits = url.searchParams.get("visits") === "1";
+      return send(res, 200, { ok: true });
+    }
+    if ((url.pathname === "/rego/BlogInfo.naver" || url.pathname === "/tistory-home") && globalThis.__brokenVisits) {
+      res.writeHead(200, { "content-type": "text/html" });
+      return res.end("<html>바뀐 화면</html>");
+    }
     if (url.pathname === "/rego/BlogInfo.naver") {
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       return res.end(`)]}',\n` + JSON.stringify({ result: { blogId: url.searchParams.get("blogId"), dayVisitorCount: 146, totalVisitorCount: 979 } }));

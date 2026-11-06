@@ -623,3 +623,31 @@ export function TopKeywordsCard({ blogs, byBlog }: { blogs: { id: string; name: 
     </section>
   );
 }
+
+// ───────── 고장 알림: 연속으로 실패하는 기능 ─────────
+type HealthItem = { id: string; label: string; fix: "self" | "code" | "auto"; hint: string; fails: number; since: string | null; error: string };
+const FIX_LABEL = { self: "🙋 직접 해결 가능", code: "🛠 코드 수정 필요 (Claude Code·Codex)", auto: "🔄 자동 복구 시도 중" } as const;
+
+export function HealthBanner({ items }: { items: HealthItem[] }) {
+  const [list, setList] = useState(items);
+  if (!list.length) return null;
+  async function dismiss(id: string) {
+    setList(await api<HealthItem[]>("/api/dashboard/health", "POST", { id }));
+  }
+  return (
+    <section className="card card-pad stack" style={{ gap: 8, borderColor: "var(--warn, #e8a000)", background: "var(--panel)" }}>
+      <b className="small">⚠️ 점검이 필요한 기능 {list.length}개</b>
+      {list.map((h) => (
+        <div key={h.id} className="row between" style={{ flexWrap: "nowrap", gap: 10, alignItems: "flex-start", borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+          <div className="stack" style={{ gap: 2, flex: 1 }}>
+            <span className="small"><b>{h.label}</b> · <span className="tiny">{FIX_LABEL[h.fix]}</span></span>
+            <span className="tiny muted">{h.hint}</span>
+            <span className="tiny muted">{h.fails}번 연속 실패{h.since ? ` · 마지막 ${new Date(h.since).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}{h.error ? ` · ${h.error.slice(0, 120)}` : ""}</span>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={() => dismiss(h.id)} title="고쳤으면 닫기 (다시 실패하면 또 떠요)">닫기</button>
+        </div>
+      ))}
+      <span className="tiny muted">다시 성공하면 저절로 사라져요. &apos;코드 수정 필요&apos;는 Claude Code나 Codex에게 이 문구를 그대로 보여 주면 돼요.</span>
+    </section>
+  );
+}

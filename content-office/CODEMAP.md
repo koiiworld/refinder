@@ -19,6 +19,7 @@
 | `db.ts` | 데이터베이스 어댑터 | getDb, q, q1, dbKind, newId, j |
 | `diagnose.ts` | 🩺 블로그 진단 | naverBlogSearch, naverSearch, postKey, blogKey, Check, diagnoseBlog, Diagnosis, DiagnoseState … |
 | `exporter.ts` | 표를 단순 마크다운 표로 변환 | htmlToMarkdown, plainText, buildPackage, packageHtmlFile, escapeHtml |
+| `health.ts` | 기능별 고장 알림: 외부 서비스에 기대는 기능이 연속으로 실패하면 대시보드 맨 위에 '점검 필요' | FEATURES, Feature, markOk, markFail, healthProblems, clearProblem |
 | `hf-models.ts` | 공식 문서에서 요청 형식(스키마)을 확인한 모델 | HF_MODELS, HfModelId, HF_IMAGE_MODELS |
 | `higgsfield.ts` | Higgsfield 공식 API (이미지·영상 생성 전용) — https://docs.higgsfield.ai | HF_ENV, hfConnected, HiggsfieldError, hfTest, HfSubmitResult, hfEstimate, hfSubmit, HfStatus … |
 | `hot-report.ts` | 📋 블로그 글감 추천 리포트 | Issue, ReportItem, HotReport, googleTrends, createReport, lastReport, approveItem, restoreItem … |
@@ -46,7 +47,7 @@
 | `types.ts` | 이미지 방식: ai = Higgsfield로 생성, official = 제조사 공식 홈페이지 이미지 사용 | ProviderId, RoleKey, RoleAssignment, AiRoles, Blog, Source, Idea, PlanImage … |
 | `usage.ts` | ai_runs.purpose → 화면에 보일 단계 이름 | ModelUsage, StepUsage, todayUsage |
 | `video-store.ts` | 영상 저장소 | MAX_VIDEO_BYTES, storageKind, putFile, getFile, signedUrl, deleteFiles, dbFile |
-| `videos.ts` | 🎬 영상공장 | Box, Video, EditOptions, ffmpegPath, probe, listVideos, getVideo, addVideoLink … |
+| `videos.ts` | 🎬 영상공장 | Box, Video, EditOptions, ffmpegPath, probe, updateYtdlp, listVideos, getVideo … |
 | `visits.ts` | 블로그 방문자 수 수집 (공개 정보만) | VisitSnapshot, naverBlogId, parseCounter, fetchVisits, collectVisits, visitDaily, visitSummary |
 | `workflow.ts` | ② 고른 키워드(1개 또는 여러 개)로 글 1개를 만들고 ③ 제목 후보만 뽑음 — 글쓰기는 사용자가 버튼으로 시작 | WorkflowError, createPosts, startWriting, rerun, selectTitle, setHashtags, setImage, insertImage … |
 | `youtube.ts` | YouTube Data API v3 (공식) | youtubeConnected, YT_CATEGORIES, YtVideo, searchRecent, videosByIds, trendingVideos, frequentTerms, trending … |
@@ -64,7 +65,7 @@
 
 | 파일 | 설명 | 내보내는 것 |
 |---|---|---|
-| `DashboardParts.tsx` | 입력칸 숫자에 천 단위 쉼표 | TrendChart, CostDays, RevenueCard, BlogTopButton, AiBalances, TopKeywordsCard |
+| `DashboardParts.tsx` | 입력칸 숫자에 천 단위 쉼표 | TrendChart, CostDays, RevenueCard, BlogTopButton, AiBalances, TopKeywordsCard, HealthBanner |
 | `api/ai/edit/route.ts` | 선택한 문단만 AI 수정 — 결과는 제안으로만 반환하고, 적용은 사용자가 결정 | POST |
 | `api/ai/models/route.ts` | 연결 상태 및 공식 API 기준 사용 가능한 모델 목록 | GET |
 | `api/blogs/[id]/route.ts` |  | GET, PUT |
@@ -76,6 +77,7 @@
 | `api/carousels/ideas/route.ts` | 알고리즘 타기 쉬운 캐러셀 주제 추천 | POST |
 | `api/carousels/route.ts` | 새 캐러셀: { projectId } 블로그 글에서 · { topic, niche, format, blogId } 주제로 | GET, POST |
 | `api/dashboard/balances/route.ts` | 충전 기록 추가: { provider, usd, at?, note? } · 지우기: { provider, remove: index } | GET, POST |
+| `api/dashboard/health/route.ts` | 점검 알림 닫기 (고쳤다고 표시) | GET, POST |
 | `api/dashboard/revenue/capture/route.ts` | 수익 화면 캡처(애드포스트 등) → AI가 화면의 수익 숫자를 읽어 돌려줌 | POST |
 | `api/dashboard/revenue/coupang/route.ts` | 쿠팡파트너스 이번 달 수익 지금 불러오기 | POST |
 | `api/dashboard/revenue/route.ts` | 이번 달 수익 직접 입력 (쿠팡파트너스·애드포스트·애드센스 정산 화면 숫자) | GET, PUT |

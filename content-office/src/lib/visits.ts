@@ -70,16 +70,26 @@ export async function collectVisits(force = false) {
   g.__visitsBusy = true;
   try {
     const blogs = await q<{ id: string; url: string }>("SELECT id, url FROM blogs WHERE NOT archived AND COALESCE(url,'') <> ''");
+    let okCount = 0;
+    let lastErr = "";
     for (const b of blogs) {
       try {
         const s = await fetchVisits(b.url);
-        if (!s) continue;
+        if (!s) {
+          lastErr = `${b.url}: 방문자 숫자를 찾지 못함`;
+          continue;
+        }
+        okCount++;
         await save(b.id, kstDay(0), s.today, s.total);
         if (s.yesterday != null) await save(b.id, kstDay(1), s.yesterday, null);
-      } catch {
+      } catch (e) {
         /* 한 블로그가 실패해도 나머지는 계속 */
+        lastErr = `${b.url}: ${(e as Error).message}`;
       }
     }
+    const { markOk, markFail } = await import("./health");
+    if (blogs.length && !okCount) await markFail("visits", lastErr || "모든 블로그 실패");
+    else if (okCount) await markOk("visits");
     g.__visitsAt = Date.now();
   } finally {
     g.__visitsBusy = false;

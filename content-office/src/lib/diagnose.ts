@@ -42,6 +42,9 @@ export async function naverSearch(kind: "blog" | "news", query: string, display 
     if (![401, 403, 404].includes(res.status)) break;
   }
   if (!res) throw new Error("네이버 검색 API에 연결하지 못했습니다.");
+  const { markFail, markOk } = await import("./health");
+  if (!res.ok) await markFail("naver_search", `HTTP ${res.status} ${data.errorMessage ?? ""}`);
+  else await markOk("naver_search");
   if (res.status === 401 || res.status === 403) throw new Error("네이버 검색 API 권한이 없습니다. NAVER API HUB(또는 개발자센터) 앱에서 '블로그 검색'을 추가해 주세요.");
   if (!res.ok) throw new Error(`네이버 검색 API 오류 (HTTP ${res.status}) ${data.errorMessage ?? ""}`.trim());
   return { total: Number(data.total ?? 0), items: (data.items ?? []).map((i) => ({ ...i, title: String(i.title ?? "").replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&"), description: String((i as { description?: string }).description ?? "").replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&") })) };

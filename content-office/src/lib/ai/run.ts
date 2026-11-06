@@ -227,11 +227,13 @@ export async function runStep(o: Omit<RunOptions, "role" | "override"> & { step:
   for (const c of candidates) {
     try {
       const r = await runAI({ ...o, role: o.role ?? "writer", override: c, retries: o.retries ?? 1 });
+      void import("../health").then((h) => h.markOk(`ai_${c.provider}` as never)).catch(() => {});
       return c.provider === primary.provider && c.model === primary.model ? r : { ...r, substitutedFor: `${PROVIDER_LABELS[primary.provider]} (${primary.model})` };
     } catch (e) {
       const name = `${PROVIDER_LABELS[c.provider]}`;
       if (unusable(e)) {
         unhealthy.set(c.provider, Date.now() + 10 * 60_000); // 10분간 건너뜀
+        void import("../health").then((h) => h.markFail(`ai_${c.provider}` as never, (e as Error).message)).catch(() => {});
         problems.push(`${name}: 크레딧·키 문제`);
         continue;
       }

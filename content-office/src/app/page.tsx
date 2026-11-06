@@ -2,7 +2,7 @@ import Link from "next/link";
 import { dashboardData, PASS_SCORE } from "@/lib/dashboard";
 import { ensureWorker } from "@/lib/jobs";
 import { fmtDate, fmtUsd, KRW_PER_USD } from "@/components/ui";
-import { AiBalances, BlogTopButton, CostDays, RevenueCard, TopKeywordsCard, TrendChart } from "./DashboardParts";
+import { AiBalances, BlogTopButton, CostDays, HealthBanner, RevenueCard, TopKeywordsCard, TrendChart } from "./DashboardParts";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +29,8 @@ export default async function Dashboard() {
       </div>
 
       <div className="stack" style={{ gap: 16 }}>
+        {/* 고장 알림 */}
+        <HealthBanner items={d.health} />
         {/* 핵심 지표 */}
         <div className="kpi-grid">
           <div className="card card-pad kpi">

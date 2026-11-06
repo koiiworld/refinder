@@ -109,12 +109,15 @@ export async function hotTab(tabId: string, force = false): Promise<HotTabData> 
       if (list.length < 10) break;
       if (all.length >= 40) break;
     }
+    const { markOk } = await import("./health");
+    await markOk("blog_hot");
     const posts = (await relevant(tab.label, all)).sort((a, b) => b.score - a.score);
     const data: HotTabData = { posts, words: topWords(posts.map((p) => p.title)), at: Date.now() };
     await q("DELETE FROM research_snapshots WHERE source='blog_hot3' AND query->>'tab'=$1", [tab.id]);
     await q("INSERT INTO research_snapshots (id, blog_id, source, query, data) VALUES ($1,NULL,'blog_hot3',$2,$3)", [newId("snap_"), j({ tab: tab.id }), j(data)]);
     return data;
   } catch (e) {
+    await (await import("./health")).markFail("blog_hot", (e as Error).message);
     if (cached) return { ...cached.data, at: new Date(cached.at).getTime(), error: `새로 불러오지 못해 이전 결과를 보여 줘요: ${(e as Error).message}` };
     return { posts: [], words: [], at: Date.now(), error: (e as Error).message };
   }

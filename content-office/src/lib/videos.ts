@@ -91,6 +91,17 @@ async function ffmpeg(args: string[], cwd: string, label: string) {
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "vf-"));
 const clean = (dir: string) => fs.rmSync(dir, { recursive: true, force: true });
 
+/** 받기 도구(yt-dlp) 최신으로: 일주일에 한 번, 또는 받기가 사이트 변경으로 실패했을 때 */
+const gy = globalThis as unknown as { __ytdlpUpdated?: number };
+export async function updateYtdlp(force = false): Promise<string> {
+  if (!fs.existsSync(ytdlpPath())) return "받기 도구 없음";
+  if (!force && gy.__ytdlpUpdated && Date.now() - gy.__ytdlpUpdated < 7 * 86400000) return "최근에 확인함";
+  gy.__ytdlpUpdated = Date.now();
+  const r = await run(ytdlpPath(), ["-U"], { timeoutMs: 120_000 });
+  const line = (r.out + r.err).trim().split("\n").filter(Boolean).pop() ?? "";
+  return r.code === 0 ? line.slice(0, 200) : `업데이트 실패: ${line.slice(0, 200)}`;
+}
+
 export async function listVideos() {
   return q<Video>("SELECT * FROM videos ORDER BY created_at DESC LIMIT 200");
 }
@@ -225,17 +236,30 @@ export async function runVideoFetch(videoId: string, removeSubs: boolean) {
   try {
     await setVideo(videoId, { status: "running", message: "영상 받는 중…" });
     if (!fs.existsSync(ytdlpPath())) throw new Error("영상 받기 도구(yt-dlp)가 설치되지 않았어요.");
-    const r = await run(ytdlpPath(), [
+    await updateYtdlp().catch(() => "");
+    const args = [
       "--no-playlist", "--no-warnings", "--no-progress", "-j", "--no-simulate",
       "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]/b",
       "--merge-output-format", "mp4", "--ffmpeg-location", ffmpegPath(), "--max-filesize", "300M",
       "-o", "src.%(ext)s", v.source_url,
-    ], { cwd: dir, timeoutMs: 10 * 60 * 1000 });
-    const src = fs.readdirSync(dir).find((f) => /^src\.(mp4|mkv|webm|mov)$/.test(f));
+    ];
+    let r = await run(ytdlpPath(), args, { cwd: dir, timeoutMs: 10 * 60 * 1000 });
+    let src = fs.readdirSync(dir).find((f) => /^src\.(mp4|mkv|webm|mov)$/.test(f));
+    // 사이트가 바뀌어 실패한 것 같으면: 받기 도구를 최신으로 바꾸고 한 번 더
+    if ((r.code !== 0 || !src) && /Unable to extract|Unsupported|HTTP Error 4\d\d|Failed to parse|Requested format|nsig|Sign in to confirm/i.test(r.err)) {
+      await setVideo(videoId, { message: "받기 도구를 최신으로 바꾸고 다시 시도 중…" });
+      await updateYtdlp(true).catch(() => "");
+      r = await run(ytdlpPath(), args, { cwd: dir, timeoutMs: 10 * 60 * 1000 });
+      src = fs.readdirSync(dir).find((f) => /^src\.(mp4|mkv|webm|mov)$/.test(f));
+    }
+    const { markFail, markOk } = await import("./health");
     if (r.code !== 0 || !src) {
       const why = r.err.split("\n").filter((l) => /ERROR/.test(l)).pop() ?? r.err.trim().split("\n").pop() ?? "";
-      throw new Error(`영상을 받지 못했어요. ${/login|private|비공개|cookies/i.test(why) ? "비공개이거나 로그인이 필요한 영상이에요." : why.replace(/^ERROR:\s*/, "").slice(0, 200)}`);
+      const privateVideo = /login|private|비공개|cookies|not available|removed/i.test(why);
+      if (!privateVideo && /^https?:\/\/(www\.)?(instagram|youtube|youtu\.be|tiktok)/i.test(v.source_url)) await markFail("video_download", why.slice(0, 200));
+      throw new Error(`영상을 받지 못했어요. ${privateVideo ? "비공개이거나 로그인이 필요한 영상이에요." : why.replace(/^ERROR:\s*/, "").slice(0, 200)}`);
     }
+    await markOk("video_download");
     let info: { title?: string; uploader?: string; description?: string; extractor_key?: string } = {};
     try {
       info = JSON.parse(r.out.trim().split("\n").pop() ?? "{}");

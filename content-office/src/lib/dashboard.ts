@@ -4,6 +4,7 @@ import { todayUsage } from "./usage";
 import { getSettings } from "./settings";
 import { collectVisits, visitDaily, visitSummary } from "./visits";
 import { coupangConnected, lastCoupangSync, syncCoupang } from "./coupang";
+import { healthProblems } from "./health";
 
 /**
  * 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음)
@@ -188,7 +189,15 @@ export async function dashboardData() {
 
   // 쿠팡파트너스: 키가 있으면 3시간에 한 번 이번 달 수익 자동 집계
   let coupangError = "";
-  if (coupangConnected()) await syncCoupang().catch((e) => { coupangError = (e as Error).message; });
+  if (coupangConnected()) {
+    const { markFail, markOk } = await import("./health");
+    await syncCoupang()
+      .then((r) => (r ? markOk("coupang") : undefined))
+      .catch(async (e) => {
+        coupangError = (e as Error).message;
+        await markFail("coupang", coupangError);
+      });
+  }
   const coupangSync = coupangConnected() ? await lastCoupangSync() : null;
   const revenueAll = await getRevenue();
   const month = monthKey();
@@ -228,6 +237,7 @@ export async function dashboardData() {
     }),
     trend: { weeks, series: blogs.map((b) => ({ id: b.id, name: b.name, values: weeks.map((w) => weeksRows.find((x) => x.blog_id === b.id && x.wk === w)?.n ?? 0) })) },
     keywordsByBlog,
+    health: await healthProblems().catch(() => []),
     topKeywords: topKeywords.map((k) => ({ ...k, volume: Number(k.volume), blog: blogs.find((b) => b.id === k.blog_id)?.name ?? "" })),
     ops: { ...(ops ?? { ready: 0, failed: 0, rereview: 0, choosing: 0 }), todayCalls: today.models.reduce((s, m) => s + m.calls, 0), todayUsd: today.total },
     cost: { monthUsd, monthCalls, perPost: completedMonth ? monthUsd / completedMonth : null, todayUsd: today.total, todaySteps: today.steps, days },

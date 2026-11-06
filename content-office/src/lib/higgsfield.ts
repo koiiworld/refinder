@@ -96,7 +96,15 @@ export async function hfEstimate(path: string, body: Record<string, unknown>): P
 }
 
 export async function hfSubmit(path: string, body: Record<string, unknown>, idempotencyKey: string): Promise<HfSubmitResult> {
-  const d = await call("POST", `${base()}/${path.replace(/^\//, "")}`, body, idempotencyKey);
+  const h = await import("./health");
+  let d: Awaited<ReturnType<typeof call>>;
+  try {
+    d = await call("POST", `${base()}/${path.replace(/^\//, "")}`, body, idempotencyKey);
+    await h.markOk("higgsfield");
+  } catch (e) {
+    if (e instanceof HiggsfieldError && [401, 402, 403].includes(e.status)) await h.markFail("higgsfield", e.message);
+    throw e;
+  }
   const id = String(d.request_id ?? "");
   if (!id) throw new HiggsfieldError("Higgsfield 응답에 request_id가 없습니다", 0, false);
   return {

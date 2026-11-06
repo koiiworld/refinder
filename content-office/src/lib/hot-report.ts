@@ -50,8 +50,14 @@ const tag = (x: string, t: string) => decode(new RegExp(`<${t}[^>]*>([\\s\\S]*?)
 export async function googleTrends(): Promise<{ title: string; traffic: string; at: string | null; news: { title: string; url: string; source: string }[] }[]> {
   const url = process.env.GOOGLE_TRENDS_RSS_URL?.trim() || "https://trends.google.com/trending/rss?geo=KR";
   const res = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (compatible; ContentOffice/1.0)" }, signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`구글 트렌드 응답 오류 (HTTP ${res.status})`);
+  const { markFail, markOk } = await import("./health");
+  if (!res.ok) {
+    await markFail("google_trends", `HTTP ${res.status}`);
+    throw new Error(`구글 트렌드 응답 오류 (HTTP ${res.status})`);
+  }
   const xml = await res.text();
+  if (!/<item>/.test(xml)) await markFail("google_trends", "검색어 목록이 비어 있음");
+  else await markOk("google_trends");
   return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) => {
     const it = m[1];
     const pub = tag(it, "pubDate");

@@ -39,6 +39,8 @@
 
 - 키 추가(이름만): `COUPANG_ACCESS_KEY`, `COUPANG_SECRET_KEY`(맥·Render 둘 다 넣음), `SUPABASE_SERVICE_KEY`(Render만 — 맥엔 아직 없음).
 - 무료 Gemini(`keywords`·`hashtags` 단계 기본)는 키워드·해시태그·화면 캡처 읽기·핫이슈 필터·진단에 씀. 제목(ChatGPT mini)·검수(Claude)는 유료 유지(사용자 결정).
+- 🎬 영상 스튜디오 `/studio` (`studio.ts`): 기획(ChatGPT mini) → 캐릭터(Gemini, 참고 이미지로 같은 인물) → 장면 이미지 → Higgsfield Wan 2.6 장면 영상(공개 주소 필요: Render `RENDER_EXTERNAL_URL`) → ffmpeg 합치기(자막: `bin/NotoSansKR.ttf`) → 영상공장. ffmpeg는 `ffmpeg-static`을 먼저 씀(brew ffmpeg엔 drawtext 없음).
+- ⚠️ 고장 알림 (`health.ts`): 방문자·쿠팡·핫이슈·구글 트렌드·네이버 검색·검색광고·영상 받기·AI·Higgsfield 성공/실패 기록 → 연속 실패 시 대시보드 맨 위. 종류: 직접 해결 / 코드 수정 필요 / 자동 복구. yt-dlp는 켜질 때 + 매주 `-U`, 사이트 변경으로 실패하면 즉시 업데이트 후 재시도.
 - 사용자 보류: 역할별 AI 직원(에이전트) 구성. 사무실 화면(대시보드 픽셀 오피스) 제안만 함.
 
 ## 2. 코드 구조 (`content-office/`)

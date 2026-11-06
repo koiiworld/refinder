@@ -52,6 +52,7 @@ async function callKeywordTool(hints: string[]) {
     signal: AbortSignal.timeout(20_000),
   });
   const text = await res.text();
+  void import("./health").then((h) => (res.ok ? h.markOk("naver_ad") : [401, 403].includes(res.status) ? h.markFail("naver_ad", `HTTP ${res.status}`) : undefined)).catch(() => {});
   if (!res.ok) {
     let msg = text.slice(0, 200);
     try {

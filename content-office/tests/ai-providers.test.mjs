@@ -827,3 +827,19 @@ test("🎬 영상 스튜디오: 프롬프트 → AI 기획 → 캐릭터(Gemini)
   assert.equal(v.height, 1920);
   assert.ok(Math.abs(v.duration - 8) < 1, String(v.duration)); // 시험 영상 3초 + 사진 장면 5초
 });
+
+test("⚠️ 고장 알림: 방문자 수집이 3번 연속 실패하면 대시보드에 '점검 필요' · 다시 성공하면 사라짐", async () => {
+  await call("/__break?visits=1", "GET", undefined, MOCK);
+  for (let i = 0; i < 3; i++) await call("/api/dashboard/visits?refresh=1");
+  let h = (await call("/api/dashboard/health")).data;
+  const v = h.find((x) => x.id === "visits");
+  assert.ok(v, JSON.stringify(h));
+  assert.equal(v.fix, "code");
+  assert.equal(v.fails, 3);
+  const html = await (await fetch(`${BASE}/`)).text();
+  assert.ok(html.includes("점검이 필요한 기능") && html.includes("블로그 방문자 수 수집"), "대시보드에 표시");
+  await call("/__break?visits=0", "GET", undefined, MOCK);
+  await call("/api/dashboard/visits?refresh=1");
+  h = (await call("/api/dashboard/health")).data;
+  assert.ok(!h.some((x) => x.id === "visits"), "다시 성공하면 사라짐");
+});
