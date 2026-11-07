@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { PostBundle } from "@/lib/post-bundle";
-import type { PostExtras, PostPlan } from "@/lib/posts-types";
+import type { PostExtras, PostOutline, PostPlan } from "@/lib/posts-types";
 import { stageLabel, stageStep } from "@/lib/steps";
 import { placeholderNumbers, readiness, READY_LABEL, type Readiness } from "@/lib/readiness";
 import { api, Modal, useToast } from "@/components/client-utils";
@@ -932,11 +932,20 @@ function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { proj
   const needSec = o.sections.map((x, i) => (x.check && !x.removed ? i : -1)).filter((i) => i >= 0);
   const needCheck = o.claims.map((c, i) => (c.check && !c.removed ? i : -1)).filter((i) => i >= 0);
   const checks = o.claims.filter((c) => c.check && !c.removed && !c.source.trim()).length;
-  async function verify(indexes: number[], sectionIndexes: number[] = []) {
+  async function verify(indexes: number[], sectionIndexes: number[] = [], base = o) {
     setVerifying(sectionIndexes.length > 1 ? "secall" : sectionIndexes.length ? `s${sectionIndexes[0]}` : indexes.length > 1 ? "all" : String(indexes[0]));
-    await onVerify(o, indexes, sectionIndexes);
+    await onVerify(base, indexes, sectionIndexes);
     setVerifying(null);
   }
+  // 💬 확인사항별 코멘트 → 그 코멘트대로 다시 확인 (예: 공식 자료로)
+  const setClaim = (i: number, patch: Partial<PostOutline["claims"][number]>) => setO((cur) => ({ ...cur, claims: cur.claims.map((x, k) => (k === i ? { ...x, ...patch } : x)) }));
+  const setSec = (i: number, patch: Partial<PostOutline["sections"][number]>) => setO((cur) => ({ ...cur, sections: cur.sections.map((x, k) => (k === i ? { ...x, ...patch } : x)) }));
+  function recheck(kind: "claim" | "sec", i: number, comment: string) {
+    const next = kind === "claim" ? { ...o, claims: o.claims.map((x, k) => (k === i ? { ...x, check: true, comment } : x)) } : { ...o, sections: o.sections.map((x, k) => (k === i ? { ...x, check: true, comment } : x)) };
+    setO(next);
+    void (kind === "claim" ? verify([i], [], next) : verify([], [i], next));
+  }
+  const personal = (u?: string) => !!u && /(blog\.naver\.com|cafe\.naver\.com|tistory\.com|brunch\.co\.kr|velog\.io|blog\.daum\.net|cafe\.daum\.net|medium\.com|blogspot\.|wordpress\.com|kin\.naver\.com|instagram\.com|youtube\.com)/i.test(u);
   return (
     <div className="card card-pad stack" style={{ gap: 12, borderColor: "var(--accent)" }}>
       <div className="row between">
@@ -967,6 +976,8 @@ function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { proj
                   {sec.check && <button className="btn btn-sm" disabled={verifying !== null} onClick={() => verify([], [i])}>{verifying === `s${i}` ? <span className="spinner" /> : sec.verify ? "🔎 다시 확인" : "🔎 확인 요청"}</button>}
                 </div>
               )}
+              {sec.verify?.source && personal(sec.verify.source) && <span className="tiny" style={{ color: "var(--warn, #b26b00)" }}>⚠️ 근거가 개인 블로그·커뮤니티예요. 공식 자료로 다시 확인해 보세요.</span>}
+              {(sec.check || sec.verify || sec.comment) && <CommentBox value={sec.comment} disabled={verifying !== null} onSave={(v) => setSec(i, { comment: v })} onRun={(v) => recheck("sec", i, v)} />}
             </div>
           </div>
         ))}
@@ -992,10 +1003,12 @@ function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { proj
               {(c.check || c.verify) && (
                 <div className="row" style={{ gap: 6 }}>
                   {c.verify && <span className={`badge ${c.verify.status === "verified" ? "badge-ok" : "badge-bad"}`}>{c.verify.status === "verified" ? "✅ 확인완료" : "❌ 확인안됨"}</span>}
-                  {c.verify && <span className="tiny muted" style={{ flex: 1 }}>{c.verify.note}</span>}
+                  {c.verify && <span className="tiny muted" style={{ flex: 1 }}>{c.verify.note}{c.verify.status === "verified" && /^https?:/.test(c.source) ? <> · <a href={c.source} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>출처</a></> : null}</span>}
                   {c.check && <button className="btn btn-sm" disabled={verifying !== null} onClick={() => verify([i])}>{verifying === String(i) ? <span className="spinner" /> : c.verify ? "🔎 다시 확인" : "🔎 확인 요청"}</button>}
                 </div>
               )}
+              {personal(c.source) && <span className="tiny" style={{ color: "var(--warn, #b26b00)" }}>⚠️ 출처가 개인 블로그·커뮤니티예요. 공식 자료로 다시 확인해 보세요.</span>}
+              {(c.check || c.verify || c.comment || personal(c.source)) && <CommentBox value={c.comment} disabled={verifying !== null} onSave={(v) => setClaim(i, { comment: v })} onRun={(v) => recheck("claim", i, v)} />}
             </div>
           </div>
         ))}
@@ -1040,6 +1053,20 @@ function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { proj
         </Modal>
       )}
       <span className="tiny muted">승인하면 자동으로 이어져요: {estLine(e?.write) || "불러오는 중…"}</span>
+    </div>
+  );
+}
+
+/** 💬 확인사항 코멘트 칸 (예: 공식 자료로 다시 확인) → 반영해서 다시 확인 */
+function CommentBox({ value, disabled, onSave, onRun }: { value?: string; disabled: boolean; onSave: (v: string) => void; onRun: (v: string) => void }) {
+  const [v, setV] = useState(value ?? "");
+  useEffect(() => setV(value ?? ""), [value]);
+  const run = (text = v) => text.trim() && onRun(text.trim());
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+      <input className="input" style={{ fontSize: 13, flex: 1, minWidth: 200 }} value={v} onChange={(ev) => setV(ev.target.value)} onBlur={() => v !== (value ?? "") && onSave(v)} onKeyDown={(ev) => ev.key === "Enter" && run()} placeholder="💬 확인 코멘트 (예: 공식 자료로 다시 확인해줘 · 2026년 기준으로)" aria-label="확인 코멘트" />
+      {!v.includes("공식") && <button type="button" className="btn btn-sm btn-ghost" onClick={() => { const t = [v.trim(), "공식 자료(정부·기관·기업 공식 사이트·언론)로 다시 확인해줘"].filter(Boolean).join(" · "); setV(t); onSave(t); }}>🏛 공식 자료로</button>}
+      <button type="button" className="btn btn-sm" disabled={disabled || !v.trim()} onClick={() => run()}>💬 코멘트 반영해서 다시 확인</button>
     </div>
   );
 }

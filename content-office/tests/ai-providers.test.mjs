@@ -1083,6 +1083,17 @@ test("📋 기획안 승인: 제목 → 목차·근거·이미지 계획 → 고
   assert.equal(v2.project.plan.outline.claims[0].verify.status, "verified");
   assert.equal(v2.project.plan.outline.sections[0].verify.status, "unverified", "목차 확인 결과");
   assert.equal(v2.project.plan.outline.sections[0].check, true);
+  // 💬 확인사항별 코멘트: '공식 자료로' → 개인 블로그 근거는 확인안됨, 공식 사이트 근거는 확인완료 · 코멘트 저장
+  const o3 = v2.project.plan.outline;
+  const draft3 = { ...o3, claims: [{ ...o3.claims[0], comment: "공식 자료로 다시 확인해줘" }, { ...o3.claims[0], claim: "식약처 기준 냉장 보관", comment: "공식 자료로" }] };
+  const v3 = (await call(`/api/posts/${id}`, "POST", { action: "verify_claims", outline: draft3, indexes: [0, 1] })).data;
+  const c3 = v3.project.plan.outline.claims;
+  assert.equal(c3[0].verify.status, "unverified", "개인 블로그 근거는 인정 안 함");
+  assert.match(c3[0].verify.note, /공식 자료에서 확인되지 않았어요/);
+  assert.equal(c3[0].comment, "공식 자료로 다시 확인해줘", "코멘트 저장");
+  assert.equal(c3[1].verify.status, "verified");
+  assert.equal(c3[1].source, "https://www.mfds.go.kr/x");
+  assert.match(await stepPrompt("꼼꼼한 한국어 팩트체커"), /사용자 코멘트\(반드시 지켜서 판단\): 공식 자료로 다시 확인해줘[\s\S]*공식 자료\(정부/);
   // 고쳐서 승인 (체크해서 지운 주장은 글에 안 씀, 따로 보관)
   const outline = { ...b.project.plan.outline, sections: [{ heading: "굴 손질부터 보쌈까지", points: ["굴 씻는 법"] }, ...b.project.plan.outline.sections.slice(1), { heading: "지운 목차", points: ["안 씀"], removed: true }], claims: [{ ...b.project.plan.outline.claims[0], source: "https://www.nifs.go.kr" }, { ...vc[1], removed: true }] };
   await call(`/api/posts/${id}`, "POST", { action: "approve_outline", outline });

@@ -17,8 +17,8 @@ export interface PostPlan {
 }
 
 export interface PostOutline {
-  sections: { heading: string; points: string[]; check?: boolean; verify?: { status: "verified" | "unverified"; note: string; at: string; source?: string }; removed?: boolean }[];
-  claims: { claim: string; evidence: string; source: string; check: boolean; verify?: { status: "verified" | "unverified"; note: string; at: string }; removed?: boolean }[];
+  sections: { heading: string; points: string[]; check?: boolean; comment?: string; verify?: { status: "verified" | "unverified"; note: string; at: string; source?: string }; removed?: boolean }[];
+  claims: { claim: string; evidence: string; source: string; check: boolean; comment?: string; verify?: { status: "verified" | "unverified"; note: string; at: string }; removed?: boolean }[];
   images: { n: number; what: string }[];
   /** 체크해서 지운 주장 (글에는 안 씀) */
   removed?: PostOutline["claims"];

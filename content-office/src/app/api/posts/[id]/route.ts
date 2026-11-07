@@ -64,8 +64,8 @@ export async function POST(req: Request, { params }: Ctx) {
         if (!ci.length && !si.length) return fail("확인할 내용을 골라 주세요.");
         const p = await getProject(id);
         const items = [
-          ...ci.map((i) => ({ claim: outline.claims[i].claim, evidence: outline.claims[i].evidence, source: outline.claims[i].source })),
-          ...si.map((i) => ({ claim: `${outline.sections[i].heading}: ${outline.sections[i].points.join(" / ")}`, evidence: "", source: "" })),
+          ...ci.map((i) => ({ claim: outline.claims[i].claim, evidence: outline.claims[i].evidence, source: outline.claims[i].source, comment: outline.claims[i].comment ?? "" })),
+          ...si.map((i) => ({ claim: `${outline.sections[i].heading}: ${outline.sections[i].points.join(" / ")}`, evidence: "", source: "", comment: outline.sections[i].comment ?? "" })),
         ];
         const verdicts = await verifyClaims(id, p?.topic ?? "", items);
         const at = new Date().toISOString();

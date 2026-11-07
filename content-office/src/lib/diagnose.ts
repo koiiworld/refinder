@@ -22,7 +22,7 @@ export async function naverBlogSearch(query: string, display = 10): Promise<{ to
 }
 
 /** 네이버 검색 API (블로그·뉴스) — NAVER API HUB 키 우선, 기존 개발자센터 키도 지원 */
-export async function naverSearch(kind: "blog" | "news", query: string, display = 10, sort: "sim" | "date" = "sim"): Promise<{ total: number; items: (SearchItem & { description?: string; originallink?: string; pubDate?: string })[] }> {
+export async function naverSearch(kind: "blog" | "news" | "webkr", query: string, display = 10, sort: "sim" | "date" = "sim"): Promise<{ total: number; items: (SearchItem & { description?: string; originallink?: string; pubDate?: string })[] }> {
   const id = process.env.NAVER_CLIENT_ID?.trim();
   const secret = process.env.NAVER_CLIENT_SECRET?.trim();
   if (!id || !secret) throw new Error("네이버 검색 API 키(NAVER_CLIENT_ID / NAVER_CLIENT_SECRET)가 없습니다.");

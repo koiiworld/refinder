@@ -52,6 +52,7 @@ export function cleanClaims(list: Partial<Claim>[]): Claim[] {
   return list
     .map((c) => ({
       claim: String(c.claim ?? "").slice(0, 200), evidence: String(c.evidence ?? "").slice(0, 200), source: String(c.source ?? "").slice(0, 300), check: !!c.check,
+      ...(String(c.comment ?? "").trim() ? { comment: String(c.comment).trim().slice(0, 300) } : {}),
       ...(c.verify && ["verified", "unverified"].includes(c.verify.status) ? { verify: { status: c.verify.status, note: String(c.verify.note ?? "").slice(0, 200), at: String(c.verify.at ?? "") } } : {}),
       ...(c.removed ? { removed: true } : {}),
     }))
@@ -66,6 +67,7 @@ export function cleanSections(list: Partial<Section>[]): Section[] {
     .map((x) => ({
       heading: String(x.heading ?? "").slice(0, 120), points: (x.points ?? []).map(String).slice(0, 4),
       ...(x.check ? { check: true } : {}),
+      ...(String(x.comment ?? "").trim() ? { comment: String(x.comment).trim().slice(0, 300) } : {}),
       ...(x.verify && ["verified", "unverified"].includes(x.verify.status) ? { verify: { status: x.verify.status, note: String(x.verify.note ?? "").slice(0, 200), at: String(x.verify.at ?? ""), ...(x.verify.source ? { source: String(x.verify.source).slice(0, 300) } : {}) } } : {}),
       ...(x.removed ? { removed: true } : {}),
     }))
