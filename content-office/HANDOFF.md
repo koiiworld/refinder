@@ -2,6 +2,20 @@
 
 다른 AI 코딩 도구(Codex 등)가 이어서 작업할 때 **가장 먼저 읽을 문서**입니다. 기준 날짜: 2026-11-06. **파일 찾기는 `CODEMAP.md`(자동 생성: `node scripts/codemap.mjs`)를 먼저 보세요.**
 
+## ★ 지금 바로 이어서 (2026-11-07 밤, Claude 마지막 상태)
+
+- 저장소: `https://github.com/koiiworld/refinder` · 브랜치 **`feature/ai-content-office`** · 앱 폴더 **`/Users/minemone/project/refinder/content-office`** (이 맥 폴더가 기준)
+- 배포: 이 브랜치에 push 하면 **Render 자동 배포**. 맥 앱 재시작: `osascript -e 'tell application "Terminal" to do script "zsh ~/.ai-content-office/restart-app.sh"'`
+- 사용자 허락: **사용자가 요청한 변경은 테스트 통과 후 바로 배포(push)해도 됨.** 키·외부 결제·운영 데이터 삭제는 물어볼 것.
+- 테스트: `bash tests/run-isolated.sh` (5~10분, /tmp/co-test 에 복사해 모의 AI로 돌림, 실제 DB 안 건드림). 마지막 통과: 10 + 60.
+- **커밋 안 된 작업 1건 (테스트 아직 안 돌림)** — 블로그 진단 개선 (`src/lib/diagnose.ts`, `src/app/diagnose/DiagnoseView.tsx`, `src/app/api/diagnose/route.ts`, `tests/*`):
+  - AI 진단 JSON 에 `problems[].steps/example`, `fixes[]`(점검표 줄별 고치는 법·실제 제목 기존→개선 예시), `growth[]`(조회수·유입 늘리기, 대시보드 조회수 캡처 `topPosts` 근거) 추가, maxTokens 8000
+  - 점검표 줄마다 "💡 고치는 법" 펼치기 + "할 일로 보내기"
+  - 이번 주 할 일: 문구 직접 수정(자동 저장 `POST /api/diagnose {blogId, next}`), 체크 → **할 일로 보내기 팝업**(제목·날짜·시간·업무·블로그·메모·텔레그램 알림 설정 후 `/api/todos` 로 생성)
+  - 할 일: `bash tests/run-isolated.sh` 통과 확인 → 커밋·push → 맥 앱 재시작
+- 최근(11-07) 끝낸 것: 캡컷형 영상 편집 `/edit` + 2단계 AI 도구(배경 제거 rembg·화질 Real-ESRGAN·슬로모션 RIFE·AI 음성 edge-tts, 모두 맥 `~/.ai-content-office/` 의 무료 도구, 작업 종류 `edit_fx`/`edit_tts` 는 맥 전용), 문서→마크다운 `/convert`(MarkItDown, 맥 전용 `doc_convert`), 텔레그램 탭 `/telegram`(보낸·받은 메시지함), 휴지통 통합(`trash.ts`·`trash-snap.ts`, 30일 뒤 자동 완전 삭제), 글 편집기 ✂️캡처·✨AI 수정(표는 HTML 그대로 수정), 애드포스트 하루 입력, 인기 글 TOP10 날짜·기간 지정, 진단 줄별 다시 진단하기.
+- 아직 안 한 것(사용자 제안): **앱 안 ChatGPT (chat 모드 / work 모드)** — 사용자에게 진행 여부·비용(OpenAI 키 사용) 확인 후 시작. 루틴 '승인 대기·AI 오류 알림'.
+
 ## 0. 사용자와 일하는 규칙 (꼭 지킬 것)
 
 - 사용자는 비개발자, **한국어로 쉽게** 설명. 화면 문구도 한국어.
