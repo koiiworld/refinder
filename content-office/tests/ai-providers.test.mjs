@@ -56,6 +56,12 @@ test("① 키워드 추천: AI 후보 + 네이버 실제 검색량·연관 키�
   assert.ok(log.some((l) => l.path === "/keywordstool"));
   assert.ok(log.some((l) => l.path === "/search-trend/v1/search"));
   pickIds = picks.filter((p) => p.origin === "ai").slice(0, 2).map((p) => p.id);
+  assert.ok(!picks.some((p) => p.keyword === "가습기"), "블로그 분야와 무관(fit:false)한 키워드는 뺌");
+  assert.match(prompt, /분야와 상관없는 단어 자체/);
+  // 대시보드 TOP 5 에서 ✕ 빼기 (같은 키워드의 아직 안 쓴 추천 전부)
+  const d = await call("/api/keywords", "POST", { action: "dismiss_keyword", blogId: "blog_algokitchen", keyword: "절임 배추" });
+  assert.ok(d.data.count >= 1, "띄어쓰기 달라도 같은 키워드");
+  assert.ok(!(await call("/api/keywords?blogId=blog_algokitchen")).data.some((p) => p.keyword === "절임배추"), "목록에서 빠짐");
 });
 
 test("② 여러 키워드 → 글 1개 · ③ 제목 후보에서 대기 → 글 쓰기 → ④⑥ (ChatGPT 제목·글, Claude 검수)", async () => {

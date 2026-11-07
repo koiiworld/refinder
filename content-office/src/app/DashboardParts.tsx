@@ -771,8 +771,16 @@ export function AiBalances() {
 const STAGE_LABEL: Record<string, string> = { titles: "제목 고르는 중", writing: "글 쓰는 중", reviewing: "검수 중", ready: "발행 대기", published: "발행 완료" };
 
 export function TopKeywordsCard({ blogs, byBlog }: { blogs: { id: string; name: string }[]; byBlog: Record<string, { keyword: string; volume: number; project_id: string | null; stage: string | null }[]> }) {
+  const router = useRouter();
   const [blogId, setBlogId] = useState(blogs.find((b) => byBlog[b.id]?.length)?.id ?? blogs[0]?.id ?? "");
-  const rows = byBlog[blogId] ?? [];
+  const [gone, setGone] = useState<string[]>([]);
+  const rows = (byBlog[blogId] ?? []).filter((k) => !gone.includes(`${blogId}:${k.keyword}`));
+  async function dismiss(keyword: string) {
+    if (!confirm(`'${keyword}'을(를) 이 블로그 키워드 목록에서 뺄까요? (블로그 주제와 맞지 않는 키워드)`)) return;
+    setGone((g) => [...g, `${blogId}:${keyword}`]);
+    await api("/api/keywords", "POST", { action: "dismiss_keyword", blogId, keyword }).catch(() => {});
+    router.refresh();
+  }
   const name = blogs.find((b) => b.id === blogId)?.name ?? "";
   return (
     <section className="card">
@@ -805,7 +813,10 @@ export function TopKeywordsCard({ blogs, byBlog }: { blogs: { id: string; name: 
                 <td>{k.project_id ? <a href={`/posts/${k.project_id}`} style={{ color: "var(--accent)" }}>{k.keyword}</a> : k.keyword}</td>
                 <td>{name}</td>
                 <td style={{ textAlign: "right" }}>{k.volume.toLocaleString("ko-KR")}</td>
-                <td>{k.stage ? STAGE_LABEL[k.stage] ?? k.stage : <a href={`/new?hint=${encodeURIComponent(k.keyword)}`} style={{ color: "var(--accent)" }}>✍️ 아직 안 씀 · 쓰기</a>}</td>
+                <td>
+                  {k.stage ? STAGE_LABEL[k.stage] ?? k.stage : <a href={`/new?hint=${encodeURIComponent(k.keyword)}`} style={{ color: "var(--accent)" }}>✍️ 아직 안 씀 · 쓰기</a>}
+                  {!k.project_id && <button type="button" className="btn btn-sm btn-ghost" title="블로그 주제와 맞지 않으면 빼기" aria-label={`${k.keyword} 빼기`} onClick={() => dismiss(k.keyword)} style={{ marginLeft: 6, padding: "0 6px" }}>✕</button>}
+                </td>
               </tr>
             ))}
             {!rows.length && <tr><td colSpan={5} className="small muted">이 블로그는 아직 검색량을 잰 키워드가 없어요. 글 만들기에서 키워드 추천을 받아 보세요.</td></tr>}

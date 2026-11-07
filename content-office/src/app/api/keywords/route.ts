@@ -23,6 +23,11 @@ export async function POST(req: Request) {
       }
     }
     if (b.action === "add") return ok({ id: await addUserKeyword(b.blogId, b.keyword ?? "") }, 201);
+    // 대시보드 TOP 5에서 '이 블로그와 무관' 빼기: 같은 키워드(띄어쓰기 무시)의 아직 안 쓴 추천 전부
+    if (b.action === "dismiss_keyword" && b.keyword?.trim()) {
+      const r = await q("UPDATE keyword_picks SET status='dismissed' WHERE blog_id=$1 AND replace(keyword, ' ', '') = replace($2, ' ', '') AND status='new' RETURNING id", [b.blogId, b.keyword.trim()]);
+      return ok({ count: r.length });
+    }
     if (b.action === "dismiss" && b.ids?.length) {
       await q("UPDATE keyword_picks SET status='dismissed' WHERE blog_id=$1 AND id = ANY($2) AND status='new'", [b.blogId, b.ids]);
       return ok({ ok: true });

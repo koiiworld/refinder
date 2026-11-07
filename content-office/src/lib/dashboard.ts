@@ -195,7 +195,7 @@ export async function dashboardData() {
   const kwRows = await q<{ blog_id: string; keyword: string; volume: number; project_id: string | null; stage: string | null; deleted: boolean | null }>(
     `SELECT k.blog_id, k.keyword, (k.volume->>'total')::numeric AS volume, p.id AS project_id, p.stage, (p.deleted_at IS NOT NULL) AS deleted
        FROM keyword_picks k LEFT JOIN projects p ON p.id = k.project_id
-      WHERE k.volume IS NOT NULL AND (k.volume->>'total') IS NOT NULL
+      WHERE k.volume IS NOT NULL AND (k.volume->>'total') IS NOT NULL AND k.status <> 'dismissed'
       ORDER BY (k.volume->>'total')::numeric DESC LIMIT 2000`,
   );
   const norm = (s: string) => s.replace(/\s+/g, "");

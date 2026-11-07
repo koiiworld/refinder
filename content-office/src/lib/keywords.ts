@@ -102,7 +102,8 @@ export async function recommendKeywords(blogId: string, hint = "") {
     hint,
   });
   const res = await runStep({ step: "keywords", role: "ideas", purpose: "keywords", blog, system, prompt, json: true, retries: 1, maxTokens: 6000 });
-  const ai = (extractJson<{ keywords?: { keyword?: string; reason?: string; season?: string }[] }>(res.text).keywords ?? [])
+  const ai = (extractJson<{ keywords?: { keyword?: string; reason?: string; season?: string; fit?: boolean }[] }>(res.text).keywords ?? [])
+    .filter((k) => k.fit !== false) // 블로그 분야와 무관하다고 AI가 스스로 표시한 건 뺌
     .map((k) => ({ keyword: String(k.keyword ?? "").trim(), reason: String(k.reason ?? ""), season: String(k.season ?? "") }))
     .filter((k) => k.keyword);
 
