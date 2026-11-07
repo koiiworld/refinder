@@ -542,6 +542,17 @@ CREATE TABLE IF NOT EXISTS routine_notifications (
   UNIQUE (run_id, kind, round)
 );
 CREATE INDEX IF NOT EXISTS routine_notifications_due ON routine_notifications (status, send_at);
+-- 🎞 영상 편집 (캡컷형)
+CREATE TABLE IF NOT EXISTS edit_projects (
+  id              TEXT PRIMARY KEY,
+  title           TEXT NOT NULL DEFAULT '',
+  doc             JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status          TEXT NOT NULL DEFAULT 'ready',   -- ready | rendering | working | error
+  message         TEXT NOT NULL DEFAULT '',
+  output_video_id TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image_kit JSONB NOT NULL DEFAULT '{}'::jsonb;  -- 🎨 이미지 컨셉 키트 (레퍼런스·스타일 문구·Soul ID)
 ALTER TABLE carousels ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;        -- 게시함 (직접 표시)
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;

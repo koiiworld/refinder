@@ -77,7 +77,7 @@ export async function saveDoc(id: string, doc: ReelDoc, title?: string) {
   return clean;
 }
 
-function run(cmd: string, args: string[], opts: { env?: Record<string, string>; onLine?: (l: string) => void; timeoutMs?: number } = {}) {
+export function run(cmd: string, args: string[], opts: { env?: Record<string, string>; onLine?: (l: string) => void; timeoutMs?: number } = {}) {
   return new Promise<{ code: number; out: string; err: string }>((resolve) => {
     const p = spawn(cmd, args, { env: { ...process.env, ...opts.env } });
     let out = "", err = "", buf = "";
@@ -96,7 +96,7 @@ function run(cmd: string, args: string[], opts: { env?: Record<string, string>; 
   });
 }
 
-async function videoToTemp(videoId: string, dir: string) {
+export async function videoToTemp(videoId: string, dir: string) {
   const v = await getVideo(videoId);
   if (!v?.path) throw new Error("영상 파일을 찾을 수 없어요.");
   const f = path.join(dir, `${videoId}.mp4`);
@@ -195,7 +195,7 @@ export async function startReelRender(id: string) {
 }
 
 /** 내보낼 때만 잠깐 여는 파일 서버 (영상·글꼴을 Remotion에 넘김) */
-function fileServer(files: Record<string, string>) {
+export function fileServer(files: Record<string, string>) {
   const srv = http.createServer((req, res) => {
     const f = files[decodeURIComponent((req.url ?? "/").slice(1).split("?")[0])];
     if (!f || !fs.existsSync(f)) {
@@ -203,7 +203,7 @@ function fileServer(files: Record<string, string>) {
       return res.end();
     }
     const size = fs.statSync(f).size;
-    const type = f.endsWith(".ttf") ? "font/ttf" : "video/mp4";
+    const type = f.endsWith(".ttf") ? "font/ttf" : /\.(jpe?g)$/.test(f) ? "image/jpeg" : f.endsWith(".png") ? "image/png" : f.endsWith(".webp") ? "image/webp" : "video/mp4";
     const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? "");
     const common = { "accept-ranges": "bytes", "content-type": type, "access-control-allow-origin": "*" };
     if (m) {

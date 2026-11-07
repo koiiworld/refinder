@@ -117,8 +117,11 @@ export async function updateRoutine(id: string, input: Partial<Routine>) {
   const today = await q1<Run>("SELECT * FROM routine_runs WHERE routine_id=$1 AND run_date=$2", [id, kstToday()]);
   if (today && !["done", "missed"].includes(today.status)) {
     await q("UPDATE routine_notifications SET status='canceled' WHERE run_id=$1 AND status='pending'", [today.id]);
-    if (!c.paused) await scheduleNotifications(today, (await getRoutine(id))!);
+    // 일시정지: 아직 손대지 않은 오늘 실행은 지움 (오늘의 루틴에서 빠짐). 다시 켜면 아래 ensureRuns 가 다시 만듦
+    if (c.paused && today.status === "pending" && !today.items.some((i) => i.done)) await q("DELETE FROM routine_runs WHERE id=$1", [today.id]);
+    else if (!c.paused) await scheduleNotifications(today, (await getRoutine(id))!);
   }
+  if (!c.paused) await ensureRuns();
   return getRoutine(id);
 }
 
@@ -148,7 +151,7 @@ export async function listRuns(opts: { from?: string; to?: string; status?: stri
   if (opts.routineId) { args.push(opts.routineId); where.push(`r.routine_id = $${args.length}`); }
   return q<Run & { name: string; time: string; completion: string; checklist: ChecklistItem[]; blog_id: string | null; link: string; category: string }>(
     `SELECT r.*, t.name, t.time, t.completion, t.checklist, t.blog_id, t.link, t.category FROM routine_runs r JOIN routines t ON t.id=r.routine_id
-     ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY r.run_date DESC, r.due_at LIMIT 300`,
+     WHERE NOT (t.paused AND r.status = 'pending') ${where.length ? `AND ${where.join(" AND ")}` : ""} ORDER BY r.run_date DESC, r.due_at LIMIT 300`,
     args,
   );
 }

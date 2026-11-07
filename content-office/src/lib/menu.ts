@@ -24,6 +24,7 @@ export const MENU_GROUPS: MenuGroup[] = [
   ] },
   { id: "video", label: "영상 제작", items: [
     { href: "/studio", label: "영상 스튜디오", sub: "쇼츠·릴스 기획 및 제작" },
+    { href: "/edit", label: "영상 편집", sub: "캡컷처럼 자르기·트랙·자막·효과·4K" },
     { href: "/reels", label: "릴스 편집", sub: "자막·장면·배경 캡컷처럼 편집" },
     { href: "/videos", label: "영상공장", short: "영상", sub: "영상 다운로드·자막 제거·편집", mobile: true },
   ] },

@@ -29,7 +29,7 @@ if (!fs.existsSync(path.join(bundleDir, "index.html"))) {
   serveUrl = await bundle({ entryPoint: job.entry, outDir: bundleDir });
 }
 
-const opts = { serveUrl, id: "Reel", inputProps: job.props, ...(job.browser ? { browserExecutable: job.browser } : {}) };
+const opts = { serveUrl, id: job.compositionId || "Reel", inputProps: job.props, ...(job.browser ? { browserExecutable: job.browser } : {}) };
 const composition = await selectComposition(opts);
 let last = 0;
 await renderMedia({
@@ -37,6 +37,7 @@ await renderMedia({
   composition,
   codec: "h264",
   crf: 23,
+  ...(job.scale ? { scale: job.scale } : {}), // 해상도: 720p 0.67 · 1080p 1 · 2K 1.33 · 4K 2
   outputLocation: job.out,
   concurrency: 2,
   onProgress: ({ progress }) => {

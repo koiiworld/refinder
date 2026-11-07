@@ -588,3 +588,73 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .routine-item.target { border-color: var(--accent); background: var(--accent-soft); }
 .routine-cap { max-width: 240px; max-height: 180px; border-radius: 8px; border: 1px solid var(--line); }
 .routine-form .seg button { padding: 6px 10px; }
+
+/* 🎞 영상 편집 (캡컷형, 어두운 화면) */
+.cut { --cut-bg: #121214; --cut-panel: #1c1c1f; --cut-line: #2c2c31; --cut-text: #f2f2f4; --cut-muted: #8e8e98; --cut-accent: #1fd1e6; background: var(--cut-bg); color: var(--cut-text); display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.cut-top { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+.cut-icon { background: none; border: 0; color: var(--cut-text); font-size: 20px; cursor: pointer; padding: 4px 8px; text-decoration: none; }
+.cut-title { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--cut-text); font: inherit; font-weight: 700; font-size: 15px; }
+.cut-save { font-size: 11px; color: var(--cut-muted); }
+.cut-res { background: var(--cut-panel); color: var(--cut-text); border: 0; border-radius: 10px; padding: 8px 10px; font: inherit; font-weight: 700; }
+.cut-export { background: var(--cut-accent); color: #062a30; border: 0; border-radius: 10px; padding: 9px 16px; font: inherit; font-weight: 800; cursor: pointer; }
+.cut-export:disabled { opacity: .6; }
+.cut-note { font-size: 12px; padding: 4px 14px; color: var(--cut-muted); }
+.cut-note.bad { color: #ff8a8a; }
+.cut-note a { color: var(--cut-accent); }
+.cut-stage { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 4px 12px; }
+.cut-frame { max-height: 100%; max-width: 100%; height: 100%; background: #000; position: relative; }
+.cut-empty { width: 100%; height: 100%; background: #000; color: var(--cut-text); border: 1px dashed var(--cut-line); font-size: 16px; cursor: pointer; }
+.cut-bar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; }
+.cut-time { font-size: 13px; font-variant-numeric: tabular-nums; }
+.cut-time span { color: var(--cut-muted); }
+.cut-play { margin: 0 auto; background: none; border: 0; color: var(--cut-text); font-size: 22px; cursor: pointer; }
+.cut-zoom { width: 80px; accent-color: var(--cut-accent); }
+.cut-tl-wrap { position: relative; display: flex; height: 230px; flex-shrink: 0; border-top: 1px solid var(--cut-line); }
+.cut-side { width: 84px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 30px; z-index: 2; background: var(--cut-bg); }
+.cut-side-btn { background: none; border: 0; color: var(--cut-text); font: inherit; font-size: 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; height: 56px; justify-content: center; }
+.cut-side-btn span { color: var(--cut-muted); }
+.cut-side-btn.on span { color: var(--cut-accent); }
+.cut-side-gap { height: 0; }
+.cut-side-ic { width: 36px; height: 30px; border-radius: 8px; background: var(--cut-panel); display: grid; place-items: center; color: var(--cut-muted); font-size: 13px; margin-top: 2px; }
+.cut-tl { flex: 1; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; position: relative; user-select: none; }
+.cut-tl::-webkit-scrollbar { display: none; }
+.cut-ruler { height: 24px; position: relative; }
+.cut-ruler span { position: absolute; top: 4px; font-size: 11px; color: var(--cut-muted); transform: translateX(-50%); }
+.cut-row { position: relative; height: 36px; margin-top: 6px; }
+.cut-row.main { height: 56px; }
+.cut-clip { position: absolute; top: 0; bottom: 0; border-radius: 6px; background-color: #2a2a30; background-size: auto 100%; background-repeat: repeat-x; cursor: pointer; overflow: hidden; border: 2px solid transparent; }
+.cut-clip.on { border-color: #fff; }
+.cut-tag { position: relative; top: 4px; left: 4px; margin-right: 3px; font-size: 10px; background: rgba(0,0,0,.65); color: #fff; padding: 1px 5px; border-radius: 4px; }
+.cut-tag.tr { background: var(--cut-accent); color: #062a30; }
+.cut-h { position: absolute; top: 0; bottom: 0; width: 12px; background: #fff; cursor: ew-resize; touch-action: none; }
+.cut-h.l { left: 0; border-radius: 4px 0 0 4px; }
+.cut-h.r { right: 0; border-radius: 0 4px 4px 0; }
+.cut-add { position: absolute; top: 8px; width: 40px; height: 40px; border-radius: 8px; background: #fff; color: #000; border: 0; font-size: 24px; cursor: pointer; }
+.cut-addrow { position: absolute; top: 0; height: 100%; background: var(--cut-panel); color: var(--cut-text); border: 0; border-radius: 6px; padding: 0 14px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.cut-blk { position: absolute; top: 0; bottom: 0; border-radius: 6px; font-size: 11px; color: #fff; padding: 0 16px 0 8px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; cursor: grab; touch-action: none; border: 2px solid transparent; }
+.cut-blk.on { border-color: #fff; }
+.cut-blk.ov { background: #6b4ad6; }
+.cut-blk.au { background: #1f8a6a; }
+.cut-blk.tx { background: #c2552f; }
+.cut-playhead { position: absolute; top: 0; bottom: 0; left: calc(84px + (100% - 84px) / 2); width: 2px; background: #fff; pointer-events: none; z-index: 3; }
+.cut-panel { background: var(--cut-panel); border-top: 1px solid var(--cut-line); padding: 10px 14px; max-height: 26vh; overflow-y: auto; flex-shrink: 0; }
+.cut.has-panel .cut-tl-wrap { height: 150px; }
+.cut-stage { min-height: 30vh; }
+.cut-icon svg, .cut-side-btn svg { display: block; }
+.cut-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cut-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cut-chips button, .cut-chips label, .cut-btn { background: #2a2a30; color: var(--cut-text); border: 1px solid transparent; border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.cut-chips button.on { border-color: var(--cut-accent); color: var(--cut-accent); }
+.cut-btn.primary { background: var(--cut-accent); color: #062a30; font-weight: 800; }
+.cut-hint { font-size: 11px; color: var(--cut-muted); }
+.cut-row-ctl { display: grid; grid-template-columns: 70px 1fr auto; align-items: center; gap: 8px; font-size: 12px; color: var(--cut-muted); }
+.cut-row-ctl input[type=range], .cut-panel input[type=range] { accent-color: var(--cut-accent); width: 100%; }
+.cut-input { width: 100%; background: #2a2a30; color: var(--cut-text); border: 0; border-radius: 8px; padding: 8px; font: inherit; }
+.cut-tools { display: flex; gap: 4px; overflow-x: auto; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--cut-line); flex-shrink: 0; scrollbar-width: none; }
+.cut-tool { flex: 0 0 auto; min-width: 64px; background: none; border: 0; color: var(--cut-text); font: inherit; font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; padding: 4px 6px; }
+.cut-tool svg { width: 26px; height: 26px; }
+.cut-tool.back { min-width: 36px; font-size: 26px; }
+body:has(.cut) .main .page { max-width: none; padding: 0; }
+/* 편집기는 캡컷처럼 화면 전체 (앱 위·아래 메뉴 숨김) */
+body:has(.cut) .bottomnav, body:has(.cut) .topbar, body:has(.cut) .side { display: none !important; }
+.cut { height: 100dvh; }

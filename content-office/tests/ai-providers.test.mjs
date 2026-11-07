@@ -1535,6 +1535,18 @@ test("🔁 루틴 관리: 반복 등록 → 오늘 실행 자동 생성 → 텔�
   const lr = (await call("/api/routines")).data.today.find((x) => x.routine_id === late.id);
   assert.equal(lr.status, "missed");
   assert.ok(!(await tgSends()).some((l) => l.body.text?.includes("늦은 루틴")), "미수집은 알림 안 보냄");
+  // 일시정지 → 오늘의 루틴에서 빠짐, 다시 켜면 돌아옴
+  const pz = (await call("/api/routines", "POST", { name: "멈출 루틴", time: "23:30", completion: "button" })).data;
+  assert.ok((await call("/api/routines")).data.today.some((x) => x.routine_id === pz.id));
+  await call(`/api/routines/${pz.id}`, "PUT", { paused: true });
+  assert.ok(!(await call("/api/routines")).data.today.some((x) => x.routine_id === pz.id), "일시정지하면 오늘에서 빠짐");
+  await call(`/api/routines/${pz.id}`, "PUT", { paused: false });
+  assert.ok((await call("/api/routines")).data.today.some((x) => x.routine_id === pz.id), "다시 켜면 돌아옴");
+  await call(`/api/routines/${pz.id}`, "DELETE");
+  // 정한 시각: 횟수만큼 시각 채움
+  const tm = (await call("/api/routines", "POST", { name: "시각 루틴", time: "09:00", completion: "button", remind: { mode: "times", times: ["20:00", "22:00"], max: 3 } })).data;
+  assert.equal(tm.remind.times.length, 3, JSON.stringify(tm.remind));
+  await call(`/api/routines/${tm.id}`, "DELETE");
   // 매주·매월: 오늘 아닌 요일은 안 만듦
   const dow = new Date(`${kstDate(0)}T00:00:00Z`).getUTCDay();
   const wk = (await call("/api/routines", "POST", { name: "주간 루틴", time: "23:00", completion: "button", schedule: { type: "weekly", days: [(dow + 1) % 7] } })).data;
@@ -1550,4 +1562,68 @@ test("🔁 루틴 관리: 반복 등록 → 오늘 실행 자동 생성 → 텔�
   assert.ok(st.includes("알림 설정 (텔레그램)") && st.includes("방해 금지"), "설정: 알림 설정");
   for (const id of [r.data.id, late.id, wk.id]) await call(`/api/routines/${id}`, "DELETE");
   await call("/api/routines/policy", "PUT", policy0);
+});
+
+test("🎞 영상 편집(캡컷형): 영상으로 시작 → 분할·배속·필터·전환·줌·오버레이·오디오·텍스트 저장 → 자동 자막 → 역재생 → 720p 내보내기 · 음악 올리기", async () => {
+  const fs = await import("node:fs");
+  const vids = (await call("/api/videos")).data.videos.filter((v) => v.status === "ready" && v.kind === "upload");
+  const vid = vids[0].id;
+  const c = await call("/api/edit", "POST", { videoIds: [vid, vid], title: "시험 편집" });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  let e = (await call(`/api/edit/${c.data.id}`)).data;
+  assert.equal(e.doc.clips.length, 2);
+  assert.equal(e.doc.ratio, "9:16", "세로 영상 → 9:16");
+  // 음악 올리기 (mp3 대신 소리만 있는 wav를 만들어 올림)
+  const wav = Buffer.alloc(44 + 16000);
+  wav.write("RIFF", 0); wav.writeUInt32LE(36 + 16000, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(16000, 40);
+  const fd = new FormData();
+  fd.append("file", new Blob([wav], { type: "audio/wav" }), "bgm.wav");
+  const au = await (await fetch(`${BASE}/api/videos/upload`, { method: "POST", body: fd })).json();
+  assert.ok(au.id, JSON.stringify(au));
+  // 편집: 첫 클립 0~2초로 자르고 2배속·흑백·줌, 둘째 클립 페이드, 오버레이·오디오·텍스트
+  const doc = e.doc;
+  doc.clips[0] = { ...doc.clips[0], out: 2, speed: 2, filter: "bw", zoom: { from: 1, to: 1.3, x: 50, y: 50 } };
+  doc.clips[1] = { ...doc.clips[1], transition: "fade" };
+  doc.overlays = [{ id: "ov1", src: vid, kind: "video", start: 0.5, dur: 1, in: 0, x: 70, y: 30, w: 40, opacity: 1, volume: 0, radius: 10 }];
+  doc.audios = [{ id: "au1", src: au.id, start: 0, in: 0, dur: 1, volume: 0.5, label: "bgm" }];
+  doc.texts = [{ id: "t1", start: 0, end: 1, text: "직접 쓴 자막", style: { size: 60, bold: true, color: "#ffffff", box: "", stroke: "#000000", align: "center", fit: true, x: 540, y: 300, width: 900, rotate: 0, anim: "slide" } }];
+  const sv = await call(`/api/edit/${e.id}`, "PUT", { doc, title: "시험 편집" });
+  assert.equal(sv.status, 200, JSON.stringify(sv.data));
+  assert.equal(sv.data.doc.clips[0].speed, 2);
+  assert.equal((await call(`/api/edit/${e.id}`, "PUT", { doc: { clips: "x" } })).status, 400);
+  const wait = async (label) => {
+    for (let i = 0; i < 480; i++) {
+      e = (await call(`/api/edit/${e.id}`)).data;
+      if (!["working", "rendering"].includes(e.status)) return e;
+      await new Promise((x) => setTimeout(x, 1000));
+    }
+    throw new Error(`시간 초과: ${label}`);
+  };
+  // 자동 자막: 자른 구간(0~2초)·2배속에 맞춰 → 첫 클립 1초 안에 2문장, 둘째 클립(3초 그대로)에 3문장
+  await call(`/api/edit/${e.id}`, "POST", { action: "captions" });
+  e = await wait("자막");
+  assert.equal(e.status, "ready", e.message);
+  const auto = e.doc.texts.filter((x) => x.auto);
+  assert.equal(auto.length, 5, JSON.stringify(auto.map((x) => [x.start, x.end, x.text])));
+  assert.ok(auto[0].end <= 1.01 && auto[2].start >= 0.99, "배속·위치 맞춤");
+  assert.ok(e.doc.texts.some((x) => x.text === "직접 쓴 자막"), "직접 쓴 자막은 그대로");
+  // 역재생
+  await call(`/api/edit/${e.id}`, "POST", { action: "reverse", clipId: e.doc.clips[0].id });
+  e = await wait("역재생");
+  assert.equal(e.status, "ready", e.message);
+  assert.notEqual(e.doc.clips[0].src, vid, "역재생 영상으로 교체");
+  assert.equal(e.doc.clips[0].reversed, true);
+  // 내보내기 720p
+  await call(`/api/edit/${e.id}`, "POST", { action: "render", resolution: "720p" });
+  e = await wait("내보내기");
+  assert.equal(e.status, "ready", e.message);
+  const out = (await call("/api/videos")).data.videos.find((v) => v.id === e.output_video_id);
+  assert.equal(out.width, 720);
+  assert.equal(out.height, 1280);
+  assert.ok(out.duration > 3 && out.duration < 5, String(out.duration));
+  const pg = (await (await fetch(`${BASE}/edit/${e.id}`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["내보내기", "편집", "오디오", "텍스트", "편집효과", "오버레이", "캡션", "필터", "비율", "클립 오디오"]) assert.ok(pg.includes(w), w);
+  const list = (await (await fetch(`${BASE}/edit`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(list.includes("시험 편집") && list.includes("내보냄"), "목록");
+  void fs;
 });
