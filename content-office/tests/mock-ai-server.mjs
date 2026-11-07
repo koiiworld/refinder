@@ -250,6 +250,8 @@ http
 
     // ── 텍스트 AI 3사: 시스템 프롬프트 내용으로 단계별 응답 ──
     const answer = (system, prompt) => {
+      // ✂️ 캡처·여러 문단 HTML 수정: 표 구조 유지 + 행 하나 추가
+      if (system.includes("블로그 원고 편집자")) return "```html\n<table><tbody><tr><th>기존 지원</th><th>2027년 정부 개편안</th></tr><tr><td>아동수당</td><td>아동기본수당</td></tr><tr><td>합계</td><td>월 30만 원</td></tr></tbody></table><p>※ 2026년 11월 기준</p>\n```";
       if (system.includes("꼼꼼한 한국어 팩트체커") && prompt.includes("사용자 코멘트")) return JSON.stringify({ results: [{ i: 1, status: "verified", note: "블로그에서 확인", source: "https://blog.naver.com/someone/123" }, { i: 2, status: "verified", note: "기관 자료", source: "https://www.mfds.go.kr/x" }] });
       if (system.includes("꼼꼼한 한국어 팩트체커")) return JSON.stringify({ results: [{ i: 1, status: "verified", note: "뉴스에서 확인", source: "https://news.example.com/kimchi" }, { i: 2, status: "unverified", note: "뒷받침하는 결과 없음", source: "" }] });
       if (system.includes("여러 채널용 콘텐츠로 바꾸는")) return JSON.stringify({ reel: "0~3초: 김장 실패 안 하는 법\n자막: 절임배추는 이렇게", cards: ["1장: 김장 황금비율", "2장: 절임배추 고르기"], threads: "김장 양념, 이것만 기억하세요" });

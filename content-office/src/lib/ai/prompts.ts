@@ -257,3 +257,25 @@ function esc(s: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+/** ✂️ 캡처·여러 문단 수정: 표·목록·굵은 글씨 구조를 그대로 살려 HTML 로 고침 */
+export function editHtmlPrompt(blog: Blog, html: string, instruction: string, context: string, hasImage = false) {
+  const system = `당신은 블로그 원고 편집자입니다. 받은 HTML 조각에서 수정 지시대로 고친 HTML 조각만 출력합니다 (설명·마크다운·코드블록 없이).
+- 쓸 수 있는 태그: p, h2, h3, strong, em, u, s, ul, ol, li, blockquote, table, thead, tbody, tr, th, td, a, br
+- 지시가 없으면 원래 구조를 그대로 두세요: 표는 표로(행·열 구조 유지), 목록은 목록으로, 소제목은 소제목으로. 표에 행·열을 더하거나 칸 안 글만 바꾸는 식으로 고치세요.
+- 지시와 관계없는 칸·문장은 글자 하나도 바꾸지 마세요. 확인할 수 없는 숫자·사실을 지어내지 마세요.${BASE_RULES}`;
+  const prompt = `${blogContext(blog)}
+
+${styleSamplesText(blog)}
+[주변 문맥 - 참고만]
+${context.slice(0, 3000)}
+
+[수정할 부분 - HTML]
+${html.slice(0, 20000)}
+
+[수정 지시]
+${instruction}
+${hasImage ? "\n[첨부한 캡처] 사용자가 고칠 곳을 화면에서 드래그해 잘라낸 캡처예요. 위 HTML 이 그 영역이에요. 사용자가 보는 모양을 참고하세요.\n" : ""}
+고친 HTML 조각만 출력하세요.`;
+  return { system, prompt };
+}

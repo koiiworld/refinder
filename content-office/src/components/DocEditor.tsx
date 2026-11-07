@@ -6,6 +6,26 @@ import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import { Placeholder } from "@tiptap/extensions";
 import { FontSize, TextStyle } from "@tiptap/extension-text-style";
+import { DOMSerializer } from "@tiptap/pm/model";
+import type { Editor } from "@tiptap/react";
+
+/** 문서의 from~to 를 HTML 로 (표·목록·굵게 그대로) */
+function rangeHtml(ed: Editor, from: number, to: number) {
+  const frag = DOMSerializer.fromSchema(ed.schema).serializeFragment(ed.state.doc.slice(from, to).content);
+  const box = document.createElement("div");
+  box.appendChild(frag);
+  return box.innerHTML;
+}
+/** AI 가 준 HTML 조각 정리 (스크립트·이벤트 속성 제거) */
+function cleanHtml(html: string) {
+  const d = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  d.querySelectorAll("script,style,iframe,object,embed,link,meta").forEach((n) => n.remove());
+  d.querySelectorAll("*").forEach((el) => {
+    for (const a of Array.from(el.attributes)) if (/^on/i.test(a.name) || (/^(href|src)$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) el.removeAttribute(a.name);
+  });
+  return d.body.firstElementChild?.innerHTML ?? "";
+}
+const htmlText = (html: string) => new DOMParser().parseFromString(html, "text/html").body.innerText || new DOMParser().parseFromString(html, "text/html").body.textContent || "";
 
 /** 글자 크기 (네이버 블로그 편집기와 비슷한 단계) */
 const FONT_SIZES = ["11", "13", "15", "16", "19", "24", "28", "30", "34", "38"];
@@ -48,7 +68,7 @@ export default function DocEditor({
   const titleRef = useRef(title);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // ✨ AI 수정: 선택한 글 · ✂️ 캡처한 영역(블록 단위) · 아무것도 없으면 글 전체에 말로 요청
-  const [aiOpen, setAiOpen] = useState<null | { from: number; to: number; text: string; image?: string; block?: boolean; whole?: boolean }>(null);
+  const [aiOpen, setAiOpen] = useState<null | { from: number; to: number; text: string; html?: string; image?: string; block?: boolean; whole?: boolean }>(null);
   const [capturing, setCapturing] = useState(false);
   const [drag, setDrag] = useState<null | { x0: number; y0: number; x1: number; y1: number }>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -210,6 +230,12 @@ export default function DocEditor({
     const text = editor!.state.doc.textBetween(from, to, "\n");
     // 고른 글이 없으면: 말로 요청해서 AI가 글 전체에서 고칠 곳을 찾아 고침
     if (!text.trim()) return setAiOpen({ from: 0, to: 0, text: "", whole: true });
+    // 여러 문단·표에 걸쳐 고르면 걸친 블록 전체를 HTML 로 (구조 유지)
+    const $f = editor!.state.doc.resolve(from), $t = editor!.state.doc.resolve(to);
+    if ($f.depth > 0 && $t.depth > 0 && ($f.index(0) !== $t.index(0) || $f.node(1).type.name !== "paragraph" && $f.node(1).type.name !== "heading")) {
+      const bf = $f.before(1), bt = $t.after(1);
+      return setAiOpen({ from: bf, to: bt, text: editor!.state.doc.textBetween(bf, bt, "\n"), html: rangeHtml(editor!, bf, bt), block: true });
+    }
     setAiOpen({ from, to, text });
   }
 
@@ -254,7 +280,7 @@ export default function DocEditor({
       // 화면 이미지는 선택 — 실패하면 글만 보냄
       console.warn("capture image failed", e);
     }
-    setAiOpen({ from, to, text, image, block: true });
+    setAiOpen({ from, to, text, html: rangeHtml(ed, from, to), image, block: true });
   }
 
   const stateLabel: Record<SaveState, string> = {
@@ -427,7 +453,8 @@ export default function DocEditor({
           projectId={projectId}
           selected={aiOpen.text}
           image={aiOpen.image}
-          captured={!!aiOpen.block}
+          html={aiOpen.html}
+          captured={!!aiOpen.image}
           whole={!!aiOpen.whole}
           canWhole={!!onWholeRequest}
           context={editor.getText()}
@@ -440,11 +467,9 @@ export default function DocEditor({
             await onWholeRequest?.(note);
           }}
           onApply={(text) => {
-            if (aiOpen.block) {
-              // 캡처한 문단(블록) 통째로 바꿈: 줄마다 문단
-              const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-              const html = text.split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join("");
-              editor.chain().focus().insertContentAt({ from: aiOpen.from, to: aiOpen.to }, html || "<p></p>").run();
+            if (aiOpen.block && aiOpen.html) {
+              // 캡처·여러 문단: AI 가 고친 HTML(표·목록 구조 그대로)로 그 블록들을 바꿈
+              editor.chain().focus().insertContentAt({ from: aiOpen.from, to: aiOpen.to }, cleanHtml(text) || "<p></p>").run();
             } else {
               editor.chain().focus().insertContentAt({ from: aiOpen.from, to: aiOpen.to }, text.replace(/\n+/g, " ")).run();
             }
@@ -460,6 +485,7 @@ function AiEditModal({
   projectId,
   selected,
   image,
+  html,
   captured = false,
   whole,
   canWhole,
@@ -472,6 +498,7 @@ function AiEditModal({
   projectId: string;
   selected: string;
   image?: string;
+  html?: string;
   captured?: boolean;
   whole: boolean;
   canWhole: boolean;
@@ -486,7 +513,9 @@ function AiEditModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [result, setResult] = useState<{ text: string; provider: string; model: string } | null>(null);
-  const presets = ["더 자연스럽게 다듬어줘", "더 짧고 간결하게", "블로그 문체에 맞게 바꿔줘", "맞춤법·띄어쓰기만 교정", "예시를 하나 추가해줘"];
+  const presets = html
+    ? ["표에 행 하나 추가해줘", "표 아래에 기준일 메모 달아줘", "금액 합계 칸을 추가해줘", "맞춤법·띄어쓰기만 교정", "더 자연스럽게 다듬어줘"]
+    : ["더 자연스럽게 다듬어줘", "더 짧고 간결하게", "블로그 문체에 맞게 바꿔줘", "맞춤법·띄어쓰기만 교정", "예시를 하나 추가해줘"];
 
   async function run() {
     setBusy(true);
@@ -505,7 +534,7 @@ function AiEditModal({
     const res = await fetch("/api/ai/edit", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId, selected, instruction, context, ...(image ? { image } : {}), ...(ai ?? {}) }),
+      body: JSON.stringify({ projectId, selected, instruction, context, ...(html ? { html } : {}), ...(image ? { image } : {}), ...(ai ?? {}) }),
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
@@ -544,7 +573,12 @@ function AiEditModal({
             <div className="label">{captured ? "캡처한 부분 (이 영역의 문단 전체를 고쳐요)" : "선택한 부분"}</div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {image && <img src={image} alt="캡처한 영역" style={{ maxWidth: "100%", maxHeight: 220, border: "1px solid var(--line)", borderRadius: 8, marginBottom: 6 }} />}
-            <div className="card card-pad small" style={{ background: "var(--panel-2)", maxHeight: 140, overflowY: "auto", whiteSpace: "pre-wrap" }}>{selected}</div>
+            {html && !image ? (
+              <div className="prose card card-pad ai-html-preview" style={{ background: "var(--panel-2)", maxHeight: 200, overflow: "auto", fontSize: 13 }} dangerouslySetInnerHTML={{ __html: cleanHtml(html) }} />
+            ) : (
+              <div className="card card-pad small" style={{ background: "var(--panel-2)", maxHeight: 140, overflowY: "auto", whiteSpace: "pre-wrap" }}>{selected}</div>
+            )}
+            {html && <div className="tiny muted" style={{ marginTop: 4 }}>표·목록·굵은 글씨 모양을 그대로 살려서 고쳐요.</div>}
           </div>
         )}
         <div className="field">
@@ -569,7 +603,17 @@ function AiEditModal({
         {result && (
           <div>
             <div className="label">수정 전후 비교 ({result.provider}/{result.model})</div>
-            <Diff before={selected} after={result.text} />
+            {html ? (
+              <>
+                <div className="prose card card-pad ai-html-preview" style={{ maxHeight: 320, overflow: "auto", fontSize: 14 }} dangerouslySetInnerHTML={{ __html: cleanHtml(result.text) }} />
+                <details style={{ marginTop: 6 }}>
+                  <summary className="tiny muted" style={{ cursor: "pointer" }}>바뀐 글자 비교</summary>
+                  <Diff before={selected} after={htmlText(cleanHtml(result.text))} />
+                </details>
+              </>
+            ) : (
+              <Diff before={selected} after={result.text} />
+            )}
             <p className="tiny muted" style={{ marginTop: 6 }}>적용 전까지 원고는 바뀌지 않습니다. 적용 후에도 ↶(실행 취소)나 버전 복원으로 되돌릴 수 있습니다.</p>
           </div>
         )}

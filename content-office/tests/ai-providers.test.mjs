@@ -296,6 +296,12 @@ test("④ 글 다시 쓰기 (수정 요청) · 에디터 부분 수정", async (
   assert.ok(oa.body.max_completion_tokens >= 12000, "gpt-5 답 한도 넉넉히");
   assert.ok(JSON.stringify(oa.body.messages).includes("image_url"), "캡처 이미지 첨부");
   assert.match(JSON.stringify(oa.body.messages), /첨부한 캡처/);
+  // 표·여러 문단은 HTML 로 보내고 HTML 로 받음 (표가 문단으로 풀리지 않게)
+  const e3 = await call("/api/ai/edit", "POST", { projectId: id, selected: "기존 지원 아동수당", html: "<table><tbody><tr><th>기존 지원</th><th>2027년 정부 개편안</th></tr><tr><td>아동수당</td><td>아동기본수당</td></tr></tbody></table>", instruction: "합계 행 추가하고 기준일 메모", image: PIXEL_URL });
+  assert.equal(e3.status, 200, JSON.stringify(e3.data));
+  assert.equal(e3.data.html, true);
+  assert.match(e3.data.text, /^<table>[\s\S]*<td>합계<\/td>[\s\S]*<\/table><p>※ 2026년 11월 기준<\/p>$/, "코드블록 표시 벗기고 표 그대로");
+  assert.match(await stepPrompt("블로그 원고 편집자"), /\[수정할 부분 - HTML\][\s\S]*<table>/);
 });
 
 test("크레딧 없는 AI는 자동으로 다른 AI로 대체", async () => {
