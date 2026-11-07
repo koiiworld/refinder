@@ -65,6 +65,39 @@ export async function viewsOf(blogId: string): Promise<Record<ViewKind, ViewsBlo
   return out;
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** 일간 캡처가 있는 날짜들 (최근 순) */
+export async function captureDays(blogId: string) {
+  return (await q<{ day: string }>("SELECT to_char(day, 'YYYY-MM-DD') AS day FROM view_captures WHERE blog_id=$1 AND kind='day' ORDER BY day DESC LIMIT 400", [blogId])).map((r) => r.day);
+}
+
+/** 고른 날 하루 (일간 캡처) */
+export async function viewsOnDay(blogId: string, day: string): Promise<ViewsBlock & { day: string }> {
+  if (!DATE_RE.test(day)) throw new Error("날짜 형식이 올바르지 않습니다.");
+  const r = await q1<{ period: string; items: ViewItem[]; created_at: string }>("SELECT period, items, created_at FROM view_captures WHERE blog_id=$1 AND kind='day' AND day=$2::date", [blogId, day]);
+  return r
+    ? { day, items: rankItems(r.items.map((i) => ({ title: i.title, views: i.views }))), source: "capture", label: r.period || day, days: 1, capturedAt: r.created_at }
+    : { day, items: [], source: "none", label: "", days: 0, capturedAt: null };
+}
+
+/** 기간 지정: 그 사이 일간 캡처를 글별로 합산 */
+export async function viewsInRange(blogId: string, from: string, to: string): Promise<ViewsBlock & { from: string; to: string; missing: number }> {
+  if (!DATE_RE.test(from) || !DATE_RE.test(to)) throw new Error("기간을 골라 주세요.");
+  if (from > to) [from, to] = [to, from];
+  const span = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+  if (span > 366) throw new Error("기간은 1년 이하로 골라 주세요.");
+  const rows = await q<{ day: string; items: ViewItem[]; created_at: string }>(
+    "SELECT to_char(day, 'YYYY-MM-DD') AS day, items, created_at FROM view_captures WHERE blog_id=$1 AND kind='day' AND day BETWEEN $2::date AND $3::date ORDER BY day DESC",
+    [blogId, from, to],
+  );
+  return {
+    from, to, missing: span - rows.length,
+    items: rows.length ? sumDaily(rows) : [], source: rows.length ? "sum" : "none",
+    label: rows.length ? `${from} ~ ${to} · 일간 캡처 ${rows.length}일치 합계${span - rows.length ? ` (캡처 없는 날 ${span - rows.length}일 빠짐)` : ""}` : "",
+    days: rows.length, capturedAt: rows[0]?.created_at ?? null,
+  };
+}
+
 export async function topPosts(blogId: string) {
   const blog = await getBlog(blogId);
   if (!blog) throw new Error("블로그를 찾을 수 없습니다.");
@@ -82,7 +115,7 @@ export async function topPosts(blogId: string) {
     await q("DELETE FROM settings WHERE key=$1", [`top_views:${blogId}`]);
   }
   const days = await q<{ n: number }>("SELECT COUNT(*)::int AS n FROM view_captures WHERE blog_id=$1 AND kind='day'", [blogId]);
-  return { views: await viewsOf(blogId), reaction, platform: blog.platform, dailyCaptures: Number(days[0]?.n ?? 0) };
+  return { views: await viewsOf(blogId), reaction, platform: blog.platform, dailyCaptures: Number(days[0]?.n ?? 0), captureDays: await captureDays(blogId) };
 }
 
 /** 통계 화면 캡처 → AI가 기간 종류(일간·주간·월간)·날짜·글별 조회수를 읽어 저장 */

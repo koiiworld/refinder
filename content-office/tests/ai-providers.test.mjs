@@ -729,6 +729,18 @@ test("🏆 블로그 인기 글 TOP 10: 반응 순위(공개 숫자) · 통계 �
   await call("/api/dashboard/top", "POST", { blogId: "blog_algokitchen", images: [PIXEL_URL], kind: "week" });
   t = (await call("/api/dashboard/top?blogId=blog_algokitchen")).data;
   assert.equal(t.views.week.source, "capture");
+  // 📅 일간 날짜 고르기 · 기간 지정 합계
+  const cday = t.captureDays[0];
+  assert.match(cday, /^\d{4}-\d{2}-\d{2}$/, "캡처한 날짜 목록");
+  const dd = (await call(`/api/dashboard/top?blogId=blog_algokitchen&day=${cday}`)).data;
+  assert.equal(dd.items[0].views, 3300);
+  assert.equal(dd.day, cday);
+  assert.equal((await call("/api/dashboard/top?blogId=blog_algokitchen&day=2001-01-01")).data.source, "none", "캡처 없는 날");
+  const rg = (await call(`/api/dashboard/top?blogId=blog_algokitchen&from=${cday.slice(0, 8)}01&to=${cday}`)).data;
+  assert.equal(rg.source, "sum");
+  assert.equal(rg.items[0].views, 3300);
+  assert.match(rg.label, /일간 캡처 1일치 합계/);
+  assert.equal((await call("/api/dashboard/top?blogId=blog_algokitchen&from=2020-01-01&to=2026-01-01")).status, 400, "1년 넘는 기간");
 });
 
 test("💳 AI별 잔액: 충전 기록 − 앱에서 쓴 금액 = 남은 잔액 · 사용률", async () => {
@@ -918,6 +930,8 @@ test("💾 저장 안전성: 직접 수정 → 다시 열기 → 늦게 도착�
 const kstNow = () => new Date(Date.now() + 9 * 3600 * 1000);
 const kstDate = (addDays = 0) => new Date(kstNow().getTime() + addDays * 86400000).toISOString().slice(0, 10);
 const kstTime = (addMin) => new Date(kstNow().getTime() + addMin * 60000).toISOString().slice(11, 16);
+/** 지금+N분의 한국 날짜 (자정 넘어가면 다음 날) */
+const kstDateAt = (addMin) => new Date(kstNow().getTime() + addMin * 60000).toISOString().slice(0, 10);
 const tgSends = async () => (await mockLog()).filter((l) => l.path === "/bottest-tg-token/sendMessage");
 
 test("✅ 할 일: 대시보드 🚨오늘할일🚨 → 오늘 탭 · 추가·다시 열기·예정·완료·수정·삭제 (한국 날짜)", async () => {
@@ -955,10 +969,10 @@ test("🔔 텔레그램 알림: 서버 예약 · 시간 변경 시 갱신 · 완
   let row = (await call("/api/todos?tab=today")).data.find((t) => t.id === past.id);
   assert.equal(row.notice, null, "지난 시각은 예약 없음");
   // 2분 뒤 → 예약, 시간 바꾸면 새 예약(이전은 취소)
-  const t = (await call("/api/todos", "POST", { title: "알림 시험", due_date: kstDate(0), due_time: kstTime(120), notify: true })).data;
+  const t = (await call("/api/todos", "POST", { title: "알림 시험", due_date: kstDateAt(120), due_time: kstTime(120), notify: true })).data;
   row = (await call("/api/todos?tab=today")).data.find((x) => x.id === t.id) ?? (await call("/api/todos?tab=upcoming")).data.find((x) => x.id === t.id);
   assert.equal(row.notice.status, "pending");
-  await call(`/api/todos/${t.id}`, "PUT", { due_time: kstTime(180) });
+  await call(`/api/todos/${t.id}`, "PUT", { due_date: kstDateAt(180), due_time: kstTime(180) });
   // 끄기 → 취소, 다시 켜기 → 예약, 완료 → 취소
   await call(`/api/todos/${t.id}`, "PUT", { notify: false });
   await call(`/api/todos/${t.id}`, "PUT", { notify: true });

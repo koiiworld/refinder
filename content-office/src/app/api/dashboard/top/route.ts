@@ -1,10 +1,14 @@
 import { body, fail, handle, ok } from "@/lib/api";
-import { saveViewsFromCapture, topPosts } from "@/lib/top-posts";
+import { saveViewsFromCapture, topPosts, viewsInRange, viewsOnDay } from "@/lib/top-posts";
 
+/** ?blogId · &day=YYYY-MM-DD (그날 일간) · &from=&to= (기간 지정 합계) */
 export async function GET(req: Request) {
   return handle(async () => {
-    const blogId = new URL(req.url).searchParams.get("blogId") ?? "";
+    const sp = new URL(req.url).searchParams;
+    const blogId = sp.get("blogId") ?? "";
     try {
+      if (sp.get("day")) return ok(await viewsOnDay(blogId, sp.get("day")!));
+      if (sp.get("from") || sp.get("to")) return ok(await viewsInRange(blogId, sp.get("from") ?? "", sp.get("to") ?? ""));
       return ok(await topPosts(blogId));
     } catch (e) {
       return fail((e as Error).message);

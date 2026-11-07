@@ -436,7 +436,7 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang, goa
 
 // ───────── 블로그 이름 누르면: 인기 글 TOP 10 팝업 ─────────
 type ViewsBlock = { items: { rank: number; title: string; views: number }[]; source: "capture" | "sum" | "none"; label: string; days: number; capturedAt: string | null };
-type TopData = { views: Record<"day" | "week" | "month", ViewsBlock>; dailyCaptures: number; reaction: { title: string; url: string; likes: number; comments: number; views: number | null }[]; platform: string };
+type TopData = { views: Record<"day" | "week" | "month", ViewsBlock>; dailyCaptures: number; captureDays?: string[]; reaction: { title: string; url: string; likes: number; comments: number; views: number | null }[]; platform: string };
 
 export function BlogTopButton({ blogId, name }: { blogId: string; name: string }) {
   const [open, setOpen] = useState(false);
@@ -444,7 +444,37 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
   const [tab, setTab] = useState<"views" | "reaction">("views");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [period, setPeriod] = useState<"day" | "week" | "month">("day");
+  const [period, setPeriod] = useState<"day" | "week" | "month" | "range">("day");
+  // 📅 일간: 고른 날짜 · 기간 지정: 시작~끝
+  const kstDay = (off = 0) => new Date(Date.now() + 9 * 3600 * 1000 + off * 86400000).toISOString().slice(0, 10);
+  const [day, setDay] = useState("");
+  const [dayBlock, setDayBlock] = useState<ViewsBlock | null>(null);
+  const [from, setFrom] = useState(kstDay(-6));
+  const [to, setTo] = useState(kstDay(0));
+  const [rangeBlock, setRangeBlock] = useState<ViewsBlock | null>(null);
+  const [subBusy, setSubBusy] = useState(false);
+  async function pickDay(dd: string) {
+    if (!dd) return;
+    setDay(dd);
+    setSubBusy(true);
+    try {
+      setDayBlock(await api<ViewsBlock>(`/api/dashboard/top?blogId=${blogId}&day=${dd}`));
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setSubBusy(false);
+  }
+  async function pickRange(f = from, t = to) {
+    setFrom(f);
+    setTo(t);
+    setSubBusy(true);
+    try {
+      setRangeBlock(await api<ViewsBlock>(`/api/dashboard/top?blogId=${blogId}&from=${f}&to=${t}`));
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setSubBusy(false);
+  }
   const [capKind, setCapKind] = useState<"" | "day" | "week" | "month">("");
   const [note, setNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -456,7 +486,11 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
       setD(x);
       const has = (["day", "week", "month"] as const).find((k) => x.views[k].items.length);
       setTab(has || x.platform === "tistory" ? "views" : "reaction");
-      if (has) setPeriod((p) => (x.views[p].items.length ? p : has));
+      if (has) setPeriod((p) => (p === "range" || x.views[p].items.length ? p : has));
+      // 일간 기본: 가장 최근 캡처한 날
+      const latest = x.captureDays?.[0] ?? "";
+      setDay(latest || kstDay(-1));
+      setDayBlock(latest ? { ...x.views.day } : null);
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -472,6 +506,7 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
       await load();
       setTab("views");
       setPeriod(r.kind);
+      if (r.kind === "day") void pickDay(r.date);
       setNote(`${r.date} ${r.kind === "day" ? "일간" : r.kind === "week" ? "주간" : "월간"} 조회수로 저장했어요. 매일 넣으면 주간·월간이 자동으로 쌓여요.`);
     } catch (e) {
       setErr((e as Error).message);
@@ -510,31 +545,66 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
             {err && <div className="notice notice-bad small">{err}</div>}
             {d && tab === "views" && (
               <>
-                <div className="row" style={{ gap: 6 }}>
-                  {(["day", "week", "month"] as const).map((k) => (
-                    <button key={k} className={`btn btn-sm ${period === k ? "btn-primary" : "btn-ghost"}`} onClick={() => setPeriod(k)}>
-                      {k === "day" ? "일간" : k === "week" ? "주간" : "월간"}
+                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                  {(["day", "week", "month", "range"] as const).map((k) => (
+                    <button key={k} className={`btn btn-sm ${period === k ? "btn-primary" : "btn-ghost"}`} onClick={() => { setPeriod(k); if (k === "range" && !rangeBlock) void pickRange(); }}>
+                      {k === "day" ? "일간" : k === "week" ? "주간" : k === "month" ? "월간" : "📅 기간 지정"}
                     </button>
                   ))}
                   <span className="tiny muted">일간 캡처 {d.dailyCaptures}일치 기억 중</span>
                 </div>
-                {d.views[period].items.length ? (
-                  <>
-                    <div className="tiny muted">
-                      {d.views[period].source === "sum" ? d.views[period].label : `${d.views[period].label || "기간 정보 없음"} · 캡처 기준`}
-                      {d.views[period].capturedAt ? ` · 마지막 캡처 ${fmtDateShort(d.views[period].capturedAt!)}` : ""}
+                {period === "day" && (() => {
+                  const days = d.captureDays ?? [];
+                  const i = days.indexOf(day);
+                  const older = i >= 0 ? days[i + 1] : days.find((x) => x < day);
+                  const newer = i > 0 ? days[i - 1] : i < 0 ? [...days].reverse().find((x) => x > day) : undefined;
+                  return (
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      <button className="btn btn-sm btn-ghost" disabled={!older || subBusy} onClick={() => older && pickDay(older)} aria-label="이전 캡처 날짜">◀</button>
+                      <input className="input" type="date" value={day} max={kstDay(0)} onChange={(e) => pickDay(e.target.value)} style={{ width: 160, fontWeight: 700 }} aria-label="일간 날짜" />
+                      <button className="btn btn-sm btn-ghost" disabled={!newer || subBusy} onClick={() => newer && pickDay(newer)} aria-label="다음 캡처 날짜">▶</button>
+                      <b className="small">{day ? `${Number(day.slice(5, 7))}월 ${Number(day.slice(8))}일 (${"일월화수목금토"[new Date(`${day}T00:00:00Z`).getUTCDay()]}) 조회수` : ""}</b>
+                      {subBusy && <span className="spinner" />}
                     </div>
-                    <ol className="stack" style={{ gap: 4, margin: 0, paddingLeft: 22 }}>
-                      {d.views[period].items.map((i) => <li key={i.rank} className="small"><span className="ellipsis" style={{ display: "inline-block", maxWidth: "75%", verticalAlign: "bottom" }}>{i.title}</span> <b style={{ float: "right" }}>{i.views.toLocaleString("ko-KR")}회</b></li>)}
-                    </ol>
-                  </>
-                ) : (
-                  <p className="small muted" style={{ margin: 0 }}>
-                    {period === "day"
-                      ? `${d.platform === "tistory" ? "티스토리" : "네이버"}는 글별 조회수를 밖에서 볼 수 없게 막아 둬서, 통계 화면 캡처를 올리면 AI가 읽어 순위를 만들어요.`
-                      : `${period === "week" ? "주간" : "월간"} 순위는 그 기간 캡처를 넣거나, 일간 캡처를 매일 넣으면 자동으로 합쳐져요.`}
-                  </p>
+                  );
+                })()}
+                {period === "range" && (
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                    <input className="input" type="date" value={from} max={to} onChange={(e) => pickRange(e.target.value, to)} style={{ width: 150 }} aria-label="시작 날짜" />
+                    <span className="small">~</span>
+                    <input className="input" type="date" value={to} min={from} max={kstDay(0)} onChange={(e) => pickRange(from, e.target.value)} style={{ width: 150 }} aria-label="끝 날짜" />
+                    <button className="btn btn-sm btn-ghost" onClick={() => pickRange(kstDay(-6), kstDay(0))}>최근 7일</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => pickRange(kstDay(-29), kstDay(0))}>최근 30일</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => pickRange(`${kstDay(0).slice(0, 8)}01`, kstDay(0))}>이번 달</button>
+                    {subBusy && <span className="spinner" />}
+                  </div>
                 )}
+                {(() => {
+                  const blk = period === "day" ? dayBlock : period === "range" ? rangeBlock : d.views[period];
+                  if (blk?.items.length)
+                    return (
+                      <>
+                        <div className="tiny muted">
+                          {blk.source === "sum" ? blk.label : `${blk.label || "기간 정보 없음"} · 캡처 기준`}
+                          {blk.capturedAt ? ` · 마지막 캡처 ${fmtDateShort(blk.capturedAt)}` : ""}
+                        </div>
+                        <ol className="stack" style={{ gap: 4, margin: 0, paddingLeft: 22 }}>
+                          {blk.items.map((it) => <li key={it.rank} className="small"><span className="ellipsis" style={{ display: "inline-block", maxWidth: "75%", verticalAlign: "bottom" }}>{it.title}</span> <b style={{ float: "right" }}>{it.views.toLocaleString("ko-KR")}회</b></li>)}
+                        </ol>
+                      </>
+                    );
+                  return (
+                    <p className="small muted" style={{ margin: 0 }}>
+                      {period === "day"
+                        ? d.dailyCaptures
+                          ? `${day || "이 날"}에는 일간 캡처가 없어요. ◀ ▶ 로 캡처한 날을 고르거나, 그날 통계 화면을 캡처해 넣어 주세요.`
+                          : `${d.platform === "tistory" ? "티스토리" : "네이버"}는 글별 조회수를 밖에서 볼 수 없게 막아 둬서, 통계 화면 캡처를 올리면 AI가 읽어 순위를 만들어요.`
+                        : period === "range"
+                          ? "이 기간에는 일간 캡처가 없어요. 일간 캡처를 매일 넣으면 원하는 기간으로 합쳐 볼 수 있어요."
+                          : `${period === "week" ? "주간" : "월간"} 순위는 그 기간 캡처를 넣거나, 일간 캡처를 매일 넣으면 자동으로 합쳐져요.`}
+                    </p>
+                  );
+                })()}
                 {note && <div className="notice notice-ok small">{note}</div>}
                 <div className="row" style={{ gap: 6 }}>
                   <span className="tiny muted">넣을 캡처:</span>
