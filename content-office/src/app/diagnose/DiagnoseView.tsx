@@ -24,6 +24,20 @@ export default function DiagnoseView({ blogs, blogId, initial, initialState }: {
   const [d, setD] = useState<Diagnosis | null>(initial);
   const [busy, setBusy] = useState(initialState?.status === "running");
   const [err, setErr] = useState(initialState?.status === "error" ? initialState.error ?? "" : "");
+  // 점검표 한 줄만 다시 진단 (수치만 다시 잼, AI 안 씀 · 무료)
+  const [rechecking, setRechecking] = useState<string | null>(null);
+  async function recheck(label: string) {
+    setRechecking(label);
+    setErr("");
+    try {
+      const r = await api<{ check: Diagnosis["checks"][number]; at: string }>("/api/diagnose", "POST", { blogId, recheck: label });
+      setD((cur) => (cur ? { ...cur, checks: cur.checks.map((c) => (c.label === label ? r.check : c)), rechecked: { ...((cur as Diagnosis & { rechecked?: Record<string, string> }).rechecked ?? {}), [label]: r.at } } as Diagnosis : cur));
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setRechecking(null);
+  }
+  const recheckedAt = (label: string) => (d as (Diagnosis & { rechecked?: Record<string, string> }) | null)?.rechecked?.[label];
   // 진행 중이면 3초마다 확인 (다른 화면에 갔다 와도 서버에서 계속 진행)
   useEffect(() => {
     if (!busy) return;
@@ -67,7 +81,7 @@ export default function DiagnoseView({ blogs, blogId, initial, initialState }: {
       <section className="card card-pad stack" style={{ gap: 10 }}>
         <div className="row between">
           <div className="small">{d ? <>마지막 진단 {fmtDate(d.at)} · 최근 글 {d.posts}개 분석</> : "아직 진단한 적이 없어요."}</div>
-          <button className="btn btn-primary" disabled={busy || !blog.url} onClick={run}>{busy ? <><span className="spinner" /> 진단 중… 다른 화면에 가도 계속돼요</> : d ? "🔄 다시 진단" : "🩺 진단 시작"}</button>
+          <button className="btn btn-primary" disabled={busy || !blog.url} onClick={run}>{busy ? <><span className="spinner" /> 진단 중… 다른 화면에 가도 계속돼요</> : d ? "🔄 전체 다시 진단하기" : "🩺 진단 시작"}</button>
         </div>
         {!blog.url && <div className="notice notice-warn small">블로그 설정에서 블로그 주소를 넣어야 진단할 수 있어요.</div>}
         {err && <div className="notice notice-bad small">{err}</div>}
@@ -109,7 +123,19 @@ export default function DiagnoseView({ blogs, blogId, initial, initialState }: {
                 <table className="tbl">
                   <tbody>
                     {d.checks.map((c, i) => (
-                      <tr key={i}><td style={{ width: 28 }}>{ICON[c.status]}</td><td className="small" style={{ whiteSpace: "nowrap" }}><b>{c.label}</b></td><td className="small">{c.detail}</td></tr>
+                      <tr key={i}>
+                        <td style={{ width: 28 }}>{ICON[c.status]}</td>
+                        <td className="small" style={{ whiteSpace: "nowrap" }}><b>{c.label}</b></td>
+                        <td className="small">
+                          {c.detail}
+                          {recheckedAt(c.label) && <span className="tiny muted"> · {new Date(recheckedAt(c.label)!).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 다시 잼</span>}
+                        </td>
+                        <td style={{ width: 1, whiteSpace: "nowrap", textAlign: "right" }}>
+                          <button className="btn btn-sm btn-ghost" disabled={busy || !!rechecking} onClick={() => recheck(c.label)} title="이 항목만 수치를 다시 재요 (AI 안 씀 · 무료)">
+                            {rechecking === c.label ? <><span className="spinner" /> 재는 중…</> : "🔄 다시 진단하기"}
+                          </button>
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>

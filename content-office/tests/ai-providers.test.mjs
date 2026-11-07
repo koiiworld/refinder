@@ -580,6 +580,17 @@ test("🩺 블로그 진단: 발행 리듬·제목·검색 누락·키워드 순
   assert.equal(d.ai.score, 62);
   assert.match(await stepPrompt("블로그 성장 컨설턴트"), /\[점검표\]/);
   assert.ok(d.at, "마지막 진단 저장");
+  // 🔄 한 줄만 다시 진단하기 (수치만 다시 잼 · AI 안 씀)
+  await call("/__reset", "POST", undefined, MOCK);
+  const rc = await call("/api/diagnose", "POST", { blogId: "blog_algokitchen", recheck: "발행 빈도" });
+  assert.equal(rc.status, 200, JSON.stringify(rc.data));
+  assert.equal(rc.data.check.label, "발행 빈도");
+  assert.ok(rc.data.at);
+  assert.ok(!(await mockLog()).some((l) => /generateContent|chat\/completions|\/v1\/messages/.test(l.path)), "AI 안 씀");
+  const last = (await call("/api/diagnose?blogId=blog_algokitchen")).data.last;
+  assert.ok(last.rechecked["발행 빈도"], "다시 잰 시각 저장");
+  assert.equal(last.ai.score, 62, "AI 종합 진단은 그대로");
+  assert.equal((await call("/api/diagnose", "POST", { blogId: "blog_tistory", recheck: "발행 빈도" })).status, 400, "진단 전에는 안 됨");
 });
 
 test("📰 블로그 핫이슈: 주제별 글을 반응(공감+댓글×3) 순으로 · 자주 나온 단어 · 1시간 캐시", async () => {

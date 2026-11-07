@@ -110,7 +110,7 @@ function rhythm(posts: BlogPostLink[]) {
 
 export type Check = { label: string; status: "ok" | "warn" | "bad" | "skip"; detail: string };
 
-export async function diagnoseBlog(blogId: string) {
+export async function diagnoseBlog(blogId: string, opts: { skipAi?: boolean; save?: boolean } = {}) {
   const blog = await getBlogForAi(blogId);
   if (!blog) throw new Error("블로그를 찾을 수 없습니다.");
   if (!blog.url) throw new Error("블로그 설정에서 블로그 주소를 먼저 넣어 주세요.");
@@ -252,13 +252,15 @@ ${checks.map((c) => `- ${c.label}: ${c.status} · ${c.detail}`).join("\n")}
 형식: {"score": 70, "summary": "", "good": [""], "problems": [{"title": "", "why": "", "fix": ""}], "titleTips": [""], "next": [""]}`;
   let ai: { score?: number; summary?: string; good?: string[]; problems?: { title: string; why: string; fix: string }[]; titleTips?: string[]; next?: string[]; provider?: string; model?: string } = {};
   try {
+    if (opts.skipAi) throw new Error("skip");
     const res = await runStep({ step: "keywords", purpose: "diagnose", blog, system, prompt, json: true, maxTokens: 3000 });
     ai = { ...extractJson(res.text), provider: res.provider, model: res.model };
   } catch (e) {
-    notes.push(`AI 종합 진단을 만들지 못했어요: ${(e as Error).message}`);
+    if (!opts.skipAi) notes.push(`AI 종합 진단을 만들지 못했어요: ${(e as Error).message}`);
   }
 
   const result = { blogId, at: new Date().toISOString(), posts: posts.length, checks, metrics, ai, notes, searchError };
+  if (opts.save === false) return result;
   await q("INSERT INTO research_snapshots (id, blog_id, source, query, data) VALUES ($1,$2,'diagnose','{}',$3)", [newId("snap_"), blogId, j(result)]);
   return result;
 }
@@ -295,4 +297,18 @@ export async function startDiagnose(blogId: string) {
 export async function lastDiagnosis(blogId: string): Promise<Diagnosis | null> {
   const r = await q1<{ data: Diagnosis }>("SELECT data FROM research_snapshots WHERE blog_id=$1 AND source='diagnose' ORDER BY collected_at DESC LIMIT 1", [blogId]);
   return r?.data ?? null;
+}
+
+/** 점검표 한 줄만 다시 진단 (수치만 다시 잼, AI 안 씀 · 무료) → 마지막 진단 기록의 그 줄을 바꿈 */
+export async function recheckOne(blogId: string, label: string) {
+  const snap = await q1<{ id: string; data: Diagnosis }>("SELECT id, data FROM research_snapshots WHERE blog_id=$1 AND source='diagnose' ORDER BY collected_at DESC LIMIT 1", [blogId]);
+  if (!snap) throw new Error("먼저 진단을 한 번 해 주세요.");
+  const fresh = await diagnoseBlog(blogId, { skipAi: true, save: false });
+  // 같은 이름의 줄 (검색 관련은 이름이 바뀔 수 있어 '검색'끼리 맞춤)
+  const group = (l: string) => (/검색/.test(l) ? "검색" : l);
+  const next = fresh.checks.find((c) => c.label === label) ?? fresh.checks.find((c) => group(c.label) === group(label));
+  const checks = snap.data.checks.map((c) => (c.label === label ? next ?? { ...c, status: "skip" as const, detail: "다시 재 보니 이 항목을 잴 수 없었어요 (글 목록·검색 연결을 확인해 주세요)" } : c));
+  const data = { ...snap.data, checks, metrics: fresh.metrics, rechecked: { ...((snap.data as Diagnosis & { rechecked?: Record<string, string> }).rechecked ?? {}), [label]: new Date().toISOString() } };
+  await q("UPDATE research_snapshots SET data=$2 WHERE id=$1", [snap.id, j(data)]);
+  return { check: checks.find((c) => c.label === label)!, at: data.rechecked[label] };
 }
