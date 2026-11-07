@@ -227,7 +227,15 @@ export async function diagnoseBlog(blogId: string, opts: { skipAi?: boolean; sav
     });
   }
 
-  const metrics = { rhythm: rh, titles: { avgLen: ts.avgLen, count: ts.count, withNumber: ts.withNumber, repeated: ts.repeated.slice(0, 5), special: ts.special.slice(0, 5), tooLong: ts.tooLong.slice(0, 5) }, indexed, ranks, structure: { avgChars: avg("chars"), avgImages: avg("images"), avgHeadings: avg("headings"), avgLists: avg("lists") }, visits: vis };
+  // 대시보드에 넣은 조회수 순위 캡처 (잘 되는 글 = 유입 전략의 근거)
+  const topViews = await q<{ day: string; items: { title: string; views: number }[] }>(
+    "SELECT to_char(day,'YYYY-MM-DD') AS day, items FROM view_captures WHERE blog_id=$1 AND kind='day' ORDER BY day DESC LIMIT 7",
+    [blogId],
+  ).catch(() => []);
+  const topMap = new Map<string, number>();
+  for (const r of topViews) for (const it of r.items ?? []) topMap.set(it.title, (topMap.get(it.title) ?? 0) + Number(it.views || 0));
+  const topPosts = [...topMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([title, views]) => ({ title, views }));
+  const metrics = { topPosts, rhythm: rh, titles: { avgLen: ts.avgLen, count: ts.count, withNumber: ts.withNumber, repeated: ts.repeated.slice(0, 5), special: ts.special.slice(0, 5), tooLong: ts.tooLong.slice(0, 5) }, indexed, ranks, structure: { avgChars: avg("chars"), avgImages: avg("images"), avgHeadings: avg("headings"), avgLists: avg("lists") }, visits: vis };
 
   // 6) AI 종합 진단 (단계별 AI의 '키워드' 담당 — 기본 무료 Gemini)
   const system = `당신은 네이버·티스토리 블로그 성장 컨설턴트입니다. 앱이 직접 잰 수치만 근거로 진단합니다. 수치에 없는 사실(방문자 수, 순위 등)을 지어내지 않습니다. '제목 검색 노출' 검사는 네이버 블로그 검색에서 제목 그대로 검색했을 때 상위 30위 안에 드는지만 본 것입니다. 이 결과로 '색인 미등록', '누락', '저품질'을 단정하지 말고 "제목 검색 상위 30위 밖"이라고만 표현하세요. 반드시 JSON 객체 하나만 출력합니다. 한국어로, 쉽고 짧게 씁니다.`;
@@ -242,18 +250,28 @@ ${JSON.stringify(metrics)}
 [점검표]
 ${checks.map((c) => `- ${c.label}: ${c.status} · ${c.detail}`).join("\n")}
 
-이 블로그가 검색·${blog.platform === "naver" ? "네이버 홈피드(홈판)" : "구글·다음 검색"} 노출을 늘리려면 무엇을 고쳐야 하는지 진단하세요.
+이 블로그가 검색·${blog.platform === "naver" ? "네이버 홈피드(홈판)" : "구글·다음 검색"} 노출과 조회수를 늘리려면 무엇을 어떻게 고쳐야 하는지 진단하세요.
+블로그 주인은 초보예요. "제목을 줄이세요"처럼 말하지 말고, 이 블로그의 실제 글·제목을 가지고 무엇을 어떻게 바꾸는지 그대로 따라 할 수 있게 써 주세요.
 - score: 0~100 (위 점검표 기준)
 - summary: 2~3문장 요약
 - good: 잘하고 있는 점 1~3개
-- problems: 가장 큰 문제부터 최대 5개. title(짧게), why(수치 근거), fix(바로 할 수 있는 행동)
-- titleTips: 최근 제목을 보고 제목 짓기 개선 팁 2~4개. 가능하면 실제 최근 제목 하나를 고쳐 쓴 예시를 "기존 → 개선" 형식으로
-- next: 이번 주에 할 일 3개
-형식: {"score": 70, "summary": "", "good": [""], "problems": [{"title": "", "why": "", "fix": ""}], "titleTips": [""], "next": [""]}`;
-  let ai: { score?: number; summary?: string; good?: string[]; problems?: { title: string; why: string; fix: string }[]; titleTips?: string[]; next?: string[]; provider?: string; model?: string } = {};
+- problems: 가장 큰 문제부터 최대 5개. title(짧게), why(수치 근거), fix(한 줄 요약), steps(따라 할 순서 2~4개), example(이 블로그의 실제 글로 든 "기존 → 개선" 예시, 없으면 빈칸)
+- fixes: 점검표에서 warn·bad 인 항목마다 하나씩. check(점검표 항목 이름 그대로), how(어떻게 고치는지 쉬운 설명 1~2문장), steps(순서 2~4개), examples(실제 최근 글로 만든 "기존 → 개선" 1~3개. 제목 길이·반복·특수문자면 위 수치의 실제 제목을 18~35자로 고쳐 쓴 것)
+- growth: 조회수·유입을 늘리는 방법 4~6개를 이 블로그에 맞게. title, why(이 블로그 수치·잘 되는 글(topPosts)·키워드 순위 근거), steps(이번 주에 바로 할 순서 2~4개), example(예: 잘 되는 글을 이어 쓸 새 글 제목, 다시 손볼 글과 바꿀 점 등). 검색 키워드 공략, 잘 되는 글 시리즈화·이어 쓰기, 오래된 인기 글 업데이트, 글 사이 내부 링크, 발행 시간·주기, ${blog.platform === "naver" ? "홈피드용 썸네일·첫 문단" : "구글 검색용 소제목·요약"} 같은 것 중 근거가 있는 것만
+- titleTips: 최근 제목을 보고 제목 짓기 개선 팁 2~4개. 실제 최근 제목 하나를 고쳐 쓴 예시를 "기존 → 개선" 형식으로
+- next: 이번 주에 할 일 3~5개 (위 내용 중 가장 효과 큰 것, 각각 한 줄로 바로 할 수 있게)
+수치에 없는 사실은 지어내지 마세요.
+형식: {"score": 70, "summary": "", "good": [""], "problems": [{"title": "", "why": "", "fix": "", "steps": [""], "example": ""}], "fixes": [{"check": "", "how": "", "steps": [""], "examples": [""]}], "growth": [{"title": "", "why": "", "steps": [""], "example": ""}], "titleTips": [""], "next": [""]}`;
+  let ai: {
+    score?: number; summary?: string; good?: string[];
+    problems?: { title: string; why: string; fix: string; steps?: string[]; example?: string }[];
+    fixes?: { check: string; how: string; steps?: string[]; examples?: string[] }[];
+    growth?: { title: string; why: string; steps?: string[]; example?: string }[];
+    titleTips?: string[]; next?: string[]; provider?: string; model?: string;
+  } = {};
   try {
     if (opts.skipAi) throw new Error("skip");
-    const res = await runStep({ step: "keywords", purpose: "diagnose", blog, system, prompt, json: true, maxTokens: 3000 });
+    const res = await runStep({ step: "keywords", purpose: "diagnose", blog, system, prompt, json: true, maxTokens: 8000 });
     ai = { ...extractJson(res.text), provider: res.provider, model: res.model };
   } catch (e) {
     if (!opts.skipAi) notes.push(`AI 종합 진단을 만들지 못했어요: ${(e as Error).message}`);
@@ -311,4 +329,13 @@ export async function recheckOne(blogId: string, label: string) {
   const data = { ...snap.data, checks, metrics: fresh.metrics, rechecked: { ...((snap.data as Diagnosis & { rechecked?: Record<string, string> }).rechecked ?? {}), [label]: new Date().toISOString() } };
   await q("UPDATE research_snapshots SET data=$2 WHERE id=$1", [snap.id, j(data)]);
   return { check: checks.find((c) => c.label === label)!, at: data.rechecked[label] };
+}
+
+/** 이번 주 할 일 고친 내용 저장 (마지막 진단 기록에) */
+export async function saveNext(blogId: string, next: string[]) {
+  const snap = await q1<{ id: string; data: Diagnosis }>("SELECT id, data FROM research_snapshots WHERE blog_id=$1 AND source='diagnose' ORDER BY collected_at DESC LIMIT 1", [blogId]);
+  if (!snap) throw new Error("먼저 진단을 한 번 해 주세요.");
+  const clean = next.map((t) => String(t ?? "").trim().slice(0, 200)).filter(Boolean).slice(0, 20);
+  await q("UPDATE research_snapshots SET data=$2 WHERE id=$1", [snap.id, j({ ...snap.data, ai: { ...snap.data.ai, next: clean } })]);
+  return clean;
 }

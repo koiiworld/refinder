@@ -586,6 +586,15 @@ test("🩺 블로그 진단: 발행 리듬·제목·검색 누락·키워드 순
   assert.equal(d.ai.score, 62);
   assert.match(await stepPrompt("블로그 성장 컨설턴트"), /\[점검표\]/);
   assert.ok(d.at, "마지막 진단 저장");
+  // 💡 고치는 법 · 📈 유입 전략 (따라 할 순서와 실제 예시)
+  assert.equal(d.ai.fixes[0].check, "제목 검색 노출");
+  assert.ok(d.ai.fixes[0].steps.length >= 2 && /→/.test(d.ai.fixes[0].examples[0]));
+  assert.equal(d.ai.growth.length, 2);
+  assert.match(await stepPrompt("블로그 성장 컨설턴트"), /따라 할 수 있게[\s\S]*growth: 조회수·유입을 늘리는 방법/);
+  // 이번 주 할 일 문구 고치기 저장
+  assert.deepEqual((await call("/api/diagnose", "POST", { blogId: "blog_algokitchen", next: ["주 3회 발행 (월·수·금)", " ", "굴보쌈 이어 쓰기"] })).data.next, ["주 3회 발행 (월·수·금)", "굴보쌈 이어 쓰기"]);
+  const pgd = (await (await fetch(`${BASE}/diagnose?blog=blog_algokitchen`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(pgd.includes("조회수·유입 늘리기") && pgd.includes("주 3회 발행 (월·수·금)") && pgd.includes("고치는 법"), "진단 화면");
   // 🔄 한 줄만 다시 진단하기 (수치만 다시 잼 · AI 안 씀)
   await call("/__reset", "POST", undefined, MOCK);
   const rc = await call("/api/diagnose", "POST", { blogId: "blog_algokitchen", recheck: "발행 빈도" });
