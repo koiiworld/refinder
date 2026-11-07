@@ -475,7 +475,8 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
     }
     setSubBusy(false);
   }
-  const [capKind, setCapKind] = useState<"" | "day" | "week" | "month">("");
+  const [capKind, setCapKind] = useState<"" | "day" | "week" | "month" | "reaction">("");
+  const [capDate, setCapDate] = useState("");
   const [note, setNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -502,12 +503,12 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
     setErr("");
     try {
       const images = await Promise.all(imgs.map((x) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(x); })));
-      const r = await api<{ kind: "day" | "week" | "month"; date: string }>(`/api/dashboard/top`, "POST", { blogId, images, kind: capKind || undefined });
+      const r = await api<{ kind: "day" | "week" | "month" | "reaction"; date: string; linked?: number }>(`/api/dashboard/top`, "POST", { blogId, images, kind: capKind || undefined, date: capDate || undefined });
       await load();
       setTab("views");
-      setPeriod(r.kind);
+      if (r.kind !== "reaction") setPeriod(r.kind);
       if (r.kind === "day") void pickDay(r.date);
-      setNote(`${r.date} ${r.kind === "day" ? "일간" : r.kind === "week" ? "주간" : "월간"} 조회수로 저장했어요. 매일 넣으면 주간·월간이 자동으로 쌓여요.`);
+      setNote(`${r.date} ${r.kind === "day" ? "일간 조회수" : r.kind === "week" ? "주간 조회수" : r.kind === "month" ? "월간 조회수" : "반응(공감·댓글) 순위"}로 저장했어요.${r.linked ? ` 같은 기준일 루틴의 캡처 항목 ${r.linked}개도 체크했어요.` : r.kind === "day" ? " 매일 넣으면 주간·월간이 자동으로 쌓여요." : ""}`);
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -613,7 +614,11 @@ export function BlogTopButton({ blogId, name }: { blogId: string; name: string }
                     <option value="day">일간</option>
                     <option value="week">주간</option>
                     <option value="month">월간</option>
+                    <option value="reaction">반응 순위 (공감·댓글)</option>
                   </select>
+                  <span className="tiny muted">날짜:</span>
+                  <input className="input" type="date" value={capDate} max={kstDay(0)} onChange={(e) => setCapDate(e.target.value)} style={{ width: 150, padding: "2px 6px", fontSize: 13 }} aria-label="캡처 날짜 (비우면 화면에서 읽음)" title="비우면 AI가 화면의 날짜를 읽어요" />
+                  {capDate && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setCapDate("")}>화면에서 읽기</button>}
                 </div>
                 <div
                   className="card"

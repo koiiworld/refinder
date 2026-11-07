@@ -694,10 +694,27 @@ function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFi
     return n && (!it.fixed || n !== (it.userNote ?? "").trim()) ? i : -1;
   }).filter((i) => i >= 0);
   const bulkLabel = [commented.length ? `코멘트 ${commented.length}건` : "", general.trim() ? "글 전체 수정사항" : ""].filter(Boolean).join(" + ");
+  // ☑ 체크한 지적만 골라 한 번에 AI 수정
+  const [picked, setPicked] = useState<number[]>([]);
+  useEffect(() => setPicked([]), [review]);
+  const togglePick = (i: number) => setPicked((p) => (p.includes(i) ? p.filter((x) => x !== i) : [...p, i]));
+  const allOpenPicked = open.length > 0 && open.every((i) => picked.includes(i));
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="row">
-        <button className="btn btn-sm btn-primary" disabled={busy || !open.length} onClick={() => confirm(`남은 지적 ${open.length}건을 AI가 본문에 반영할까요?\n적어 둔 내 코멘트도 함께 반영하고, 지적과 관계없는 부분은 그대로 둡니다.`) && onFix(open, notes)}>
+        {open.length > 0 && (
+          <label className="small row" style={{ gap: 4, cursor: "pointer" }}>
+            <input type="checkbox" checked={allOpenPicked} disabled={busy} onChange={() => setPicked(allOpenPicked ? [] : open)} aria-label="남은 지적 모두 선택" /> 모두 선택
+          </label>
+        )}
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={busy || !picked.length}
+          onClick={() => confirm(`선택한 지적 ${picked.length}건을 AI가 본문에 반영할까요?\n적어 둔 내 코멘트도 함께 반영하고, 선택하지 않은 부분은 그대로 둡니다.`) && onFix([...picked].sort((a, b) => a - b), notes)}
+        >
+          {fixing ? <><span className="spinner" /> AI가 고치는 중…</> : `☑ 선택한 지적 AI로 수정 (${picked.length})`}
+        </button>
+        <button className="btn btn-sm" disabled={busy || !open.length} onClick={() => confirm(`남은 지적 ${open.length}건을 AI가 본문에 반영할까요?\n적어 둔 내 코멘트도 함께 반영하고, 지적과 관계없는 부분은 그대로 둡니다.`) && onFix(open, notes)}>
           {fixing ? <><span className="spinner" /> AI가 고치는 중…</> : `✏️ 지적 모두 AI로 수정 (${open.length})`}
         </button>
         <button className="btn btn-sm" disabled={busy} onClick={onRereview}>
@@ -747,7 +764,10 @@ function ReviewView({ review, rereview, imagesNow, busy, fixing, reviewing, onFi
         const noteChanged = note.trim() !== (it.userNote ?? "").trim();
         return (
           <div key={i} className="card card-pad stack" style={{ gap: 4, padding: 10, ...(it.fixed ? { background: "var(--ok-bg, #f3faf5)" } : {}) }}>
-            <div className="row"><span className={`badge ${sev[it.severity] ?? ""}`}>{it.severity}</span><span className="badge">{it.type}</span></div>
+            <div className="row">
+              <input type="checkbox" checked={picked.includes(i)} disabled={busy} onChange={() => togglePick(i)} aria-label={`지적 ${i + 1} 선택 (일괄 AI 수정)`} />
+              <span className={`badge ${sev[it.severity] ?? ""}`}>{it.severity}</span><span className="badge">{it.type}</span>
+            </div>
             {it.quote && <div className="tiny muted">“{it.quote}”</div>}
             <div className="small">{it.comment}</div>
             {it.suggestion && <div className="small" style={{ color: "var(--ok)" }}>→ {it.suggestion}</div>}

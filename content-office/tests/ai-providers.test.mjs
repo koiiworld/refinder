@@ -1507,7 +1507,8 @@ test("📣 블로그 글 → 다른 채널 · 🔍 릴스 분석(받아쓰기·�
 
 test("🔁 루틴 관리: 반복 등록 → 오늘 실행 자동 생성 → 텔레그램 첫 알림(버튼) → 완료 버튼은 필수 확인 → 30분 뒤 → 캡처 등록(AI 읽기)·체크로 자동 완료·알림 취소 · 마감 지나면 미수집 · 비공개 캡처", async (t) => {
   const hm = kstTime(0);
-  if (hm < "00:10" || hm > "23:50") return t.skip("자정 근처라 건너뜀");
+  // 30분 뒤 알림이 23:59 마감을 넘지 않게 (자정 근처는 건너뜀)
+  if (hm < "00:10" || hm > "23:20") return t.skip("자정 근처라 건너뜀");
   const tick = () => call("/api/routines", "POST", { action: "tick" });
   const policy0 = (await call("/api/routines/policy")).data.policy;
   await call("/api/routines/policy", "PUT", { quietOn: false }); // 밤에 돌려도 보내지게
@@ -1795,4 +1796,32 @@ test("📄 문서 → 마크다운 (MarkItDown, 맥): 올리기 → 변환 → �
   const rp = (await (await fetch(`${BASE}/repurpose`)).text());
   assert.equal((await fetch(`${BASE}/repurpose?convert=${ids[0]}`)).status, 200);
   void rp;
+});
+
+test("🔁 대시보드에서 넣은 캡처 → 같은 기준일 루틴 항목 자동 체크 (조회수·반응 순위) · 날짜 직접 고르기", async () => {
+  const r = (await call("/api/routines", "POST", {
+    name: "대시보드 연결 시험", category: "blog", blog_id: "blog_algokitchen", schedule: { type: "daily", baseOffset: -1 }, time: "00:01", deadline: "23:59", notify: false,
+    completion: "checklist", checklist: [{ label: "조회수 순위 캡처", kind: "views", required: true }, { label: "반응 순위 TOP 10 캡처 등록", kind: "capture", required: true }, { label: "확인", kind: "check", required: true }],
+  })).data;
+  await call("/api/routines", "POST", { action: "tick" });
+  const run = (await call("/api/routines")).data.today.find((x) => x.routine_id === r.id);
+  assert.ok(run, "오늘 실행");
+  const base = run.base_date;
+  const v = await call("/api/dashboard/top", "POST", { blogId: "blog_algokitchen", images: [PIXEL_URL], kind: "day", date: base });
+  assert.equal(v.data.date, base, "고른 날짜로 저장");
+  assert.equal(v.data.linked, 1, "조회수 항목 체크");
+  const rc = await call("/api/dashboard/top", "POST", { blogId: "blog_algokitchen", images: [PIXEL_URL], kind: "reaction", date: base });
+  assert.equal(rc.status, 200, JSON.stringify(rc.data));
+  assert.equal(rc.data.kind, "reaction");
+  assert.equal(rc.data.linked, 1, "반응 항목 체크");
+  const rn = (await call(`/api/routines/runs/${run.id}`)).data.run;
+  const routine = (await call(`/api/routines/runs/${run.id}`)).data.routine;
+  assert.ok(rn.items.find((i) => i.id === routine.checklist[0].id)?.done && rn.items.find((i) => i.id === routine.checklist[1].id)?.done);
+  assert.match(rn.items.find((i) => i.id === routine.checklist[1].id).note, /대시보드에서 넣은/);
+  assert.notEqual(rn.status, "done", "확인 항목이 남아 아직 완료 아님");
+  assert.equal((await call(`/api/dashboard/top?blogId=blog_algokitchen&day=${base}`)).data.source, "capture");
+  await call(`/api/routines/${r.id}`, "DELETE");
+  const dash = (await (await fetch(`${BASE}/`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(dash.includes("오늘 쓴 AI 비용"), "대시보드로 옮김");
+  assert.ok(!(await (await fetch(`${BASE}/posts`)).text()).includes("오늘 쓴 AI 비용"), "블로그 업로드에선 뺌");
 });

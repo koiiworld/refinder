@@ -255,6 +255,26 @@ export async function setItem(runId: string, itemId: string, patch: { done?: boo
   return getRun(runId);
 }
 
+/** 대시보드에서 넣은 캡처 → 같은 블로그·같은 기준일 루틴의 해당 항목 자동 체크 (조회수=views 항목, 반응=라벨에 '반응'이 든 캡처 항목) */
+export async function syncCaptureToRuns(blogId: string, kind: string, date: string) {
+  if (kind !== "day" && kind !== "reaction") return 0;
+  const runs = await q<Run & { routine: Routine }>(
+    `SELECT r.*, to_jsonb(t) AS routine FROM routine_runs r JOIN routines t ON t.id=r.routine_id
+      WHERE t.blog_id=$1 AND COALESCE(NULLIF(r.base_date,''), r.run_date)=$2 AND r.status <> 'done'`,
+    [blogId, date],
+  );
+  let n = 0;
+  for (const run of runs) {
+    for (const c of run.routine.checklist ?? []) {
+      const hit = kind === "day" ? c.kind === "views" : c.kind === "capture" && /반응/.test(c.label);
+      if (!hit || run.items?.find((i) => i.id === c.id)?.done) continue;
+      await setItem(run.id, c.id, { done: true, note: `대시보드에서 넣은 ${date} ${kind === "day" ? "조회수" : "반응"} 순위 캡처` });
+      n++;
+    }
+  }
+  return n;
+}
+
 /** 캡처 사진 저장 (비공개: 로그인한 사람만 /api/routines/capture/<id> 로 봄) */
 export async function saveCapture(data: Buffer, mime: string, label: string) {
   if (!/^image\/(jpeg|png|webp)$/.test(mime)) throw new Error("JPG·PNG·WEBP 캡처만 올릴 수 있어요.");

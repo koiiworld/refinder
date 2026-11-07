@@ -119,7 +119,8 @@ export async function topPosts(blogId: string) {
 }
 
 /** 통계 화면 캡처 → AI가 기간 종류(일간·주간·월간)·날짜·글별 조회수를 읽어 저장 */
-export async function saveViewsFromCapture(blogId: string, images: string[], kindHint?: ViewKind) {
+export type CaptureKind = ViewKind | "reaction";
+export async function saveViewsFromCapture(blogId: string, images: string[], kindHint?: CaptureKind, dateHint?: string) {
   const blog = await getBlog(blogId);
   if (!blog) throw new Error("블로그를 찾을 수 없습니다.");
   const today = kstToday();
@@ -131,14 +132,21 @@ export async function saveViewsFromCapture(blogId: string, images: string[], kin
 - items: 글 제목과 조회수를 조회수가 많은 순서대로 최대 10개. title 은 보이는 그대로(잘려 있으면 보이는 만큼), views 는 숫자만
 - 조회수 목록이 안 보이면 items 를 빈 배열로
 형식: {"kind": "day", "date": "", "period": "", "items": [{"title": "", "views": 0}]}`;
-  const res = await runStep({ step: "keywords", purpose: "top-views", blog: null, system, prompt, images, json: true, maxTokens: 1500 });
+  // 반응 순위(공감·댓글) 캡처: 같은 형식으로 '반응 수'를 읽음
+  const reactionPrompt = `첨부한 캡처는 블로그 통계의 반응(공감·댓글) 순위 화면입니다. 오늘은 ${today} 입니다.
+- date: 그 기간의 마지막 날짜 (YYYY-MM-DD). 연도가 안 보이면 오늘 기준으로 추정. 모르면 빈 문자열
+- period: 화면에 보이는 기간 문구 그대로
+- items: 글 제목과 반응 수(공감+댓글, 한 숫자만 보이면 그 숫자)를 많은 순서대로 최대 10개. views 칸에 반응 수를 넣으세요
+형식: {"kind": "reaction", "date": "", "period": "", "items": [{"title": "", "views": 0}]}`;
+  const res = await runStep({ step: "keywords", purpose: "top-views", blog: null, system, prompt: kindHint === "reaction" ? reactionPrompt : prompt, images, json: true, maxTokens: 1500 });
   const raw = extractJson<{ kind?: string; date?: string; period?: string; items?: { title?: string; views?: number | string }[] }>(res.text);
   const items = rankItems(
     (raw.items ?? []).map((i) => ({ title: String(i.title ?? "").trim(), views: Number(String(i.views ?? "").replace(/[^\d]/g, "")) || 0 })).filter((i) => i.title),
   );
   if (!items.length) throw new Error("캡처에서 글 제목·조회수를 찾지 못했어요. 조회수 순위가 보이는 화면으로 다시 올려 주세요.");
-  const kind: ViewKind = kindHint ?? (["day", "week", "month"].includes(String(raw.kind)) ? (raw.kind as ViewKind) : "day");
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date)) && String(raw.date) <= addDays(today, 1) ? String(raw.date) : today;
+  const kind: CaptureKind = kindHint ?? (["day", "week", "month"].includes(String(raw.kind)) ? (raw.kind as ViewKind) : "day");
+  // 날짜를 직접 고르면 그 날짜, 아니면 화면에서 읽은 날짜, 그것도 없으면 오늘
+  const date = dateHint && DATE_RE.test(dateHint) ? dateHint : /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date)) && String(raw.date) <= addDays(today, 1) ? String(raw.date) : today;
   await q(
     `INSERT INTO view_captures (blog_id, kind, day, period, items, ai) VALUES ($1,$2,$3,$4,$5,$6)
      ON CONFLICT (blog_id, kind, day) DO UPDATE SET period=EXCLUDED.period, items=EXCLUDED.items, ai=EXCLUDED.ai, created_at=NOW()`,
@@ -146,7 +154,9 @@ export async function saveViewsFromCapture(blogId: string, images: string[], kin
   );
   // 예전 방식(한 장만 저장)은 정리
   await q("DELETE FROM settings WHERE key=$1", [`top_views:${blogId}`]).catch(() => {});
-  return { kind, date, period: String(raw.period ?? ""), items };
+  // 🔁 같은 블로그·같은 기준일 루틴의 캡처 항목도 자동 체크
+  const linked = await import("./routines").then((m) => m.syncCaptureToRuns(blogId, kind, date)).catch(() => 0);
+  return { kind, date, period: String(raw.period ?? ""), items, linked };
 }
 
 export async function lastCaptureDay(blogId: string) {

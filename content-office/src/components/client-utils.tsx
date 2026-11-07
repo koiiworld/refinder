@@ -119,9 +119,52 @@ export function AiPicker({
           </option>
         ))}
       </select>
-      {value && value.provider !== "template" && (
-        <input className="input" style={{ width: 200 }} value={value.model} onChange={(e) => onChange({ ...value, model: e.target.value })} aria-label="모델 ID" />
-      )}
+      {value && value.provider !== "template" && <ModelSelect provider={value.provider} model={value.model} onChange={(model) => onChange({ ...value, model })} />}
     </div>
+  );
+}
+
+/** 설정의 AI 단가표에 있는 글 쓰는 모델 목록 (한 번만 불러와 같이 씀) */
+let modelCache: Promise<Record<string, string[]>> | null = null;
+function loadModels() {
+  modelCache ??= api<{ pricing?: Record<string, unknown> }>("/api/settings")
+    .then((s) => {
+      const out: Record<string, string[]> = {};
+      for (const key of Object.keys(s.pricing ?? {})) {
+        const [p, ...rest] = key.split(":");
+        const m = rest.join(":");
+        // 이미지·영상·음성·임베딩 모델은 글 수정에 못 써서 뺌
+        if (!m || /image|imagen|dall-e|veo|sora|tts|whisper|audio|embedding|realtime|transcribe|moderation|search|computer/i.test(m)) continue;
+        (out[p] ??= []).push(m);
+      }
+      for (const p of Object.keys(out)) out[p].sort((a, b) => b.localeCompare(a, "en", { numeric: true }));
+      return out;
+    })
+    .catch(() => ({}));
+  return modelCache;
+}
+
+/** 세부 모델 고르기: 목록에서 고르거나 '직접 입력' */
+function ModelSelect({ provider, model, onChange }: { provider: string; model: string; onChange: (m: string) => void }) {
+  const [models, setModels] = useState<Record<string, string[]>>({});
+  const [custom, setCustom] = useState(false);
+  useEffect(() => {
+    void loadModels().then(setModels);
+  }, []);
+  const list = models[provider] ?? [];
+  const inList = list.includes(model);
+  if (custom || (list.length > 0 && !inList && model && !PROVIDERS.some((p) => p.defaultModel === model)) || !list.length)
+    return (
+      <span className="row" style={{ gap: 4 }}>
+        <input className="input" style={{ width: 200 }} value={model} onChange={(e) => onChange(e.target.value)} placeholder="모델 ID" aria-label="모델 ID" />
+        {list.length > 0 && <button type="button" className="btn btn-sm btn-ghost" onClick={() => { setCustom(false); if (!list.includes(model)) onChange(list[0]); }}>목록에서 고르기</button>}
+      </span>
+    );
+  return (
+    <select className="select" style={{ width: "auto", minWidth: 200 }} value={inList ? model : ""} onChange={(e) => (e.target.value === "__custom" ? setCustom(true) : onChange(e.target.value))} aria-label="세부 모델">
+      {!inList && <option value="">{model || "모델 고르기"}</option>}
+      {list.map((m) => <option key={m} value={m}>{m}</option>)}
+      <option value="__custom">✏️ 직접 입력…</option>
+    </select>
   );
 }

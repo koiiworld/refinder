@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TodayCost from "@/components/TodayCost";
 import { dashboardData, PASS_SCORE } from "@/lib/dashboard";
 import { categoryOf, kstToday, listTodos, TODO_CATEGORIES } from "@/lib/todos";
 import { ensureWorker } from "@/lib/jobs";
@@ -66,6 +67,9 @@ export default async function Dashboard() {
 
         {/* 수익 (직접 입력) */}
         <RevenueCard month={d.month} data={d.revenue.data} total={d.revenue.total} prevTotal={d.revenue.prevTotal} aiKrw={d.cost.monthUsd * KRW_PER_USD} coupang={d.revenue.coupang} goal={d.revenue.goal} />
+
+        {/* 오늘 쓴 AI 비용 (단계별·모델별, 블로그 업로드에서 옮겨 옴) */}
+        <TodayCost />
 
         {/* AI 비용 */}
         <section className="card">

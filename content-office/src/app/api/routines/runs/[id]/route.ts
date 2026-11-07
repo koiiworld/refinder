@@ -28,8 +28,13 @@ export async function POST(req: Request, ctx: Ctx) {
         // 조회수 순위 캡처: AI가 글 제목·조회수를 읽어 그날 기록으로 저장 (대시보드 인기 글 TOP 10과 같은 기록)
         if (item.kind === "views" && r.blog_id) {
           const { saveViewsFromCapture } = await import("@/lib/top-posts");
-          const v = await saveViewsFromCapture(r.blog_id, [`data:${file.type || "image/png"};base64,${data.toString("base64")}`], "day");
+          const v = await saveViewsFromCapture(r.blog_id, [`data:${file.type || "image/png"};base64,${data.toString("base64")}`], "day", run.base_date || run.run_date);
           note = `${v.date} · ${v.items.length}개 글 저장`;
+        } else if (item.kind === "capture" && /반응/.test(item.label) && r.blog_id) {
+          // 반응 순위 캡처: 대시보드 기록에도 남김 (실패해도 사진 등록은 그대로)
+          const { saveViewsFromCapture } = await import("@/lib/top-posts");
+          const v = await saveViewsFromCapture(r.blog_id, [`data:${file.type || "image/png"};base64,${data.toString("base64")}`], "reaction", run.base_date || run.run_date).catch(() => null);
+          if (v) note = `${v.date} · 반응 ${v.items.length}개 글 저장`;
         }
         return ok({ run: await setItem(id, itemId, { done: true, img, ...(note ? { note } : {}) }) });
       }
