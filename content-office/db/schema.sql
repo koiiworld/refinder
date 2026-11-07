@@ -575,3 +575,17 @@ CREATE TABLE IF NOT EXISTS trash_items (
   rows       JSONB NOT NULL DEFAULT '[]'::jsonb,
   deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 💬 텔레그램 메시지함: 보낸(out) · 받은(in) 메시지 기록
+CREATE TABLE IF NOT EXISTS telegram_messages (
+  id         TEXT PRIMARY KEY,
+  direction  TEXT NOT NULL,              -- out | in
+  kind       TEXT NOT NULL DEFAULT '',   -- routine | todo | briefing | test | manual | reply | text | button
+  chat_id    TEXT NOT NULL DEFAULT '',
+  chat_name  TEXT NOT NULL DEFAULT '',
+  text       TEXT NOT NULL DEFAULT '',
+  status     TEXT NOT NULL DEFAULT 'sent', -- sent | failed | received
+  error      TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS telegram_messages_dir ON telegram_messages (direction, created_at DESC);

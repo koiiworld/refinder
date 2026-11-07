@@ -197,6 +197,7 @@ export async function sendTodoNotification(notificationId: string) {
     return;
   }
   const d = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
+  await (await import("./telegram")).logTg({ direction: "out", kind: "todo", text, ok: res.ok && d.ok !== false, error: res.ok && d.ok !== false ? null : `텔레그램 오류 ${res.status}: ${d.description ?? ""}` });
   if (res.ok && d.ok !== false) {
     await q("UPDATE todo_notifications SET status='sent', sent_at=NOW(), error=NULL WHERE id=$1", [n.id]);
     return;
@@ -222,6 +223,11 @@ export async function findTelegramChats() {
     const c = u.message?.chat;
     if (c) seen.set(c.id, c.title || c.first_name || c.username || String(c.id));
   }
+  // 이미 받은 메시지함에 들어온 채팅도 (1분 확인이 먼저 가져갔을 수 있음)
+  for (const r of await q<{ chat_id: string; chat_name: string }>("SELECT DISTINCT ON (chat_id) chat_id, chat_name FROM telegram_messages WHERE direction='in' AND chat_id <> '' ORDER BY chat_id, created_at DESC LIMIT 20").catch(() => [])) {
+    const idn = Number(r.chat_id);
+    if (Number.isFinite(idn) && !seen.has(idn)) seen.set(idn, r.chat_name.replace(" (내 채팅 아님)", "") || r.chat_id);
+  }
   return { bot, chats: [...seen.entries()].map(([id, name]) => ({ id: String(id), name })) };
 }
 
@@ -235,5 +241,6 @@ export async function sendTelegramTest() {
     signal: AbortSignal.timeout(15_000),
   });
   const d = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
+  await (await import("./telegram")).logTg({ direction: "out", kind: "test", text: "✅ AI 콘텐츠 오피스 알림 연결 확인", ok: res.ok && d.ok !== false, error: res.ok && d.ok !== false ? null : `텔레그램 오류 ${res.status}: ${d.description ?? ""}` });
   if (!res.ok || d.ok === false) throw new Error(`텔레그램 오류: ${d.description ?? res.status}`);
 }

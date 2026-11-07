@@ -131,6 +131,13 @@ http
       globalThis.__tgPress.push({ update_id: globalThis.__tgUid, callback_query: { id: `cb${globalThis.__tgUid}`, data: url.searchParams.get("data"), from: { id: 987654 }, message: { message_id: 1, chat: { id: Number(url.searchParams.get("chat") ?? 987654) } } } });
       return send(res, 200, { ok: true });
     }
+    // 텔레그램에서 봇에게 메시지 보내기 흉내: /__tgsay?text=...
+    if (url.pathname === "/__tgsay") {
+      globalThis.__tgPress = globalThis.__tgPress ?? [];
+      globalThis.__tgUid = (globalThis.__tgUid ?? 100) + 1;
+      globalThis.__tgPress.push({ update_id: globalThis.__tgUid, message: { message_id: 9, text: url.searchParams.get("text"), chat: { id: Number(url.searchParams.get("chat") ?? 987654), first_name: "민" } } });
+      return send(res, 200, { ok: true });
+    }
     const tg = url.pathname.match(/^\/bottest-tg-token\/(sendMessage|getUpdates|getMe|answerCallbackQuery|editMessageReplyMarkup)$/);
     if (tg) {
       if (tg[1] === "getMe") return send(res, 200, { ok: true, result: { username: "test_office_bot", first_name: "시험봇" } });

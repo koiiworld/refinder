@@ -66,7 +66,7 @@ export default function RoutineBoard({ initialRoutines, initialToday, blogs, cat
         </div>
         <button className="btn btn-primary btn-sm" onClick={() => { setErr(""); setEdit({ ...EMPTY }); }}>+ 새 루틴</button>
       </div>
-      {!telegram && <div className="notice small">텔레그램이 연결되지 않아 알림은 가지 않아요. <Link href="/settings#notify" style={{ color: "var(--accent)" }}>설정 → 알림 설정</Link></div>}
+      {!telegram && <div className="notice small">텔레그램이 연결되지 않아 알림은 가지 않아요. <Link href="/telegram" style={{ color: "var(--accent)" }}>워크스페이스 → 텔레그램</Link></div>}
 
       {tab === "today" && (
         <section className="card">

@@ -84,7 +84,7 @@ function TodoForm({ init, blogs, posts, refs, telegram, onSave, onCancel, saveLa
       <input className="input" value={f.memo} onChange={(e) => set({ memo: e.target.value })} placeholder="메모 (선택)" aria-label="메모" />
       <label className="small row" style={{ gap: 6, opacity: f.due_time ? 1 : 0.5 }}>
         <input type="checkbox" checked={f.notify} disabled={!f.due_time} onChange={(e) => set({ notify: e.target.checked })} />
-        🔔 이 시간에 텔레그램 알림 {!f.due_time ? "(시간을 정하면 켤 수 있어요)" : !telegram ? "(텔레그램 연결 전 · 설정에서 연결하면 보내져요)" : ""}
+        🔔 이 시간에 텔레그램 알림 {!f.due_time ? "(시간을 정하면 켤 수 있어요)" : !telegram ? "(텔레그램 연결 전 · 텔레그램 탭에서 연결하면 보내져요)" : ""}
       </label>
       {err && <div className="notice notice-bad small">{err}</div>}
       <div className="row" style={{ gap: 6 }}>

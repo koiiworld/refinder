@@ -1,4 +1,5 @@
 import "server-only";
+import { logTg } from "./telegram";
 import crypto from "node:crypto";
 import { q, q1, newId, j } from "./db";
 import { kstToDate, kstToday, telegramConnected } from "./todos";
@@ -306,9 +307,14 @@ function quietUntil(p: Policy, now = new Date()) {
 }
 
 // ── 텔레그램 ──
-async function tg(method: string, body: Record<string, unknown>) {
+async function tg(method: string, body: Record<string, unknown>, kind = "routine") {
   const res = await fetch(`${tgBase()}/bot${process.env.TELEGRAM_BOT_TOKEN!.trim()}/${method}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) });
   const d = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string; result?: unknown; parameters?: { retry_after?: number } };
+  // 💬 보낸 메시지함 기록
+  if (method === "sendMessage") {
+    const ok = res.ok && d.ok !== false;
+    await logTg({ direction: "out", kind, text: String(body.text ?? ""), chatId: String(body.chat_id ?? ""), ok, error: ok ? null : `텔레그램 오류 ${res.status}: ${d.description ?? ""}` });
+  }
   return { res, d };
 }
 
@@ -393,9 +399,7 @@ export async function markMissed() {
 /** 텔레그램 버튼 누른 것 받기 (웹훅 없이 주기적으로 · 한 서버만) */
 export async function pollButtons() {
   if (!telegramConnected()) return;
-  // 최근 이틀 안에 버튼 달린 알림을 보낸 적이 있을 때만 물어봄
-  const recent = await q1("SELECT 1 FROM routine_notifications WHERE status='sent' AND sent_at > NOW() - interval '2 days' LIMIT 1");
-  if (!recent) return;
+  // 받은 메시지함·버튼 처리를 위해 연결돼 있으면 1분마다 확인 (Render·맥 중 한 곳만: 아래 임대)
   const owner = process.env.RENDER ? "render" : "mac";
   const lease = await q1(
     `INSERT INTO settings (key, value) VALUES ('tg_poll', jsonb_build_object('until', (NOW() + interval '50 seconds')::text, 'owner', $1::text))
@@ -406,13 +410,25 @@ export async function pollButtons() {
   if (!lease) return;
   const off = await q1<{ value: { offset?: number } }>("SELECT value FROM settings WHERE key='tg_poll'");
   const offset = Number(off?.value?.offset ?? 0);
-  const { res, d } = await tg("getUpdates", { offset: offset ? offset + 1 : undefined, timeout: 0, allowed_updates: ["callback_query"] });
+  const { res, d } = await tg("getUpdates", { offset: offset ? offset + 1 : undefined, timeout: 0, allowed_updates: ["callback_query", "message"] });
   if (!res.ok || !Array.isArray(d.result)) return;
   let last = offset;
-  for (const u of d.result as { update_id: number; callback_query?: { id: string; data?: string; from?: { id: number }; message?: { message_id: number; chat?: { id: number } } } }[]) {
+  const mine = process.env.TELEGRAM_CHAT_ID!.trim();
+  type Chat = { id: number; first_name?: string; last_name?: string; title?: string; username?: string };
+  const nameOf = (c?: Chat) => (c ? c.title || [c.first_name, c.last_name].filter(Boolean).join(" ") || c.username || String(c.id) : "");
+  for (const u of d.result as { update_id: number; message?: { text?: string; caption?: string; photo?: unknown[]; document?: { file_name?: string }; chat?: Chat }; callback_query?: { id: string; data?: string; from?: { id: number }; message?: { message_id: number; chat?: Chat; text?: string } } }[]) {
     last = Math.max(last, u.update_id);
+    // 💬 받은 메시지함: 봇에게 온 메시지 기록 (다른 사람이 보낸 것도 표시만)
+    if (u.message) {
+      const m = u.message;
+      const text = m.text ?? (m.photo ? `📷 사진${m.caption ? ` · ${m.caption}` : ""}` : m.document ? `📎 파일 ${m.document.file_name ?? ""}` : m.caption ?? "(지원하지 않는 메시지)");
+      await logTg({ direction: "in", kind: "text", text, chatId: m.chat?.id, chatName: nameOf(m.chat) + (String(m.chat?.id) === mine ? "" : " (내 채팅 아님)") });
+      continue;
+    }
     const cb = u.callback_query;
     if (!cb?.data) continue;
+    const [a0] = cb.data.split(":");
+    await logTg({ direction: "in", kind: "button", text: `${a0 === "rd" ? "✅ 완료 처리" : a0 === "rs" ? "⏰ 30분 뒤 알림" : cb.data}${cb.message?.text ? ` · ${cb.message.text.split("\n")[0].slice(0, 80)}` : ""}`, chatId: cb.message?.chat?.id ?? cb.from?.id, chatName: nameOf(cb.message?.chat) });
     // 내 채팅에서 누른 버튼만 처리
     if (String(cb.message?.chat?.id ?? cb.from?.id) !== process.env.TELEGRAM_CHAT_ID!.trim()) {
       await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "권한이 없어요." }).catch(() => {});
@@ -425,7 +441,7 @@ export async function pollButtons() {
         const r = await completeRun(runId);
         text = r.done ? "✅ 완료 처리했어요" : `아직 남았어요: ${r.missing.join(", ")}`;
         if (r.done && cb.message) await tg("editMessageReplyMarkup", { chat_id: cb.message.chat?.id, message_id: cb.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
-        if (!r.done) await tg("sendMessage", { chat_id: process.env.TELEGRAM_CHAT_ID!.trim(), text: `아직 ${r.missing.join(", ")}이(가) 남아 있어요. 등록하면 자동으로 완료돼요.` }).catch(() => {});
+        if (!r.done) await tg("sendMessage", { chat_id: process.env.TELEGRAM_CHAT_ID!.trim(), text: `아직 ${r.missing.join(", ")}이(가) 남아 있어요. 등록하면 자동으로 완료돼요.` }, "reply").catch(() => {});
       } else if (act === "rs") {
         text = (await snooze(runId, 30)) ? "⏰ 30분 뒤에 다시 알릴게요" : "마감이 가까워 더 미룰 수 없어요";
       }
@@ -452,7 +468,7 @@ export async function sendBriefing() {
   const { listTodos } = await import("./todos");
   const todos = await listTodos("today").catch(() => []);
   const lines = [`☀️ 오늘의 업무 (${today})`, "", `🔁 루틴 ${runs.length}개`, ...runs.map((r) => `· ${r.time} ${r.name}${r.status === "done" ? " ✔" : ""}`), "", `✅ 할 일 ${todos.length}개`, ...todos.slice(0, 10).map((t) => `· ${t.due_time ?? ""} ${t.title}`)];
-  await tg("sendMessage", { chat_id: process.env.TELEGRAM_CHAT_ID!.trim(), text: lines.join("\n") }).catch(() => {});
+  await tg("sendMessage", { chat_id: process.env.TELEGRAM_CHAT_ID!.trim(), text: lines.join("\n") }, "briefing").catch(() => {});
 }
 
 /** 1분마다 (모든 서버, 중복은 DB 가 막음) */

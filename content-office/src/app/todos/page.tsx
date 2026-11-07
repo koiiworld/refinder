@@ -3,7 +3,6 @@ import { q } from "@/lib/db";
 import { listBlogs } from "@/lib/repo";
 import { kstToday, listTodos, telegramConnected } from "@/lib/todos";
 import TodoBoard from "./TodoBoard";
-import TelegramSetup from "./TelegramSetup";
 import { ensureRuns, listRuns } from "@/lib/routines";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +61,7 @@ export default async function Todos({ searchParams }: { searchParams: Promise<{ 
           </div>
         </section>
       )}
-      <div style={{ marginBottom: 16 }}><TelegramSetup connected={telegramConnected()} hasToken={!!process.env.TELEGRAM_BOT_TOKEN?.trim()} /></div>
+      {!telegramConnected() && <div className="notice small" style={{ marginBottom: 16 }}>🔔 텔레그램이 아직 연결되지 않았어요. <a href="/telegram" style={{ color: "var(--accent)" }}>워크스페이스 → 텔레그램</a>에서 연결해 주세요.</div>}
       <TodoBoard
         key={tab}
         tab={tab}

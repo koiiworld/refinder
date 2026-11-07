@@ -25,7 +25,7 @@ export default function NotifyCard({ connected, bot, initial, log: initialLog }:
     <section id="notify" className="card">
       <div className="card-head"><h2>🔔 알림 설정 (텔레그램)</h2><span className={`badge ${connected ? "badge-ok" : "badge-warn"}`}>{connected ? "연결 확인" : "연결 전"}</span></div>
       <div className="card-pad stack" style={{ gap: 10 }}>
-        <span className="small">{connected ? `봇 ${bot || "연결됨"} → 내 텔레그램 채팅으로 보내요.` : "봇 토큰과 채팅 ID를 넣으면 루틴·할 일 알림이 텔레그램으로 와요."} <a href="/todos" style={{ color: "var(--accent)" }}>연결·시험 메시지는 할 일 화면에서</a></span>
+        <span className="small">{connected ? `봇 ${bot || "연결됨"} → 내 텔레그램 채팅으로 보내요.` : "봇 토큰과 채팅 ID를 넣으면 루틴·할 일 알림이 텔레그램으로 와요."}</span>
         <label className="row small" style={{ gap: 6 }}>
           <input type="checkbox" checked={p.quietOn} onChange={(e) => save({ quietOn: e.target.checked })} /> 방해 금지
           <input className="input" type="time" style={{ width: 110 }} value={p.quietStart} onChange={(e) => save({ quietStart: e.target.value })} aria-label="방해 금지 시작" /> ~
@@ -40,7 +40,7 @@ export default function NotifyCard({ connected, bot, initial, log: initialLog }:
         <span className="tiny muted">루틴마다 정한 시각·재알림이 이 기본값보다 먼저예요. 승인 대기·AI 오류 알림은 다음 단계에서 이어 붙일 예정이에요.</span>
         {msg && <div className={`notice small ${msg.ok ? "" : "notice-bad"}`}>{msg.text}</div>}
         <details>
-          <summary className="small strong" style={{ cursor: "pointer" }}>발송 기록 ({log.length})</summary>
+          <summary className="small strong" style={{ cursor: "pointer" }}>루틴 알림 발송 기록 ({log.length})</summary>
           <button className="btn btn-sm btn-ghost" onClick={async () => setLog((await api<{ log: Log[] }>("/api/routines/policy")).log)}>새로고침</button>
           <div className="list">
             {log.map((l) => (

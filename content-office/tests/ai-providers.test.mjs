@@ -1571,8 +1571,26 @@ test("🔁 루틴 관리: 반복 등록 → 오늘 실행 자동 생성 → 텔�
   assert.ok(rp.includes("조회수 순위 TOP 10 캡처 등록") && rp.includes("완료 조건"), "실행 화면");
   const td = (await (await fetch(`${BASE}/todos?tab=today`)).text()).replace(/<!-- -->/g, "");
   assert.ok(td.includes("오늘의 루틴") && td.includes("알고키친 인기 글 순위 캡처"), "할 일에 당일 루틴");
-  const st = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
-  assert.ok(st.includes("알림 설정 (텔레그램)") && st.includes("방해 금지"), "설정: 알림 설정");
+  const st = (await (await fetch(`${BASE}/telegram`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(st.includes("알림 설정 (텔레그램)") && st.includes("방해 금지") && st.includes("메시지함") && st.includes("채팅 ID 찾기"), "워크스페이스 → 텔레그램: 연결·알림 설정·메시지함");
+  assert.ok((await (await fetch(`${BASE}/settings`)).text()).includes("워크스페이스 → 텔레그램"), "설정에는 안내만");
+  // 💬 메시지함: 보낸(루틴 알림) · 받은(버튼 누름 · 봇에게 보낸 말) · 직접 보내기
+  let out = (await call("/api/telegram?box=out")).data.list;
+  assert.ok(out.some((m) => m.kind === "routine" && /조회수 순위 TOP 10/.test(m.text) && m.status === "sent"), "보낸 메시지함: 루틴 알림");
+  await call(`/__tgsay?text=${encodeURIComponent("내일 촬영 몇 시였지?")}`, "GET", undefined, MOCK);
+  await tick();
+  const inbox = (await call("/api/telegram?box=in")).data;
+  assert.ok(inbox.list.some((m) => m.kind === "text" && m.text === "내일 촬영 몇 시였지?" && m.chat_name === "민"), "받은 메시지함: 내가 보낸 말");
+  assert.ok(inbox.list.some((m) => m.kind === "button" && /완료 처리/.test(m.text)), "받은 메시지함: 버튼 누름");
+  assert.ok(inbox.list.some((m) => m.kind === "button" && /내 채팅 아님/.test(m.chat_name) === false), "버튼 기록");
+  assert.equal((await call("/api/telegram")).data.counts.unread, 0, "받은 메시지함을 열면 읽음");
+  assert.equal((await call("/api/telegram", "POST", { action: "send", text: " " })).status, 400);
+  assert.equal((await call("/api/telegram", "POST", { action: "send", text: "직접 보내는 메모" })).status, 200);
+  out = (await call("/api/telegram?box=out")).data.list;
+  assert.equal(out[0].kind, "manual");
+  assert.equal(out[0].text, "직접 보내는 메모");
+  assert.ok((await mockLog()).some((l) => l.path.endsWith("/sendMessage") && l.body.text === "직접 보내는 메모"), "실제로는 모의 서버로만");
+  assert.equal((await fetch(`${BASE}/telegram`)).status, 200, "텔레그램 탭");
   for (const id of [r.data.id, late.id, wk.id]) await call(`/api/routines/${id}`, "DELETE");
   await call("/api/routines/policy", "PUT", policy0);
 });
