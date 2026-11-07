@@ -288,6 +288,14 @@ test("④ 글 다시 쓰기 (수정 요청) · 에디터 부분 수정", async (
   const e = await call("/api/ai/edit", "POST", { projectId: id, selected: "본문", instruction: "다듬기" });
   assert.equal(e.status, 200, JSON.stringify(e.data));
   assert.equal(e.data.text, "AI가 다듬은 문장입니다.");
+  // ✂️ 캡처한 영역 이미지도 함께 보냄 · 생각하는 모델(gpt-5)은 답 한도를 넉넉히
+  await call("/__reset", "POST", undefined, MOCK);
+  const e2 = await call("/api/ai/edit", "POST", { projectId: id, selected: "본문 문단", instruction: "표 아래에 기준일 메모", image: PIXEL_URL, provider: "openai", model: "gpt-5" });
+  assert.equal(e2.status, 200, JSON.stringify(e2.data));
+  const oa = (await mockLog()).find((l) => l.path === "/v1/chat/completions");
+  assert.ok(oa.body.max_completion_tokens >= 12000, "gpt-5 답 한도 넉넉히");
+  assert.ok(JSON.stringify(oa.body.messages).includes("image_url"), "캡처 이미지 첨부");
+  assert.match(JSON.stringify(oa.body.messages), /첨부한 캡처/);
 });
 
 test("크레딧 없는 AI는 자동으로 다른 AI로 대체", async () => {

@@ -7,7 +7,9 @@ import { body, fail, handle, ok } from "@/lib/api";
 /** 선택한 문단만 AI 수정 — 결과는 제안으로만 반환하고, 적용은 사용자가 결정 */
 export async function POST(req: Request) {
   return handle(async () => {
-    const b = await body<{ projectId: string; selected: string; instruction: string; context?: string; provider?: ProviderId; model?: string }>(req);
+    const b = await body<{ projectId: string; selected: string; instruction: string; context?: string; provider?: ProviderId; model?: string; image?: string }>(req);
+    // ✂️ 캡처한 영역 이미지 (선택)
+    const image = /^data:image\/(png|jpe?g|webp);base64,/.test(String(b.image ?? "")) && String(b.image).length < 8_000_000 ? String(b.image) : null;
     const project = await getProject(b.projectId);
     if (!project) return fail("프로젝트 없음", 404);
     const blog = (await getBlogForAi(project.blog_id))!;
@@ -22,7 +24,7 @@ export async function POST(req: Request) {
     } catch (e) {
       return fail((e as Error).message);
     }
-    const { system, prompt } = editPrompt(blog, b.selected, b.instruction, b.context ?? "");
+    const { system, prompt } = editPrompt(blog, b.selected, b.instruction, b.context ?? "", !!image);
     try {
       const res = await runAI({
         purpose: "edit",
@@ -31,9 +33,10 @@ export async function POST(req: Request) {
         projectId: project.id,
         system,
         prompt,
-        maxTokens: 2000,
+        maxTokens: 4000,
         retries: 2,
         override,
+        ...(image ? { images: [image] } : {}),
       });
       await addEvent(project.id, "ai", `선택 부분 AI 수정 제안 (${res.provider}/${res.model})`);
       return ok({ text: res.text.trim(), provider: res.provider, model: res.model });

@@ -28,6 +28,7 @@ export default function DocEditor({
   lockedReason,
   connections,
   onSaved,
+  onWholeRequest,
 }: {
   projectId: string;
   serverDoc: EditorDoc | null;
@@ -35,6 +36,8 @@ export default function DocEditor({
   lockedReason?: string;
   connections: { provider: string; connected: boolean }[];
   onSaved: (r: { needsRereview: boolean }) => void;
+  /** 고른 곳 없이 말로만 요청 → 글 전체에서 AI가 찾아 고침 */
+  onWholeRequest?: (note: string) => unknown;
 }) {
   const [title, setTitle] = useState(serverDoc?.title ?? "");
   const [state, setState] = useState<SaveState>("saved");
@@ -44,7 +47,11 @@ export default function DocEditor({
   const dirtyRef = useRef(false);
   const titleRef = useRef(title);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [aiOpen, setAiOpen] = useState<null | { from: number; to: number; text: string }>(null);
+  // ✨ AI 수정: 선택한 글 · ✂️ 캡처한 영역(블록 단위) · 아무것도 없으면 글 전체에 말로 요청
+  const [aiOpen, setAiOpen] = useState<null | { from: number; to: number; text: string; image?: string; block?: boolean; whole?: boolean }>(null);
+  const [capturing, setCapturing] = useState(false);
+  const [drag, setDrag] = useState<null | { x0: number; y0: number; x1: number; y1: number }>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -201,8 +208,53 @@ export default function DocEditor({
   function openAi() {
     const { from, to } = editor!.state.selection;
     const text = editor!.state.doc.textBetween(from, to, "\n");
-    if (!text.trim()) return alert("AI로 수정할 문장(문단)을 먼저 드래그해서 선택하세요.");
+    // 고른 글이 없으면: 말로 요청해서 AI가 글 전체에서 고칠 곳을 찾아 고침
+    if (!text.trim()) return setAiOpen({ from: 0, to: 0, text: "", whole: true });
     setAiOpen({ from, to, text });
+  }
+
+  /** ✂️ 캡처: 본문 위를 드래그한 영역 → 그 영역에 걸친 문단들(블록 단위) + 화면 이미지 */
+  async function finishCapture(r: { x0: number; y0: number; x1: number; y1: number }) {
+    setCapturing(false);
+    setDrag(null);
+    const ed = editor!;
+    const view = ed.view;
+    const box = view.dom.getBoundingClientRect();
+    const left = Math.max(box.left + 2, Math.min(r.x0, r.x1)), right = Math.min(box.right - 2, Math.max(r.x0, r.x1));
+    const top = Math.max(box.top + 2, Math.min(r.y0, r.y1)), bottom = Math.min(box.bottom - 2, Math.max(r.y0, r.y1));
+    if (right - left < 8 || bottom - top < 8) return;
+    const a = view.posAtCoords({ left, top }) ?? view.posAtCoords({ left: box.left + 4, top });
+    const b = view.posAtCoords({ left: right, top: bottom }) ?? view.posAtCoords({ left: box.right - 4, top: bottom });
+    if (!a || !b) return alert("본문 글 위를 드래그해 주세요.");
+    const doc = ed.state.doc;
+    // 걸친 문단 전체로 넓힘 (맨 위 블록 기준)
+    const $a = doc.resolve(Math.min(a.pos, b.pos));
+    const $b = doc.resolve(Math.max(a.pos, b.pos));
+    const from = $a.depth > 0 ? $a.before(1) : 0;
+    const to = $b.depth > 0 ? $b.after(1) : doc.content.size;
+    const text = doc.textBetween(from, to, "\n").trim();
+    if (!text) return alert("이 영역에서 글을 찾지 못했어요. 글이 있는 곳을 드래그해 주세요.");
+    let image: string | undefined;
+    try {
+      const { toCanvas } = await import("html-to-image");
+      const scale = 1;
+      const canvas = await toCanvas(view.dom as HTMLElement, {
+        pixelRatio: scale,
+        skipFonts: true,
+        backgroundColor: "#ffffff",
+        // 다른 사이트 이미지·깨진 이미지는 캡처를 막으니 빼고 (글 위치 확인용이라 충분)
+        filter: (n) => !(n instanceof HTMLImageElement) || n.src.startsWith("data:") || n.src.startsWith(location.origin),
+      });
+      const crop = document.createElement("canvas");
+      crop.width = Math.round(right - left);
+      crop.height = Math.round(bottom - top);
+      crop.getContext("2d")!.drawImage(canvas, (left - box.left) * scale, (top - box.top) * scale, crop.width * scale, crop.height * scale, 0, 0, crop.width, crop.height);
+      image = crop.toDataURL("image/jpeg", 0.85);
+    } catch (e) {
+      // 화면 이미지는 선택 — 실패하면 글만 보냄
+      console.warn("capture image failed", e);
+    }
+    setAiOpen({ from, to, text, image, block: true });
   }
 
   const stateLabel: Record<SaveState, string> = {
@@ -296,10 +348,14 @@ export default function DocEditor({
           {tb("↶", false, () => editor.chain().focus().undo().run(), "실행 취소")}
           {tb("↷", false, () => editor.chain().focus().redo().run(), "다시 실행")}
           <span className="tb-sep" />
-          <button type="button" className={`tb ${active?.hasSel ? "on" : ""}`} onClick={openAi} disabled={locked} title="선택한 부분만 AI로 수정">
-            ✨ 선택 부분 AI 수정
+          <button type="button" className={`tb ${capturing ? "on" : ""}`} onClick={() => { setCapturing((c) => !c); setDrag(null); }} disabled={locked} title="본문 위를 드래그해서 고칠 곳을 잘라 AI에게 보여줘요">
+            ✂️ {capturing ? "캡처 취소" : "캡처"}
+          </button>
+          <button type="button" className={`tb ${active?.hasSel ? "on" : ""}`} onClick={openAi} disabled={locked} title="고른 글·캡처한 곳을 고치거나, 아무것도 안 골랐으면 말로 요청해서 글 전체에서 고쳐요">
+            ✨ AI 수정
           </button>
         </div>
+        {capturing && <div className="notice small" style={{ margin: 0, borderRadius: 0 }}>✂️ 고칠 곳을 본문 위에서 드래그하세요. 걸친 문단 전체를 AI에게 보여줘요. (Esc 취소)</div>}
         <input
           className="title-input"
           value={title}
@@ -312,7 +368,28 @@ export default function DocEditor({
             markDirty();
           }}
         />
-        <EditorContent editor={editor} />
+        <div ref={shellRef} style={{ position: "relative" }}>
+          <EditorContent editor={editor} />
+          {capturing && (
+            <div
+              role="presentation"
+              tabIndex={-1}
+              onKeyDown={(e) => e.key === "Escape" && setCapturing(false)}
+              onMouseDown={(e) => { e.preventDefault(); setDrag({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }); }}
+              onMouseMove={(e) => drag && setDrag({ ...drag, x1: e.clientX, y1: e.clientY })}
+              onMouseUp={() => drag && void finishCapture(drag)}
+              onTouchStart={(e) => { const t = e.touches[0]; setDrag({ x0: t.clientX, y0: t.clientY, x1: t.clientX, y1: t.clientY }); }}
+              onTouchMove={(e) => { const t = e.touches[0]; if (drag) setDrag({ ...drag, x1: t.clientX, y1: t.clientY }); }}
+              onTouchEnd={() => drag && void finishCapture(drag)}
+              style={{ position: "absolute", inset: 0, cursor: "crosshair", background: "rgba(40,90,255,.04)", zIndex: 5, touchAction: "none" }}
+            >
+              {drag && shellRef.current && (() => {
+                const b = shellRef.current.getBoundingClientRect();
+                return <div style={{ position: "absolute", left: Math.min(drag.x0, drag.x1) - b.left, top: Math.min(drag.y0, drag.y1) - b.top, width: Math.abs(drag.x1 - drag.x0), height: Math.abs(drag.y1 - drag.y0), border: "2px dashed var(--accent)", background: "rgba(40,90,255,.08)", pointerEvents: "none" }} />;
+              })()}
+            </div>
+          )}
+        </div>
         <div className="sticky-actions row between">
           <span className="save-state" aria-live="polite">
             {state === "saving" && <span className="spinner" style={{ width: 10, height: 10 }} />}
@@ -349,11 +426,28 @@ export default function DocEditor({
         <AiEditModal
           projectId={projectId}
           selected={aiOpen.text}
+          image={aiOpen.image}
+          captured={!!aiOpen.block}
+          whole={!!aiOpen.whole}
+          canWhole={!!onWholeRequest}
           context={editor.getText()}
           connections={connections}
           onClose={() => setAiOpen(null)}
+          onWhole={async (note) => {
+            // 고치기 전에 내 변경부터 저장
+            if (dirtyRef.current) await save(true);
+            setAiOpen(null);
+            await onWholeRequest?.(note);
+          }}
           onApply={(text) => {
-            editor.chain().focus().insertContentAt({ from: aiOpen.from, to: aiOpen.to }, text.replace(/\n+/g, " ")).run();
+            if (aiOpen.block) {
+              // 캡처한 문단(블록) 통째로 바꿈: 줄마다 문단
+              const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+              const html = text.split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join("");
+              editor.chain().focus().insertContentAt({ from: aiOpen.from, to: aiOpen.to }, html || "<p></p>").run();
+            } else {
+              editor.chain().focus().insertContentAt({ from: aiOpen.from, to: aiOpen.to }, text.replace(/\n+/g, " ")).run();
+            }
             setAiOpen(null);
           }}
         />
@@ -365,17 +459,27 @@ export default function DocEditor({
 function AiEditModal({
   projectId,
   selected,
+  image,
+  captured = false,
+  whole,
+  canWhole,
   context,
   connections,
   onClose,
   onApply,
+  onWhole,
 }: {
   projectId: string;
   selected: string;
+  image?: string;
+  captured?: boolean;
+  whole: boolean;
+  canWhole: boolean;
   context: string;
   connections: { provider: string; connected: boolean }[];
   onClose: () => void;
   onApply: (text: string) => void;
+  onWhole: (note: string) => void | Promise<void>;
 }) {
   const [instruction, setInstruction] = useState("");
   const [ai, setAi] = useState<{ provider: string; model: string } | null>(null);
@@ -388,12 +492,22 @@ function AiEditModal({
     setBusy(true);
     setErr("");
     setResult(null);
+    if (whole) {
+      // 고른 곳 없이 말로만: 글 전체에서 AI가 찾아 고침 (화면을 닫아도 계속)
+      try {
+        await onWhole(instruction.trim());
+      } catch (e) {
+        setErr((e as Error).message);
+      }
+      setBusy(false);
+      return;
+    }
     const res = await fetch("/api/ai/edit", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId, selected, instruction, context, ...(ai ?? {}) }),
+      body: JSON.stringify({ projectId, selected, instruction, context, ...(image ? { image } : {}), ...(ai ?? {}) }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) return setErr(data.error ?? "실패");
     setResult(data);
@@ -401,7 +515,7 @@ function AiEditModal({
 
   return (
     <Modal
-      title="선택 부분 AI 수정"
+      title={whole ? "✨ AI 수정 · 말로 요청" : captured ? "✨ AI 수정 · 캡처한 부분" : "✨ AI 수정 · 선택한 부분"}
       onClose={onClose}
       footer={
         <>
@@ -412,31 +526,45 @@ function AiEditModal({
               <button className="btn btn-primary" onClick={() => onApply(result.text)}>이 수정 적용</button>
             </>
           ) : (
-            <button className="btn btn-primary" onClick={run} disabled={busy || !instruction.trim()}>
-              {busy ? <span className="spinner" /> : "AI 수정 실행"}
+            <button className="btn btn-primary" onClick={run} disabled={busy || !instruction.trim() || (whole && !canWhole)}>
+              {busy ? <span className="spinner" /> : whole ? "글 전체에 반영 요청" : "AI 수정 실행"}
             </button>
           )}
         </>
       }
     >
       <div className="stack">
-        <div>
-          <div className="label">선택한 부분</div>
-          <div className="card card-pad small" style={{ background: "var(--panel-2)", maxHeight: 140, overflowY: "auto", whiteSpace: "pre-wrap" }}>{selected}</div>
-        </div>
-        <div className="field">
-          <label className="label">수정 지시</label>
-          <textarea className="textarea" value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="어떻게 고칠지 적어주세요" />
-          <div className="row" style={{ marginTop: 6 }}>
-            {presets.map((p) => (
-              <button key={p} type="button" className="btn btn-sm" onClick={() => setInstruction(p)}>{p}</button>
-            ))}
+        {whole ? (
+          <div className="notice small">
+            고른 글이 없어서 <b>말로 요청</b>하는 방식이에요. 무엇을 어디서 어떻게 바꿀지 적으면 AI가 글 전체에서 그 부분을 찾아 고쳐요. (예: &quot;부모급여 표에 2026년 11월 기준이라고 작게 적어줘&quot;)
+            <div className="tiny muted" style={{ marginTop: 4 }}>정확한 곳을 짚으려면 ✂️ 캡처로 그 부분을 드래그하거나, 글을 드래그해 고른 뒤 ✨ AI 수정을 누르세요.</div>
           </div>
-        </div>
+        ) : (
+          <div>
+            <div className="label">{captured ? "캡처한 부분 (이 영역의 문단 전체를 고쳐요)" : "선택한 부분"}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {image && <img src={image} alt="캡처한 영역" style={{ maxWidth: "100%", maxHeight: 220, border: "1px solid var(--line)", borderRadius: 8, marginBottom: 6 }} />}
+            <div className="card card-pad small" style={{ background: "var(--panel-2)", maxHeight: 140, overflowY: "auto", whiteSpace: "pre-wrap" }}>{selected}</div>
+          </div>
+        )}
         <div className="field">
-          <span className="label">사용할 AI</span>
-          <AiPicker value={ai} onChange={setAi} connections={connections} />
+          <label className="label">{whole ? "수정 요청 (말로)" : "수정 지시"}</label>
+          <textarea className="textarea" value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder={whole ? "예: 육아지원금 표 아래에 '2026년 11월 기준' 메모를 달고, 월별 금액 합계를 한 줄로 정리해줘" : "어떻게 고칠지 적어주세요"} autoFocus />
+          {!whole && (
+            <div className="row" style={{ marginTop: 6 }}>
+              {presets.map((p) => (
+                <button key={p} type="button" className="btn btn-sm" onClick={() => setInstruction(p)}>{p}</button>
+              ))}
+            </div>
+          )}
         </div>
+        {!whole && (
+          <div className="field">
+            <span className="label">사용할 AI</span>
+            <AiPicker value={ai} onChange={setAi} connections={connections} />
+          </div>
+        )}
+        {whole && !canWhole && <div className="notice notice-warn small">이 화면에서는 글 전체 수정 요청을 쓸 수 없어요. 글을 고르거나 캡처해 주세요.</div>}
         {err && <div className="notice notice-bad small">{err}</div>}
         {result && (
           <div>

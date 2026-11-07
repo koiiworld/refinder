@@ -21,6 +21,7 @@
     "@tiptap/starter-kit": "^3.32.2",
     "diff": "^9.0.0",
     "ffmpeg-static": "^5.2.0",
+    "html-to-image": "1.11.11",
     "next": "^16.4.4",
     "pg": "^8.23.1",
     "react": "^19.3.1",

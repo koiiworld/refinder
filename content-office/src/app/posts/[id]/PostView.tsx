@@ -155,6 +155,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                 lockedReason="AI가 본문을 쓰거나 고치는 중이라 편집이 잠깁니다. 끝나면 자동으로 풀립니다."
                 connections={b.connections}
                 onSaved={() => void refresh()}
+                onWholeRequest={(note) => act({ action: "edit_request", note }, "말로 요청한 수정사항을 AI가 글 전체에서 찾아 반영하고 있습니다.")}
               />
               <VersionHistory projectId={p.id} revision={doc?.revision ?? 0} disabled={running} onRestored={() => void refresh()} />
               <Hashtags tags={extras.hashtags} disabled={running} onSave={(hashtags) => act({ action: "hashtags", hashtags }, "해시태그를 저장했습니다.")} />

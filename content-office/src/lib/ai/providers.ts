@@ -135,7 +135,8 @@ async function callOpenAI(key: string, r: AiRequest): Promise<AiResponse> {
           : r.prompt,
       },
     ],
-    max_completion_tokens: r.maxTokens ?? 8000,
+    // 생각하는 모델(gpt-5·o 시리즈)은 생각에 쓴 토큰도 이 한도에 들어가서, 한도가 작으면 답이 비어 버림 → 넉넉히
+    max_completion_tokens: /^(gpt-5|o\d)/i.test(r.model) ? Math.max(16000, (r.maxTokens ?? 8000) * 3) : r.maxTokens ?? 8000,
   };
   if (r.json) body.response_format = { type: "json_object" };
   const data = (await postJson(`${base("openai")}/v1/chat/completions`, { authorization: `Bearer ${key}` }, body)) as {

@@ -212,7 +212,7 @@ export function reviewTemplate(blog: Blog, html: string): Omit<ReviewResult, "pr
 
 // ───────────────────────── 부분 수정 ─────────────────────────
 
-export function editPrompt(blog: Blog, selected: string, instruction: string, context: string) {
+export function editPrompt(blog: Blog, selected: string, instruction: string, context: string, hasImage = false) {
   const system = `당신은 블로그 문장 교정 전문가입니다. 선택된 부분만 수정해 결과 텍스트만 출력합니다 (설명·따옴표·마크다운 없이).${BASE_RULES}`;
   const prompt = `${blogContext(blog)}
 
@@ -225,8 +225,8 @@ ${selected}
 
 [수정 지시]
 ${instruction}
-
-수정된 부분만 출력하세요.`;
+${hasImage ? "\n[첨부한 캡처] 사용자가 고칠 곳을 화면에서 드래그해 잘라낸 캡처예요. 위 '수정할 부분'이 그 캡처 영역의 글이에요. 표·목록 모양도 참고하세요.\n" : ""}
+수정된 부분만 출력하세요. 문단이 여러 개면 문단마다 줄을 바꾸세요.`;
   return { system, prompt };
 }
 
