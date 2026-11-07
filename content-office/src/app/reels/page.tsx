@@ -1,4 +1,4 @@
-import Link from "next/link";
+import TrashableList from "@/components/TrashableList";
 import { listReels } from "@/lib/reels";
 import { listVideos } from "@/lib/videos";
 import { fmtDate } from "@/components/ui";
@@ -22,22 +22,16 @@ export default async function ReelsPage({ searchParams }: { searchParams: Promis
       </div>
       <div className="stack" style={{ gap: 16 }}>
         <NewReel videos={ready} defaultId={sp.from} />
-        <section className="card">
-          <div className="card-head"><h2 style={{ fontSize: 15 }}>만든 릴스 ({reels.length})</h2></div>
-          <div className="list">
-            {!reels.length && <div className="list-item small muted">아직 없어요.</div>}
-            {reels.map((r) => (
-              <Link key={r.id} href={`/reels/${r.id}`} className="list-item" style={{ gap: 10, flexWrap: "nowrap" }}>
-                {r.base_video_id && r.thumb ? <img src={`/api/videos/${r.base_video_id}/file?kind=thumb`} alt="" style={{ width: 40, height: 64, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} /> : <span style={{ width: 40 }}>🎞</span>}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="strong ellipsis">{r.title || "릴스"}</div>
-                  <div className="tiny muted">{r.doc?.scenes?.length ?? 0}장면 · 자막 {r.doc?.texts?.length ?? 0}개 · {fmtDate(r.updated_at)}{r.message ? ` · ${r.message}` : ""}</div>
-                </div>
-                <span className={`badge ${r.status === "error" ? "badge-bad" : r.output_video_id ? "badge-ok" : ""}`}>{r.status === "ready" && r.output_video_id ? "내보냄" : STATUS[r.status] ?? r.status}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
+        <TrashableList
+          title="만든 릴스"
+          items={reels.map((r) => ({
+            id: r.id, href: `/reels/${r.id}`, title: r.title || "릴스",
+            thumb: r.base_video_id && r.thumb ? `/api/videos/${r.base_video_id}/file?kind=thumb` : null,
+            sub: `${r.doc?.scenes?.length ?? 0}장면 · 자막 ${r.doc?.texts?.length ?? 0}개 · ${fmtDate(r.updated_at)}${r.message ? ` · ${r.message}` : ""}`,
+            badge: r.status === "ready" && r.output_video_id ? "내보냄" : STATUS[r.status] ?? r.status,
+            badgeClass: r.status === "error" ? "badge-bad" : r.output_video_id ? "badge-ok" : "",
+          }))}
+        />
       </div>
     </div>
   );

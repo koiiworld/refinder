@@ -260,7 +260,8 @@ export async function addUpload(id: string, dataUrl: string) {
 }
 
 export async function deleteCarousel(id: string) {
-  await q("DELETE FROM carousels WHERE id=$1", [id]);
+  // 바로 지우지 않고 휴지통으로 (30일 뒤 자동 완전 삭제)
+  await (await import("./trash-snap")).snapToTrash("carousel", id);
 }
 
 /** 알고리즘 타기 쉬운 카드뉴스 주제 추천 (분야 자유 입력) */

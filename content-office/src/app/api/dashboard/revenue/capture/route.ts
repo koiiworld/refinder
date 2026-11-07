@@ -22,13 +22,15 @@ export async function POST(req: Request) {
 - usd: 달러로 표시된 경우 그 금액, 아니면 null
 - period: 그 숫자의 기간 (예: "2026-11-01~2026-11-06", 모르면 빈 문자열)
 - metric: 화면에 보이는 노출·클릭 수 등을 짧게 (예: "노출 12,300 · 클릭 210"), 없으면 빈 문자열
+- days: 날짜별 수익 표가 보이면 [{"date":"YYYY-MM-DD","krw":숫자}] 로 보이는 날짜 전부 (연도가 안 보이면 ${(month || new Date().toISOString().slice(0, 7)).slice(0, 4)}년), 표가 없으면 []
 - found: 수익 숫자를 찾았으면 true, 못 찾았으면 false
-형식: {"krw": 0, "usd": null, "period": "", "metric": "", "found": true}`;
+형식: {"krw": 0, "usd": null, "period": "", "metric": "", "days": [], "found": true}`;
     try {
       const res = await runStep({ step: "keywords", purpose: "revenue-capture", blog: null, system, prompt, images, json: true, maxTokens: 800 });
-      const raw = extractJson<{ krw?: number; usd?: number | null; period?: string; metric?: string; found?: boolean }>(res.text);
+      const raw = extractJson<{ krw?: number; usd?: number | null; period?: string; metric?: string; days?: { date?: string; krw?: number }[]; found?: boolean }>(res.text);
+      const days = (Array.isArray(raw.days) ? raw.days : []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d?.date))).map((d) => ({ date: String(d.date), krw: Math.max(0, Math.round(Number(d.krw) || 0)) })).slice(0, 62);
       if (raw.found === false) return fail("캡처에서 수익 숫자를 찾지 못했어요. 수익 금액이 보이는 화면으로 다시 올려 주세요.", 422);
-      return ok({ krw: Math.max(0, Math.round(Number(raw.krw) || 0)), usd: raw.usd == null ? null : Number(raw.usd) || null, period: String(raw.period ?? ""), metric: String(raw.metric ?? "").slice(0, 120), provider: res.provider, model: res.model });
+      return ok({ krw: Math.max(0, Math.round(Number(raw.krw) || 0)), usd: raw.usd == null ? null : Number(raw.usd) || null, period: String(raw.period ?? ""), metric: String(raw.metric ?? "").slice(0, 120), days, provider: res.provider, model: res.model });
     } catch (e) {
       if (e instanceof AiError) return fail(e.message, 502);
       throw e;

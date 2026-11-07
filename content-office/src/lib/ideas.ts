@@ -65,5 +65,6 @@ export async function updateIdea(id: string, input: { memo?: string; category?: 
 }
 
 export async function deleteIdea(id: string) {
-  await q("DELETE FROM ideas_notes WHERE id=$1", [id]);
+  // 바로 지우지 않고 휴지통으로 (30일 뒤 자동 완전 삭제)
+  await (await import("./trash-snap")).snapToTrash("idea", id);
 }

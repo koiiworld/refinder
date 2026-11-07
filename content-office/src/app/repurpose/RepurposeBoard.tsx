@@ -161,7 +161,7 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
                   <span className="small strong ellipsis" style={{ display: "block" }}>{h.title}</span>
                   <span className="tiny muted">{channels.filter((c) => h.result[c.id]).map((c) => c.label.replace(/^\S+\s/, "")).join(" · ")} · {fmtDate(h.updated_at)}</span>
                 </button>
-                <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm("지울까요?")) { await api(`/api/repurpose/${h.id}`, "DELETE"); setHistory(history.filter((x) => x.id !== h.id)); if (docId === h.id) { setDocId(null); setResult({}); } } }}>🗑</button>
+                <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm("휴지통으로 옮길까요? (30일 안에 되살릴 수 있어요)")) { await api(`/api/repurpose/${h.id}`, "DELETE"); setHistory(history.filter((x) => x.id !== h.id)); if (docId === h.id) { setDocId(null); setResult({}); } } }}>🗑</button>
               </div>
             ))}
           </div>

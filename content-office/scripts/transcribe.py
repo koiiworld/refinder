@@ -14,8 +14,14 @@ from faster_whisper import WhisperModel
 
 def load_audio(src: str) -> np.ndarray:
     ff = os.environ.get("FFMPEG", "ffmpeg")
-    raw = subprocess.run([ff, "-v", "error", "-i", src, "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "-"], check=True, capture_output=True).stdout
-    return np.frombuffer(raw, dtype=np.float32).copy()
+    r = subprocess.run([ff, "-v", "error", "-i", src, "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "-"], capture_output=True)
+    if r.returncode != 0:
+        err = r.stderr.decode("utf-8", "ignore")
+        # 소리 트랙이 없는 영상(화면 녹화 등) → 말소리 없음으로 처리
+        if "does not contain any stream" in err or "matches no streams" in err or "Output file #0 does not contain" in err or not r.stdout:
+            return np.zeros(0, dtype=np.float32)
+        raise RuntimeError(err.strip().splitlines()[-1] if err.strip() else "ffmpeg 실패")
+    return np.frombuffer(r.stdout, dtype=np.float32).copy()
 
 
 def main():

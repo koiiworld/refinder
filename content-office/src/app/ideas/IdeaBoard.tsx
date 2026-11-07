@@ -134,7 +134,7 @@ export default function IdeaBoard({ initial, blogs, openId }: { initial: Idea[];
                 <div className="row" style={{ gap: 2, flexShrink: 0 }}>
                   <button className="btn btn-sm btn-ghost" onClick={() => router.push(todoHref(i))} title="할 일 만들기" aria-label="할 일 만들기">✅</button>
                   <button className="btn btn-sm btn-ghost" onClick={() => router.push(planHref(i))} title="글 기획으로 보내기" aria-label="글 기획으로 보내기">📝</button>
-                  <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm("이 아이디어를 지울까요?")) { await api(`/api/ideas/${i.id}`, "DELETE"); await reload(); } }} aria-label="삭제">🗑</button>
+                  <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm("이 아이디어를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있어요)")) { await api(`/api/ideas/${i.id}`, "DELETE"); await reload(); } }} aria-label="삭제">🗑</button>
                 </div>
               </div>
             ),

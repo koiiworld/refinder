@@ -128,7 +128,7 @@ export default function TodoBoard({ tab, today, initial, blogs, posts, refs, tel
     await reload();
   }
   async function remove(t: Todo) {
-    if (!confirm(`'${t.title}'을(를) 지울까요?${t.notify ? " (알림 예약도 취소돼요)" : ""}`)) return;
+    if (!confirm(`'${t.title}'을(를) 휴지통으로 옮길까요?${t.notify ? " (알림 예약도 취소돼요)" : ""}`)) return;
     await api(`/api/todos/${t.id}`, "DELETE");
     await reload();
   }

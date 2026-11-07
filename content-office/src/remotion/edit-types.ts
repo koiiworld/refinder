@@ -33,9 +33,10 @@ export type Clip = {
   zoom: { from: number; to: number; x: number; y: number } | null; // 키프레임: 시작→끝 배율 (켄번스)
   fit: "cover" | "contain";
   reversed?: boolean;
+  alpha?: boolean; // 배경 제거된 투명 영상(webm)
 };
 /** 오버레이: 메인 위에 겹치는 영상·사진 (화면 속 화면) */
-export type Overlay = { id: string; src: string; kind: "video" | "image"; start: number; dur: number; in: number; x: number; y: number; w: number; opacity: number; volume: number; radius: number };
+export type Overlay = { id: string; src: string; kind: "video" | "image"; start: number; dur: number; in: number; x: number; y: number; w: number; opacity: number; volume: number; radius: number; alpha?: boolean };
 /** 오디오: 영상에서 소리만 · 올린 음악 · 음성 */
 export type AudioClip = { id: string; src: string; start: number; in: number; dur: number; volume: number; label: string };
 

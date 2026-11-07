@@ -85,8 +85,8 @@ export default function VideoEditor({ initial, edits }: { initial: Video; edits:
     }
   }
   async function remove() {
-    if (!confirm("이 영상을 지울까요? (저장소에서도 지워져요)")) return;
-    await api(`/api/videos/${v.id}`, "DELETE");
+    if (!confirm("이 영상을 휴지통으로 옮길까요? (휴지통에서 되살릴 수 있어요)")) return;
+    await api("/api/trash", "POST", { action: "trash", ids: [v.id] });
     router.push("/videos");
   }
 
@@ -95,7 +95,7 @@ export default function VideoEditor({ initial, edits }: { initial: Video; edits:
       <section className="card card-pad stack" style={{ gap: 8 }}>
         {v.status === "error" ? <div className="notice notice-bad small">{v.message}</div> : <div className="small"><span className="spinner" /> {v.message || "대기 중"} (이 화면을 닫아도 계속 진행돼요)</div>}
         <div className="tiny muted">{v.source_url}</div>
-        <div className="row"><button className="btn btn-ghost" onClick={remove}>🗑 지우기</button></div>
+        <div className="row"><button className="btn btn-ghost" onClick={remove}>🗑 휴지통으로</button></div>
       </section>
     );
   }

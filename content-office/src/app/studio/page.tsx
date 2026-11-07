@@ -1,4 +1,4 @@
-import Link from "next/link";
+import TrashableList from "@/components/TrashableList";
 import { listStudio, STUDIO_STYLES } from "@/lib/studio";
 import { IMAGE_MODELS } from "@/lib/image-models";
 import { fmtDate } from "@/components/ui";
@@ -24,18 +24,16 @@ export default async function Studio({ searchParams }: { searchParams: Promise<{
       </div>
       <NewSeries styles={STUDIO_STYLES.map((s) => ({ id: s.id, label: s.label }))} list={series.map((x) => ({ id: x.id, title: x.title, count: x.episodes.length, made: x.episodes.filter((e) => e.studioId).length }))} />
       <NewStudio defaultPrompt={sp.prompt ?? ""} styles={STUDIO_STYLES.map((s) => ({ id: s.id, label: s.label }))} imageModels={IMAGE_MODELS.filter((m) => m.provider !== "higgsfield").map((m) => ({ id: m.id, label: m.label, note: m.note }))} />
-      <section className="card">
-        <div className="card-head"><h2 style={{ fontSize: 15 }}>만든 영상 프로젝트 ({list.length})</h2></div>
-        <div className="card-pad stack" style={{ gap: 6 }}>
-          {!list.length && <p className="small muted" style={{ margin: 0 }}>아직 없어요.</p>}
-          {list.map((s) => (
-            <Link key={s.id} href={`/studio/${s.id}`} className="row between card card-pad" style={{ padding: 10, flexWrap: "nowrap" }}>
-              <span className="small ellipsis" style={{ flex: 1 }}><b>{s.title}</b> <span className="tiny muted">· 장면 {s.scenes.length}개 · {STATUS[s.status] ?? s.status}</span></span>
-              <span className="tiny muted">{fmtDate(s.updated_at)}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <TrashableList
+        title="만든 영상 프로젝트"
+        items={list.map((s) => ({
+          id: s.id, href: `/studio/${s.id}`, title: s.title,
+          thumb: s.character?.image?.url ?? null,
+          sub: `장면 ${s.scenes.length}개 · ${STATUS[s.status] ?? s.status} · ${fmtDate(s.updated_at)}`,
+          badge: s.status === "done" ? "완성" : s.status === "error" ? "오류" : undefined,
+          badgeClass: s.status === "done" ? "badge-ok" : "badge-bad",
+        }))}
+      />
     </div>
   );
 }

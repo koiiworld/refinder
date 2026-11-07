@@ -180,7 +180,7 @@ test("대시보드: 메인 화면 · 실제 기록 집계 · 수익 직접 입�
   assert.equal(home.status, 200);
   for (const t of ["대시보드", "이번 달 발행 글", "1차 검수 통과율", "최근 5주 완성 글 추이", "블로그별 방문자 비교", "운영 상태"]) assert.ok(html.includes(t), t);
   assert.ok(html.includes("아직 수익이 없습니다"), "수익은 지어내지 않음");
-  assert.ok(html.includes("애드포스트</b> 수익 화면 캡처"), "애드포스트 캡처 칸");
+  assert.ok(html.includes("애드포스트 수익 화면 캡처") && html.includes("애드포스트 하루 수익"), "애드포스트 캡처 칸 + 하루 입력");
   assert.equal((await fetch(BASE + "/new")).status, 200, "글 만들기는 /new");
   const now = new Date(Date.now() + 9 * 3600 * 1000);
   const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;

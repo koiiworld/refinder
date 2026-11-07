@@ -126,7 +126,8 @@ export async function updateRoutine(id: string, input: Partial<Routine>) {
 }
 
 export async function deleteRoutine(id: string) {
-  await q("DELETE FROM routines WHERE id=$1", [id]);
+  // 바로 지우지 않고 휴지통으로 (30일 뒤 자동 완전 삭제)
+  await (await import("./trash-snap")).snapToTrash("routine", id);
 }
 
 /** 이 날짜에 해당하는 루틴인지 (매월 지정일이 없는 달은 건너뜀) */

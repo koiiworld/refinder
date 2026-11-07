@@ -25,7 +25,7 @@ export default async function Todos({ searchParams }: { searchParams: Promise<{ 
     ),
     q<{ id: string; title: string }>("SELECT id, title FROM carousels ORDER BY updated_at DESC LIMIT 60"),
     q<{ id: string; title: string }>(
-      "SELECT id, '🎬 ' || title AS title FROM (SELECT id, title, updated_at FROM studio_projects UNION ALL SELECT id, title, updated_at FROM videos WHERE kind <> 'edit') x ORDER BY updated_at DESC LIMIT 60",
+      "SELECT id, '🎬 ' || title AS title FROM (SELECT id, title, updated_at FROM studio_projects UNION ALL SELECT id, title, updated_at FROM videos WHERE kind <> 'edit' AND deleted_at IS NULL) x ORDER BY updated_at DESC LIMIT 60",
     ),
   ]);
   // 할 일 '오늘'에 당일 루틴도 함께 (루틴 관리와 같은 실행 항목)

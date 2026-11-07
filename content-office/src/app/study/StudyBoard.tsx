@@ -103,7 +103,7 @@ function StudyDetail({ s, categories, onChange, onDelete }: { s: StudyReel; cate
           </select>
           {s.video_id && <a className="btn btn-sm" href={`/reels?from=${s.video_id}`}>✂️ 편집기로</a>}
           {s.status === "done" && <a className="btn btn-sm" href={`/studio?prompt=${encodeURIComponent(studioPrompt.slice(0, 1500))}`}>🎬 이 구조로 기획</a>}
-          <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm("지울까요?")) { await api(`/api/study/${s.id}`, "DELETE"); onDelete(); } }}>🗑</button>
+          <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm("휴지통으로 옮길까요? (30일 안에 되살릴 수 있어요)")) { await api(`/api/study/${s.id}`, "DELETE"); onDelete(); } }}>🗑</button>
         </div>
       </div>
       {s.status !== "done" && <div className="notice small">{s.status === "error" ? `⚠️ ${s.message}` : s.message || "기다리는 중"}</div>}

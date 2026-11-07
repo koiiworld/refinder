@@ -23,7 +23,7 @@ function ClipLayer({ c, src, mute }: { c: Clip; src: string; mute: boolean }) {
       {c.kind === "image" ? (
         <Img src={src} style={media} />
       ) : (
-        <OffthreadVideo src={src} startFrom={Math.round(c.in * fps)} playbackRate={c.speed} volume={mute ? 0 : c.volume} muted={mute || c.volume === 0} style={media} />
+        <OffthreadVideo src={src} startFrom={Math.round(c.in * fps)} playbackRate={c.speed} volume={mute ? 0 : c.volume} muted={mute || c.volume === 0} transparent={!!c.alpha} style={media} />
       )}
     </AbsoluteFill>
   );
@@ -55,7 +55,7 @@ export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, scale = 1 }) => 
         return (
           <Sequence key={o.id} from={Math.round(o.start * fps)} durationInFrames={Math.max(1, Math.round(o.dur * fps))} name="오버레이">
             <div style={{ position: "absolute", left: `${o.x}%`, top: `${o.y}%`, width: `${o.w}%`, transform: "translate(-50%, -50%)", opacity: o.opacity, borderRadius: (o.radius / 100) * W * 0.1, overflow: "hidden" }}>
-              {o.kind === "image" ? <Img src={src} style={{ width: "100%", display: "block" }} /> : <OffthreadVideo src={src} startFrom={Math.round(o.in * fps)} volume={o.volume} muted={o.volume === 0} style={{ width: "100%", display: "block" }} />}
+              {o.kind === "image" ? <Img src={src} style={{ width: "100%", display: "block" }} /> : <OffthreadVideo src={src} startFrom={Math.round(o.in * fps)} volume={o.volume} muted={o.volume === 0} transparent={!!o.alpha} style={{ width: "100%", display: "block" }} />}
             </div>
           </Sequence>
         );

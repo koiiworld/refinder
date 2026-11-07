@@ -689,7 +689,9 @@ test("🎬 영상공장: 링크 → 받기 → AI가 화면 자막 위치 찾아
   assert.ok((await call("/api/videos")).data.videos.some((x) => x.id === ev.id));
   // 지우기 · 잘못된 링크
   assert.equal((await call(`/api/videos/${ev.id}`, "DELETE")).status, 200);
-  assert.equal((await fetch(`${BASE}/api/videos/${ev.id}/file`)).status, 404);
+  assert.ok(!(await call("/api/videos")).data.videos.some((x) => x.id === ev.id), "지우면 휴지통으로 (목록에서 빠짐)");
+  assert.equal((await call("/api/trash", "POST", { action: "purge", ids: [ev.id] })).data.count, 1);
+  assert.equal((await fetch(`${BASE}/api/videos/${ev.id}/file`)).status, 404, "휴지통에서 완전 삭제하면 파일도 지워짐");
   assert.equal((await call("/api/videos", "POST", { url: "영상" })).status, 400);
   const bad = await call("/api/videos", "POST", { url: "http://localhost:4110/no-such-video" });
   const bv = await waitVideo(bad.data.id, "실패");
@@ -1626,4 +1628,90 @@ test("🎞 영상 편집(캡컷형): 영상으로 시작 → 분할·배속·필
   const list = (await (await fetch(`${BASE}/edit`)).text()).replace(/<!-- -->/g, "");
   assert.ok(list.includes("시험 편집") && list.includes("내보냄"), "목록");
   void fs;
+});
+
+test("💰 애드포스트 하루 수익 직접 입력 · 캡처는 못 넣은 날 한꺼번에 (일별 표 / 기간 합계)", async () => {
+  const rev = async () => (await call("/api/dashboard/revenue")).data["2026-10"]?.adpost;
+  // 예전 방식 합계(메모에 기간) → 그다음 날 직접 입력은 더해짐
+  await call("/api/dashboard/revenue", "PUT", { month: "2026-10", data: { adpost: { krw: 4678, metric: "기간 2026-10-01~2026-10-05" } } });
+  let r = await call("/api/dashboard/revenue", "POST", { channel: "adpost", days: [{ date: "2026-10-06", krw: 900 }] });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal((await rev()).krw, 4678 + 900);
+  // 같은 날 다시 넣으면 바뀜, 기간 안 날짜는 합계에 이미 포함
+  await call("/api/dashboard/revenue", "POST", { channel: "adpost", days: [{ date: "2026-10-06", krw: 1000 }, { date: "2026-10-03", krw: 777 }] });
+  assert.equal((await rev()).krw, 4678 + 1000);
+  // 지우기
+  await call("/api/dashboard/revenue", "POST", { channel: "adpost", days: [{ date: "2026-10-06", krw: null }] });
+  assert.equal((await rev()).krw, 4678);
+  // 캡처 기간 합계로 바꿈 → 그 기간 일별 기록은 지워짐
+  await call("/api/dashboard/revenue", "POST", { channel: "adpost", base: { krw: 8000, from: "2026-10-01", to: "2026-10-07" }, days: [{ date: "2026-10-08", krw: 500 }] });
+  let e = await rev();
+  assert.equal(e.krw, 8500);
+  assert.equal(e.days["2026-10-03"], undefined);
+  assert.match(e.metric, /캡처 10-01~10-07 · 일별 1일/);
+  // 수정 화면에서 합계를 그대로 두고 저장하면 일별 기록 유지
+  await call("/api/dashboard/revenue", "PUT", { month: "2026-10", data: { adpost: { krw: 8500, metric: e.metric } } });
+  assert.equal((await rev()).days["2026-10-08"], 500);
+  // 캡처가 일별 표를 돌려줌
+  const cap = await call("/api/dashboard/revenue/capture", "POST", { channel: "adpost", month: "2026-11", images: [PIXEL_URL] });
+  assert.deepEqual(cap.data.days, [{ date: "2026-11-01", krw: 2000 }, { date: "2026-11-02", krw: 3000 }]);
+  assert.equal((await call("/api/dashboard/revenue", "POST", { channel: "adpost", days: [] })).status, 400);
+  assert.equal((await call("/api/dashboard/revenue", "POST", { channel: "adpost", base: { krw: 1, from: "2026-10-30", to: "2026-11-02" } })).status, 400, "달을 넘는 기간");
+  await call("/api/dashboard/revenue", "PUT", { month: "2026-10", data: {} });
+  const dash = await (await fetch(`${BASE}/`)).text();
+  assert.ok(dash.includes("애드포스트 하루 수익"), "대시보드 입력칸");
+});
+
+test("🗑 릴스·영상 편집·영상공장도 체크해서 휴지통으로 → 되살리기 · 완전 삭제", async () => {
+  const vid = (await call("/api/videos")).data.videos.find((v) => v.status === "ready" && v.kind === "upload").id;
+  const ed = (await call("/api/edit", "POST", { videoIds: [vid], title: "휴지통 시험 편집" })).data.id;
+  const fd = new FormData();
+  const fs = await import("node:fs");
+  const vids = (await call("/api/videos")).data.videos;
+  const extra = vids.find((v) => v.status === "ready" && v.id !== vid) ?? null;
+  void fd; void fs;
+  const ids = [ed, ...(extra ? [extra.id] : [])];
+  const reel = (await call("/api/reels")).data?.[0]?.id ?? (await call("/api/reels")).data?.reels?.[0]?.id;
+  if (reel) ids.push(reel);
+  const t = await call("/api/trash", "POST", { action: "trash", ids });
+  assert.equal(t.data.count, ids.length);
+  assert.ok(!(await call("/api/edit")).data.some((x) => x.id === ed), "편집 목록에서 숨김");
+  if (extra) assert.ok(!(await call("/api/videos")).data.videos.some((v) => v.id === extra.id), "영상공장 목록에서 숨김");
+  const trashPage = (await (await fetch(`${BASE}/trash`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(trashPage.includes("휴지통 시험 편집") && trashPage.includes("🎞 영상 편집"), "휴지통에 보임");
+  const editPage = (await (await fetch(`${BASE}/edit`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(!editPage.includes("휴지통 시험 편집") && editPage.includes("편집 프로젝트"));
+  assert.equal((await call("/api/trash", "POST", { action: "restore", ids })).data.count, ids.length);
+  assert.ok((await call("/api/edit")).data.some((x) => x.id === ed), "되살림");
+  await call("/api/trash", "POST", { action: "trash", ids: [ed] });
+  assert.equal((await call("/api/trash", "POST", { action: "purge", ids: [ed] })).data.count, 1);
+  assert.equal((await call(`/api/edit/${ed}`)).status, 404, "완전 삭제");
+  const vf = (await (await fetch(`${BASE}/videos`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(vf.includes("휴지통으로"), "영상공장 휴지통 버튼");
+});
+
+test("🗑 나머지도 지우면 휴지통으로 (아이디어·할 일 등) → 그대로 되살리기 · 완전 삭제 · 30일 안내", async () => {
+  const idea = (await call("/api/ideas", "POST", { memo: "휴지통 시험 아이디어", category: "blog" })).data;
+  assert.equal((await call(`/api/ideas/${idea.id}`, "DELETE")).status, 200);
+  assert.ok(!(await call("/api/ideas")).data.some((x) => x.id === idea.id), "목록에서 빠짐");
+  let page = (await (await fetch(`${BASE}/trash`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(page.includes("휴지통 시험 아이디어") && page.includes("💡 아이디어") && page.includes("30일 뒤 자동 완전 삭제"), "휴지통에 보임");
+  const tr = page.match(/tr_[a-z0-9]+/g) ?? [];
+  assert.ok(tr.length, "휴지통 항목 아이디");
+  // 체크해서 휴지통으로 (아이디로 바로)
+  const idea2 = (await call("/api/ideas", "POST", { memo: "두 번째 시험 아이디어", category: "blog" })).data;
+  assert.equal((await call("/api/trash", "POST", { action: "trash", ids: [idea2.id] })).data.count, 1);
+  page = (await (await fetch(`${BASE}/trash`)).text()).replace(/<!-- -->/g, "");
+  const ids = Array.from(new Set(page.match(/tr_[a-z0-9]+/g) ?? []));
+  assert.ok(ids.length >= 2);
+  assert.equal((await call("/api/trash", "POST", { action: "restore", ids })).data.count, ids.length);
+  const back = (await call("/api/ideas")).data;
+  assert.ok(back.some((x) => x.id === idea.id && x.memo === "휴지통 시험 아이디어"), "그대로 되살림");
+  await call("/api/trash", "POST", { action: "trash", ids: [idea.id, idea2.id] });
+  page = (await (await fetch(`${BASE}/trash`)).text()).replace(/<!-- -->/g, "");
+  const ids2 = Array.from(new Set(page.match(/tr_[a-z0-9]+/g) ?? []));
+  assert.equal((await call("/api/trash", "POST", { action: "purge", ids: ids2 })).data.count, ids2.length);
+  assert.ok(!(await call("/api/ideas")).data.some((x) => x.id === idea.id), "완전 삭제");
+  const studio = (await (await fetch(`${BASE}/studio`)).text());
+  assert.ok(studio.includes("만든 영상 프로젝트"));
 });

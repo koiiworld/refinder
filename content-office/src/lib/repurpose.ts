@@ -50,7 +50,8 @@ export async function getRepurposeDoc(id: string) {
   return q1<RepurposeDoc>("SELECT * FROM repurpose_docs WHERE id=$1", [id]);
 }
 export async function deleteRepurpose(id: string) {
-  await q("DELETE FROM repurpose_docs WHERE id=$1", [id]);
+  // 바로 지우지 않고 휴지통으로 (30일 뒤 자동 완전 삭제)
+  await (await import("./trash-snap")).snapToTrash("repurpose", id);
 }
 
 /** 만들기: 새로 만들거나(id 없음) 같은 글에 채널을 더함(id 있음) */

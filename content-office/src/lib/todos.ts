@@ -138,7 +138,8 @@ export async function updateTodo(id: string, input: Input & { done?: boolean }) 
 
 export async function deleteTodo(id: string) {
   await cancelPending(id);
-  await q("DELETE FROM todos WHERE id=$1", [id]);
+  // 바로 지우지 않고 휴지통으로 (30일 뒤 자동 완전 삭제)
+  await (await import("./trash-snap")).snapToTrash("todo", id);
 }
 
 async function cancelPending(todoId: string) {

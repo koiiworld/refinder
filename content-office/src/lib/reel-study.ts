@@ -65,7 +65,8 @@ export async function addStudies(urls: string[], mine: boolean) {
 }
 
 export async function deleteStudy(id: string) {
-  await q("DELETE FROM study_reels WHERE id=$1", [id]);
+  // 바로 지우지 않고 휴지통으로 (30일 뒤 자동 완전 삭제)
+  await (await import("./trash-snap")).snapToTrash("study", id);
 }
 export async function setCategory(id: string, category: string) {
   await setStudy(id, { category: category.trim().slice(0, 30) || "기타" });

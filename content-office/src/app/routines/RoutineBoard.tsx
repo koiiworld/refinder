@@ -106,7 +106,7 @@ export default function RoutineBoard({ initialRoutines, initialToday, blogs, cat
                 </div>
                 <button className="btn btn-sm btn-ghost" onClick={async () => { await api(`/api/routines/${r.id}`, "PUT", { paused: !r.paused }); await reload(); }}>{r.paused ? "▶ 다시 켜기" : "⏸ 일시정지"}</button>
                 <button className="btn btn-sm" onClick={() => { setErr(""); setEdit(r); }}>수정</button>
-                <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm(`'${r.name}' 루틴을 지울까요? 실행 기록도 함께 지워져요.`)) { await api(`/api/routines/${r.id}`, "DELETE"); await reload(); } }}>🗑</button>
+                <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm(`'${r.name}' 루틴을 휴지통으로 옮길까요? (30일 안에 실행 기록까지 되살릴 수 있어요)`)) { await api(`/api/routines/${r.id}`, "DELETE"); await reload(); } }}>🗑</button>
               </div>
             ))}
           </div>

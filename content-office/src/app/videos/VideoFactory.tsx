@@ -15,6 +15,23 @@ export default function VideoFactory({ initial, storage }: { initial: Video[]; s
   const [removeSubs, setRemoveSubs] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [sel, setSel] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const toggle = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  async function trash(ids: string[]) {
+    if (!ids.length) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await api<{ count: number }>("/api/trash", "POST", { action: "trash", ids });
+      setNote(`${r.count}개를 휴지통으로 옮겼어요. 휴지통에서 되살릴 수 있어요.`);
+      setSel([]);
+      setVideos((cur) => cur.filter((v) => !ids.includes(v.id)));
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setBusy(false);
+  }
   const pending = videos.some((v) => v.status === "queued" || v.status === "running");
 
   useEffect(() => {
@@ -72,11 +89,33 @@ export default function VideoFactory({ initial, storage }: { initial: Video[]; s
         {err && <div className="notice notice-bad small">{err}</div>}
       </section>
 
+      {videos.length > 0 && (
+        <div className="row between" style={{ gap: 8 }}>
+          <label className="small row" style={{ gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={sel.length === videos.length} onChange={() => setSel(sel.length === videos.length ? [] : videos.map((v) => v.id))} /> 모두 선택{sel.length ? ` (${sel.length})` : ""}
+          </label>
+          <button className="btn btn-sm btn-danger" disabled={busy || !sel.length} onClick={() => trash(sel)}>🗑 휴지통으로{sel.length ? ` (${sel.length})` : ""}</button>
+        </div>
+      )}
+      {note && <div className="notice small">{note} <Link href="/trash" style={{ color: "var(--accent)" }}>휴지통 보기</Link></div>}
       {videos.length ? (
         <div className="trend-grid">
           {videos.map((v) => (
-            <Link key={v.id} href={`/videos/${v.id}`} className="card trend-card">
-              <div className="trend-thumb" style={{ aspectRatio: "9 / 16", maxHeight: 360 }}>
+            <Link key={v.id} href={`/videos/${v.id}`} className="card trend-card" style={sel.includes(v.id) ? { outline: "2px solid var(--accent)" } : undefined}>
+              <div className="trend-thumb" style={{ aspectRatio: "9 / 16", maxHeight: 360, position: "relative" }}>
+                <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(v.id); }} style={{ position: "absolute", bottom: 6, left: 6, zIndex: 2, background: "rgba(255,255,255,.9)", borderRadius: 6, padding: "5px 6px", lineHeight: 0, cursor: "pointer" }}>
+                  <input type="checkbox" aria-label={`${v.title} 선택`} checked={sel.includes(v.id)} readOnly style={{ pointerEvents: "none" }} />
+                </span>
+                <button
+                  type="button"
+                  title="휴지통으로"
+                  aria-label={`${v.title} 휴지통으로`}
+                  disabled={busy}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); void trash([v.id]); }}
+                  style={{ position: "absolute", top: 6, right: 6, zIndex: 2, border: 0, background: "rgba(255,255,255,.9)", borderRadius: 6, padding: "3px 6px", cursor: "pointer" }}
+                >
+                  🗑
+                </button>
                 {v.thumb_path ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={`/api/videos/${v.id}/file?kind=thumb`} alt="" loading="lazy" />

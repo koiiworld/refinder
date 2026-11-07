@@ -61,6 +61,10 @@ export function ensureWorker() {
   const rt = () => void import("./routines").then((m) => m.routineTick()).catch(() => {});
   setTimeout(rt, 15_000).unref?.();
   setInterval(rt, 60_000).unref?.();
+  // 🗑 휴지통 30일 지난 것 자동 완전 삭제 (1시간마다)
+  const tp = () => void import("./trash").then((m) => m.purgeExpired()).catch(() => {});
+  setTimeout(tp, 90_000).unref?.();
+  setInterval(tp, 60 * 60 * 1000).unref?.();
   // 영상 받기 도구: 켜질 때 한 번, 이후 하루마다 확인(실제 업데이트는 일주일에 한 번)
   const yt = () => void import("./videos").then((v) => v.updateYtdlp()).catch(() => {});
   setTimeout(yt, 60_000).unref?.();

@@ -33,7 +33,7 @@ const sid = () => Math.random().toString(36).slice(2, 9);
 
 export async function listReels() {
   return q<ReelProject & { thumb: string | null }>(
-    `SELECT r.*, v.thumb_path AS thumb FROM reel_projects r LEFT JOIN videos v ON v.id=r.base_video_id ORDER BY r.updated_at DESC LIMIT 100`,
+    `SELECT r.*, v.thumb_path AS thumb FROM reel_projects r LEFT JOIN videos v ON v.id=r.base_video_id WHERE r.deleted_at IS NULL ORDER BY r.updated_at DESC LIMIT 100`,
   );
 }
 export async function getReel(id: string) {
@@ -59,7 +59,7 @@ export async function createReel(videoId: string) {
 }
 
 export async function deleteReel(id: string) {
-  await q("DELETE FROM reel_projects WHERE id=$1", [id]);
+  await q("UPDATE reel_projects SET deleted_at=NOW() WHERE id=$1 AND deleted_at IS NULL", [id]); // 휴지통으로
 }
 
 /** 화면에서 고친 편집 문서 저장 (모양만 확인) */

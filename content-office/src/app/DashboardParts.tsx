@@ -210,19 +210,54 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang, goa
     setSyncing(false);
   }
 
-  // 애드포스트 수익 캡처 → AI가 숫자를 읽어 입력칸에 채움 (저장은 직접)
+  // ✍️ 애드포스트 하루 수익 직접 입력 (기본: 어제 — 애드포스트는 다음 날 확정)
+  const kstDay = (offset: number) => new Date(Date.now() + 9 * 3600 * 1000 + offset * 86400000).toISOString().slice(0, 10);
+  const [dayDate, setDayDate] = useState(kstDay(-1));
+  const [dayKrw, setDayKrw] = useState("");
+  const [daySaving, setDaySaving] = useState(false);
+  async function saveDays(payload: { days?: { date: string; krw: number | null }[]; base?: { krw: number; from: string; to: string } }, note: string) {
+    setDaySaving(true);
+    setMsg("");
+    try {
+      await api("/api/dashboard/revenue", "POST", { channel: "adpost", ...payload });
+      setCapNote(note);
+      setCap(null);
+      router.refresh();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+    setDaySaving(false);
+  }
+  async function saveDay() {
+    if (!dayKrw.trim()) return setMsg("금액을 넣어 주세요.");
+    const won = Number(dayKrw.replace(/[^\d]/g, "")) || 0;
+    await saveDays({ days: [{ date: dayDate, krw: won }] }, `${dayDate.slice(5).replace("-", "/")} 애드포스트 ${krw(won)} 저장했어요.`);
+    setDayKrw("");
+  }
+  const adDays = Object.entries(data.adpost?.days ?? {}).sort(([a], [b]) => (a < b ? 1 : -1));
+
+  // 📷 캡처(못 넣은 날들 한꺼번에) → AI가 읽은 걸 보여주고 '반영'을 눌러야 저장
+  const [cap, setCap] = useState<{ krw: number; period: string; metric: string; days: { date: string; krw: number }[]; provider: string; model: string } | null>(null);
+  const capRange = cap ? /(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/.exec(cap.period) : null;
   async function readCapture(files: File[]) {
     const imgs = files.filter((x) => x.type.startsWith("image/")).slice(0, 3);
     if (!imgs.length) return;
     setReading(true);
     setMsg("");
     setCapNote("");
+    setCap(null);
     try {
       const images = await Promise.all(imgs.map((x) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(x); })));
-      const r = await api<{ krw: number; period: string; metric: string; provider: string; model: string }>("/api/dashboard/revenue/capture", "POST", { channel: "adpost", month, images });
-      setF((cur) => ({ ...cur, adpost: { ...cur.adpost, krw: String(r.krw), metric: [r.metric, r.period && `기간 ${r.period}`].filter(Boolean).join(" · ") || cur.adpost.metric } }));
-      setEdit(true);
-      setCapNote(`캡처에서 애드포스트 ${krw(r.krw)}을 읽었어요 (${r.provider}/${r.model}). 숫자가 맞는지 확인하고 '저장'을 누르세요.`);
+      const r = await api<{ krw: number; period: string; metric: string; days?: { date: string; krw: number }[]; provider: string; model: string }>("/api/dashboard/revenue/capture", "POST", { channel: "adpost", month, images });
+      const days = r.days ?? [];
+      const range = /(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/.exec(r.period);
+      if (days.length || range) setCap({ ...r, days });
+      else {
+        // 날짜를 모르는 합계만 읽힘 → 예전처럼 입력칸에 채워서 확인 후 저장
+        setF((cur) => ({ ...cur, adpost: { ...cur.adpost, krw: String(r.krw), metric: [r.metric, r.period && `기간 ${r.period}`].filter(Boolean).join(" · ") || cur.adpost.metric } }));
+        setEdit(true);
+        setCapNote(`캡처에서 애드포스트 ${krw(r.krw)}을 읽었어요 (${r.provider}/${r.model}). 날짜가 안 보여서 이번 달 합계로 넣었어요. 숫자를 확인하고 '저장'을 누르세요.`);
+      }
     } catch (e) {
       setMsg((e as Error).message);
     }
@@ -294,7 +329,7 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang, goa
             </div>
           </div>
         ) : (
-          !edit && <p className="small muted" style={{ margin: 0 }}>아직 수익이 없습니다. 쿠팡파트너스는 API 키를 연결하면 자동으로, 애드포스트는 수익 화면 캡처를 아래에 올리면 AI가 읽어 채워 줍니다.</p>
+          !edit && <p className="small muted" style={{ margin: 0 }}>아직 수익이 없습니다. 쿠팡파트너스는 API 키를 연결하면 자동으로, 애드포스트는 아래에 하루 수익을 넣거나, 못 넣은 날은 수익 화면 캡처로 한꺼번에 넣을 수 있어요.</p>
         )}
         {!edit && (
           <div className="table-wrap">
@@ -320,6 +355,26 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang, goa
           {coupang?.connected && <button className="btn btn-sm" disabled={syncing} onClick={syncCoupang}>{syncing ? <><span className="spinner" /> 불러오는 중…</> : "🔄 지금 불러오기"}</button>}
           {coupang?.error && <span className="tiny" style={{ color: "var(--bad)" }}>{coupang.error}</span>}
         </div>
+        <div className="stack" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <span className="small"><b>✍️ 애드포스트 하루 수익</b></span>
+            <input className="input" type="date" value={dayDate} max={kstDay(0)} onChange={(e) => setDayDate(e.target.value)} style={{ width: 150 }} aria-label="날짜" />
+            <input className="input" inputMode="numeric" placeholder="그날 수익 (원)" value={commas(dayKrw)} onChange={(e) => setDayKrw(e.target.value.replace(/[^\d]/g, ""))} onKeyDown={(e) => e.key === "Enter" && void saveDay()} style={{ width: 150 }} aria-label="애드포스트 하루 수익" />
+            <button className="btn btn-sm btn-primary" disabled={daySaving} onClick={saveDay}>{daySaving ? "저장 중…" : "저장"}</button>
+          </div>
+          {adDays.length > 0 && (
+            <div className="row tiny muted" style={{ gap: 6, flexWrap: "wrap" }}>
+              <span>이번 달 입력:</span>
+              {adDays.slice(0, 10).map(([d, v]) => (
+                <span key={d} className="chip" title="같은 날짜로 다시 저장하면 바뀌어요">
+                  {d.slice(5).replace("-", "/")} {krw(v)}
+                  <button type="button" aria-label={`${d} 지우기`} onClick={() => { if (confirm(`${d} 애드포스트 기록을 지울까요?`)) void saveDays({ days: [{ date: d, krw: null }] }, `${d.slice(5).replace("-", "/")} 기록을 지웠어요.`); }} style={{ marginLeft: 2, border: 0, background: "none", cursor: "pointer", color: "inherit", padding: 0 }}>✕</button>
+                </span>
+              ))}
+              {adDays.length > 10 && <span>외 {adDays.length - 10}일</span>}
+            </div>
+          )}
+        </div>
         <div
           className="card"
           role="button"
@@ -330,9 +385,31 @@ export function RevenueCard({ month, data, total, prevTotal, aiKrw, coupang, goa
           onDrop={(e) => { e.preventDefault(); void readCapture(Array.from(e.dataTransfer.files)); }}
           style={{ borderStyle: "dashed", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--panel-2)" }}
         >
-          {reading ? <span className="small"><span className="spinner" /> AI가 캡처에서 애드포스트 수익을 읽는 중…</span> : <span className="small">📷 <b>애드포스트</b> 수익 화면 캡처: <b style={{ color: "var(--accent)" }}>눌러서 파일 선택</b> · 끌어다 놓기 · <b>Ctrl+V</b>(맥은 ⌘V)로 붙여넣기</span>}
+          {reading ? <span className="small"><span className="spinner" /> AI가 캡처에서 애드포스트 수익을 읽는 중…</span> : <span className="small">📷 <b>못 넣은 날 한꺼번에</b> — 애드포스트 수익 화면 캡처: <b style={{ color: "var(--accent)" }}>눌러서 파일 선택</b> · 끌어다 놓기 · <b>Ctrl+V</b>(맥은 ⌘V)로 붙여넣기</span>}
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => e.target.files && void readCapture(Array.from(e.target.files))} />
         </div>
+        {cap && (
+          <div className="notice small stack" style={{ gap: 6 }}>
+            <div>캡처에서 읽었어요 ({cap.provider}/{cap.model}){cap.period && ` · 기간 ${cap.period}`} · 합계 <b>{krw(cap.krw)}</b></div>
+            {cap.days.length > 0 ? (
+              <>
+                <div className="tiny">{cap.days.map((d) => `${d.date.slice(5).replace("-", "/")} ${krw(d.krw)}`).join(" · ")}</div>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="btn btn-sm btn-primary" disabled={daySaving} onClick={() => saveDays({ days: cap.days }, `캡처의 ${cap.days.length}일치를 날짜별로 넣었어요. (같은 날짜는 새 숫자로 바뀜)`)}>날짜별로 {cap.days.length}일 넣기</button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => setCap(null)}>취소</button>
+                </div>
+              </>
+            ) : capRange ? (
+              <>
+                <div className="tiny">일별 표가 안 보여서 기간 합계로 넣어요. 이 기간 안에 직접 넣은 날짜 기록은 합계에 들어간 것으로 보고 지워요.</div>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="btn btn-sm btn-primary" disabled={daySaving} onClick={() => saveDays({ base: { krw: cap.krw, from: capRange[1], to: capRange[2] } }, `${capRange[1].slice(5)}~${capRange[2].slice(5)} 합계 ${krw(cap.krw)}을 넣었어요.`)}>{capRange[1].slice(5)}~{capRange[2].slice(5)} 합계 넣기</button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => setCap(null)}>취소</button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        )}
         {capNote && <div className="notice notice-ok small">{capNote}</div>}
         {!edit && msg && <div className="notice notice-bad small">{msg}</div>}
         {edit && (

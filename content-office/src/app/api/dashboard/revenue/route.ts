@@ -1,5 +1,5 @@
 import { body, fail, handle, ok } from "@/lib/api";
-import { getRevenue, saveGoal, saveRevenue, type MonthRevenue } from "@/lib/dashboard";
+import { getRevenue, saveDailyRevenue, saveGoal, saveRevenue, type MonthRevenue, type RevenueChannel } from "@/lib/dashboard";
 
 export async function GET() {
   return handle(async () => ok(await getRevenue()));
@@ -12,6 +12,18 @@ export async function PUT(req: Request) {
     try {
       if (typeof b.goal === "number") return ok(await saveGoal(String(b.month ?? ""), b.goal));
       return ok(await saveRevenue(String(b.month ?? ""), b.data ?? {}));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  });
+}
+
+/** 날짜별 입력: { channel, days:[{date, krw}], base?:{krw, from, to} } */
+export async function POST(req: Request) {
+  return handle(async () => {
+    const b = await body<{ channel?: string; days?: { date: string; krw: number | null }[]; base?: { krw: number; from: string; to: string } }>(req);
+    try {
+      return ok(await saveDailyRevenue(String(b.channel ?? "adpost") as RevenueChannel, { days: b.days, base: b.base }));
     } catch (e) {
       return fail((e as Error).message);
     }

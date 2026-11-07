@@ -17,7 +17,8 @@ export async function PATCH(req: Request, { params }: P) {
 export async function DELETE(_req: Request, { params }: P) {
   return handle(async () => {
     const { id, sid } = await params;
-    await q("DELETE FROM blog_samples WHERE id=$1 AND blog_id=$2", [sid, id]);
+    // 휴지통으로 (30일 뒤 자동 완전 삭제)
+    if ((await q("SELECT id FROM blog_samples WHERE id=$1 AND blog_id=$2", [sid, id])).length) await (await import("@/lib/trash-snap")).snapToTrash("sample", sid);
     return ok({ ok: true });
   });
 }

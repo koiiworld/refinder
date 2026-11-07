@@ -21,7 +21,8 @@ const KST_PREV_MONTH_START = `(date_trunc('month', (NOW() AT TIME ZONE 'Asia/Seo
 const PUBLISHED_AT = `NULLIF(p.package->>'publishedAt','')::timestamptz`;
 
 export type RevenueChannel = "coupang" | "adpost" | "adsense";
-export type RevenueEntry = { krw: number; usd?: number | null; metric?: string };
+/** days: 날짜별 직접 입력 · base: 캡처로 한 번에 넣은 기간 합계(일별 표가 없을 때) → krw = base + 기간 밖 날짜들 */
+export type RevenueEntry = { krw: number; usd?: number | null; metric?: string; days?: Record<string, number>; base?: { krw: number; from: string; to: string } | null };
 export type MonthRevenue = Partial<Record<RevenueChannel, RevenueEntry>> & { updatedAt?: string };
 
 export function monthKey(d = new Date()) {
@@ -48,11 +49,67 @@ export async function saveRevenue(month: string, data: MonthRevenue) {
     const krw = Math.max(0, Math.round(Number(e.krw) || 0));
     const usd = e.usd == null || e.usd === ("" as unknown) ? null : Math.max(0, Number(e.usd) || 0);
     // 0원이어도 기록(예: 쿠팡 자동 집계 클릭 수)이 있으면 남김
-    if (krw || usd || String(e.metric ?? "").trim()) clean[ch] = { krw, usd, metric: String(e.metric ?? "").slice(0, 120) };
+    if (!(krw || usd || String(e.metric ?? "").trim())) continue;
+    clean[ch] = { krw, usd, metric: String(e.metric ?? "").slice(0, 120) };
+    // 합계를 그대로 두고 저장하면 날짜별 기록 유지, 합계를 직접 바꾸면 그 숫자가 기준
+    const prev = all[month]?.[ch];
+    if (prev && (prev.days || prev.base) && prev.krw === krw) Object.assign(clean[ch]!, { days: prev.days, base: prev.base ?? null });
   }
   all[month] = clean;
   await q(`INSERT INTO settings (key, value) VALUES ('revenue', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j(all)]);
   return clean;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function entryTotal(e: RevenueEntry) {
+  const b = e.base;
+  const days = Object.entries(e.days ?? {}).filter(([d]) => !b || !b.from || !b.to || d < b.from || d > b.to);
+  return (b?.krw ?? 0) + days.reduce((a, [, v]) => a + v, 0);
+}
+function dayMetric(e: RevenueEntry) {
+  const ds = Object.keys(e.days ?? {}).sort();
+  const parts = [e.base?.from && e.base?.to ? `캡처 ${e.base.from.slice(5)}~${e.base.to.slice(5)}` : e.base ? "캡처 합계" : "", ds.length ? `일별 ${ds.length}일 (마지막 ${ds[ds.length - 1].slice(5)})` : ""];
+  return parts.filter(Boolean).join(" · ");
+}
+
+/**
+ * 날짜별 수익 넣기 (애드포스트처럼 하루 숫자 하나씩)
+ * - days: [{date, krw}] 매일 직접 입력 또는 캡처의 일별 표 (같은 날은 새 값으로 바꿈, krw=null 이면 그 날 지움)
+ * - base: 일별 표가 없는 캡처의 기간 합계 (그 기간 안 날짜 입력은 합계에 이미 들어간 것으로 봄)
+ */
+export async function saveDailyRevenue(channel: RevenueChannel, input: { days?: { date: string; krw: number | null }[]; base?: { krw: number; from: string; to: string } }) {
+  if (!["coupang", "adpost", "adsense"].includes(channel)) throw new Error("채널이 올바르지 않습니다.");
+  const days = (input.days ?? []).filter((d) => DATE_RE.test(String(d.date)));
+  const base = input.base && DATE_RE.test(input.base.from) && DATE_RE.test(input.base.to) && input.base.from <= input.base.to ? input.base : null;
+  if (!days.length && !base) throw new Error("날짜와 금액을 넣어 주세요.");
+  if (base && base.from.slice(0, 7) !== base.to.slice(0, 7)) throw new Error("기간 합계는 한 달 안의 기간만 넣을 수 있어요.");
+  const all = await getRevenue();
+  const months = new Set([...days.map((d) => d.date.slice(0, 7)), ...(base ? [base.from.slice(0, 7)] : [])]);
+  for (const mk of months) {
+    const mon = (all[mk] ??= {});
+    const prev = mon[channel];
+    // 예전 방식(합계만 있음)은 메모의 '기간 YYYY-MM-DD~YYYY-MM-DD' 를 기준 기간으로 이어받음
+    let e: RevenueEntry = prev ? { ...prev, days: { ...(prev.days ?? {}) } } : { krw: 0, days: {} };
+    if (prev && !prev.days && !prev.base && prev.krw) {
+      const m = /(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/.exec(prev.metric ?? "");
+      e.base = { krw: prev.krw, from: m?.[1] ?? "", to: m?.[2] ?? "" };
+    }
+    if (base && base.from.startsWith(mk)) {
+      e.base = { krw: Math.max(0, Math.round(Number(base.krw) || 0)), from: base.from, to: base.to };
+      for (const d of Object.keys(e.days!)) if (d >= base.from && d <= base.to) delete e.days![d];
+    }
+    for (const d of days.filter((x) => x.date.startsWith(mk))) {
+      if (d.krw == null || d.krw === ("" as unknown)) delete e.days![d.date];
+      else e.days![d.date] = Math.max(0, Math.round(Number(d.krw) || 0));
+    }
+    e = { ...e, krw: 0 };
+    e.krw = entryTotal(e);
+    e.metric = dayMetric(e);
+    mon[channel] = e;
+    mon.updatedAt = new Date().toISOString();
+  }
+  await q(`INSERT INTO settings (key, value) VALUES ('revenue', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [j(all)]);
+  return all;
 }
 
 /** 월 매출 목표 (원). 그 달 목표가 없으면 가장 최근에 정한 목표를 이어서 씀 */

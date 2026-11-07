@@ -353,5 +353,6 @@ export async function runStudioRender(id: string) {
 }
 
 export async function deleteStudio(id: string) {
-  await q("DELETE FROM studio_projects WHERE id=$1", [id]);
+  // 바로 지우지 않고 휴지통으로 (30일 뒤 자동 완전 삭제)
+  await (await import("./trash-snap")).snapToTrash("studio", id);
 }

@@ -221,7 +221,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
   }
 
   async function remove() {
-    if (!confirm("이 캐러셀을 지울까요?")) return;
+    if (!confirm("이 캐러셀을 휴지통으로 옮길까요? (30일 안에 되살릴 수 있어요)")) return;
     await api(`/api/carousels/${c.id}`, "DELETE");
     router.push("/carousels");
   }

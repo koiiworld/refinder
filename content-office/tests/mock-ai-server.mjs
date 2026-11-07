@@ -274,7 +274,7 @@ http
       if (system.includes("편집 기획자")) return JSON.stringify({ sections: [{ heading: "굴보쌈 재료", points: ["굴 300g", "배추"] }, { heading: "만드는 순서", points: ["굴 씻기"] }], claims: [{ claim: "굴은 11월이 제철", evidence: "수산물 시기", source: "", check: true }], images: [{ n: 1, what: "완성된 굴보쌈" }] });
       if (system.includes("표지 카피라이터")) return JSON.stringify({ hooks: ["새 표지 A", "새 표지 B", "새 표지 C"] });
       if (system.includes("블로그 통계 화면")) return JSON.stringify({ period: "최근 7일", items: [{ title: "깍두기 담그는 법", views: "1,204" }, { title: "굴보쌈", views: 3300 }, { title: "", views: 9 }] });
-      if (system.includes("광고 수익 화면")) return JSON.stringify({ krw: 12345, usd: null, period: "2026-11-01~2026-11-06", metric: "노출 1,000 · 클릭 20", found: true });
+      if (system.includes("광고 수익 화면")) return JSON.stringify({ krw: 12345, usd: null, period: "2026-11-01~2026-11-06", metric: "노출 1,000 · 클릭 20", days: [{ date: "2026-11-01", krw: 2000 }, { date: "2026-11-02", krw: 3000 }, { date: "bad", krw: 1 }], found: true });
       if (system.includes("크리에이터 어드바이저 화면")) return "1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW";
       return "{}";
     };

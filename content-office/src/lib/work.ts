@@ -99,7 +99,7 @@ export async function workItems(): Promise<WorkItem[]> {
 
   // 🎞 영상공장 (스튜디오에서 만든 영상은 스튜디오 쪽에서 보여 줌)
   const vids = await q<{ id: string; title: string; kind: string; status: string; message: string; posted_at: string | null; updated_at: string }>(
-    `SELECT id, title, kind, status, message, posted_at, updated_at FROM videos WHERE kind <> 'studio' AND (posted_at IS NULL OR posted_at >= $1) ORDER BY updated_at DESC LIMIT 200`,
+    `SELECT id, title, kind, status, message, posted_at, updated_at FROM videos WHERE deleted_at IS NULL AND kind <> 'studio' AND (posted_at IS NULL OR posted_at >= $1) ORDER BY updated_at DESC LIMIT 200`,
     [since],
   );
   const V_STEPS = ["받기", "자막 지우기·편집", "확인", "게시"];

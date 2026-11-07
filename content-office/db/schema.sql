@@ -559,3 +559,19 @@ ALTER TABLE videos ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;
 ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;
 ALTER TABLE ideas_notes ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '';  -- blog | insta | youtube | etc
 ALTER TABLE ideas_notes ADD COLUMN IF NOT EXISTS detail TEXT NOT NULL DEFAULT '';    -- 세부 (블로그 이름·릴스·쇼츠·직접 입력)
+
+-- 릴스 편집·영상 편집도 휴지통으로 (deleted_at 이 채워지면 목록에서 숨김, 휴지통에서 되살리기·완전 삭제)
+ALTER TABLE reel_projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE edit_projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- 휴지통(나머지 항목): 지운 줄을 통째로 보관 → 되살리기 · 30일 뒤 자동 완전 삭제
+CREATE TABLE IF NOT EXISTS trash_items (
+  id         TEXT PRIMARY KEY,
+  kind       TEXT NOT NULL,
+  ref_id     TEXT NOT NULL,
+  title      TEXT NOT NULL DEFAULT '',
+  label      TEXT NOT NULL DEFAULT '',
+  rows       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

@@ -28,7 +28,7 @@ const sid = () => Math.random().toString(36).slice(2, 9);
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function listEdits() {
-  return q<EditProject>("SELECT * FROM edit_projects ORDER BY updated_at DESC LIMIT 100");
+  return q<EditProject>("SELECT * FROM edit_projects WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 100");
 }
 export async function getEdit(id: string) {
   return q1<EditProject>("SELECT * FROM edit_projects WHERE id=$1", [id]);
@@ -56,7 +56,7 @@ export async function createEdit(videoIds: string[], title?: string) {
 }
 
 export async function deleteEdit(id: string) {
-  await q("DELETE FROM edit_projects WHERE id=$1", [id]);
+  await q("UPDATE edit_projects SET deleted_at=NOW() WHERE id=$1 AND deleted_at IS NULL", [id]); // 휴지통으로
 }
 
 const num = (v: unknown, lo: number, hi: number, d: number) => (Number.isFinite(Number(v)) ? Math.max(lo, Math.min(hi, Number(v))) : d);

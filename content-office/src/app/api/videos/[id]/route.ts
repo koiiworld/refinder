@@ -1,5 +1,5 @@
 import { body, fail, handle, ok, type Ctx } from "@/lib/api";
-import { addEdit, deleteVideo, getVideo, type EditOptions } from "@/lib/videos";
+import { addEdit, getVideo, type EditOptions } from "@/lib/videos";
 
 export async function GET(_req: Request, ctx: Ctx) {
   return handle(async () => {
@@ -24,7 +24,9 @@ export async function POST(req: Request, ctx: Ctx) {
 
 export async function DELETE(_req: Request, ctx: Ctx) {
   return handle(async () => {
-    await deleteVideo((await ctx.params).id);
-    return ok({ ok: true });
+    // 휴지통으로 (30일 뒤 자동 완전 삭제)
+    const { moveToTrash } = await import("@/lib/trash");
+    await moveToTrash([(await ctx.params).id]);
+    return ok({ ok: true, trashed: true });
   });
 }

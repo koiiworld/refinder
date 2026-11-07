@@ -104,7 +104,7 @@ export async function updateYtdlp(force = false): Promise<string> {
 }
 
 export async function listVideos() {
-  return q<Video>("SELECT * FROM videos ORDER BY created_at DESC LIMIT 200");
+  return q<Video>("SELECT * FROM videos WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 200");
 }
 export async function getVideo(id: string) {
   return q1<Video>("SELECT * FROM videos WHERE id=$1", [id]);

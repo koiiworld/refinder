@@ -202,7 +202,7 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
               </>
             )}
             {open.custom && (
-              <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }} onClick={async () => { if (confirm("이 행사를 지울까요?")) { await api("/api/calendar", "POST", { remove: open.id.replace(/^custom:/, "") }); setOpen(null); router.refresh(); } }}>🗑 이 행사 지우기</button>
+              <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }} onClick={async () => { if (confirm("이 행사를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있어요)")) { await api("/api/calendar", "POST", { remove: open.id.replace(/^custom:/, "") }); setOpen(null); router.refresh(); } }}>🗑 이 행사 지우기</button>
             )}
           </div>
         </Modal>
