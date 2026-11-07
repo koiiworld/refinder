@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./client-utils";
 import { fmtDate } from "./ui";
+import FileToMarkdown from "./FileToMarkdown";
 
 type Sample = { id: string; filename: string; content: string; enabled: boolean; chars: number; created_at: string };
 
@@ -80,6 +81,22 @@ export default function StyleSamples({ blogId }: { blogId: string }) {
         >
           {busy ? <span className="spinner" /> : <span className="small">파일을 끌어다 놓거나 <b style={{ color: "var(--accent)" }}>눌러서 선택</b> (.md, .txt, .html · 여러 개 가능 · 파일당 10만 자 이하)</span>}
           <input ref={input} type="file" accept=".md,.markdown,.txt,.html,.htm,text/markdown,text/plain,text/html" multiple hidden onChange={(e) => e.target.files && upload(e.target.files)} />
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <FileToMarkdown
+            multiple
+            label="📄 PDF·워드·PPT 글 불러오기"
+            onText={async (md, name) => {
+              try {
+                await api(`/api/blogs/${blogId}/samples`, "POST", { files: [{ filename: `${name.replace(/\.\w+$/, "")}.md`, content: md }] });
+                setMsg({ ok: true, text: `${name} 을(를) 글로 바꿔 예시로 넣었어요.` });
+                await load();
+              } catch (e) {
+                setMsg({ ok: false, text: (e as Error).message });
+              }
+            }}
+          />
+          <span className="tiny muted">맥에서 MarkItDown 으로 글만 뽑아 넣어요 (무료)</span>
         </div>
         <div className="field">
           <span className="label">또는 블로그 글 주소로 가져오기 (네이버 블로그·티스토리 공개 글)</span>

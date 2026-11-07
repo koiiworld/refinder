@@ -74,7 +74,7 @@ export function ensureWorker() {
 /** 영상 작업(다운로드·인코딩): 맥이 켜져 있으면 맥이 먼저 맡음 (Render 무료 서버는 CPU가 아주 약함) */
 export const VIDEO_JOBS = ["video_fetch", "video_edit", "studio_plan", "studio_character", "studio_scene", "studio_render"];
 const ON_RENDER = !!process.env.RENDER;
-export const MAC_ONLY_JOBS = ["reel_analyze", "reel_render", "reel_study", "edit_render", "edit_captions", "edit_reverse"];
+export const MAC_ONLY_JOBS = ["reel_analyze", "reel_render", "reel_study", "edit_render", "edit_captions", "edit_reverse", "doc_convert"];
 const hb = globalThis as unknown as { __macAlive?: { at: number; alive: boolean }; __macBeat?: number };
 /** 맥이 켜져 있고, 영상을 같은 저장소(Supabase)에 넣을 수 있을 때만 맥에 영상 작업을 맡김 */
 async function macAlive() {
@@ -245,6 +245,11 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
   async edit_captions(job) {
     const { runCaptions } = await import("./edit");
     await runCaptions(String(job.payload.editId));
+  },
+  // 📄 문서 → 마크다운 (맥 전용)
+  async doc_convert(job) {
+    const { runConversion } = await import("./convert");
+    await runConversion(String(job.payload.id));
   },
   async edit_reverse(job) {
     const { runReverse } = await import("./edit");

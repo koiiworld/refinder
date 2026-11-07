@@ -271,17 +271,41 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
   );
 }
 
+/** 단계 칸: 오른쪽 ▼ 로 접고 펴기 (접은 상태는 이 브라우저에 기억) */
 function Section({ n, title, ai, right, children }: { n: number; title: string; ai?: { provider: string; model: string; substitutedFor: string | null } | null; right?: React.ReactNode; children: React.ReactNode }) {
+  const key = `post-sec-closed:${n}`;
+  const [closed, setClosed] = useState(false);
+  useEffect(() => {
+    try {
+      setClosed(localStorage.getItem(key) === "1");
+    } catch {
+      /* 저장소를 못 쓰면 펼친 채로 */
+    }
+  }, [key]);
+  const toggle = () => {
+    setClosed((c) => {
+      try {
+        localStorage.setItem(key, c ? "0" : "1");
+      } catch {
+        /* 무시 */
+      }
+      return !c;
+    });
+  };
   return (
     <section className="card">
       <div className="card-head" style={{ flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: 16 }}>{"①②③④⑤⑥⑦"[n - 1]} {title}</h2>
+        <h2 style={{ fontSize: 16, cursor: "pointer" }} onClick={toggle}>{"①②③④⑤⑥⑦"[n - 1]} {title}</h2>
         <div className="row">
           {ai && <span className="tiny muted">{ai.provider}/{ai.model}{ai.substitutedFor ? ` · ${ai.substitutedFor} 대신 사용` : ""}</span>}
-          {right}
+          {!closed && right}
+          <button type="button" className="btn btn-sm btn-ghost" onClick={toggle} aria-expanded={!closed} title={closed ? "펼치기" : "접기"} aria-label={closed ? `${title} 펼치기` : `${title} 접기`} style={{ minWidth: 32 }}>
+            <span style={{ display: "inline-block", transition: "transform .15s", transform: closed ? "rotate(-90deg)" : "none" }}>▼</span>
+          </button>
         </div>
       </div>
-      <div className="card-pad">{children}</div>
+      {/* 접어도 내용은 그대로 둠 (편집기 상태 유지) */}
+      <div className="card-pad" style={closed ? { display: "none" } : undefined}>{children}</div>
     </section>
   );
 }

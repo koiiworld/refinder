@@ -10,6 +10,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     { href: "/routines", label: "루틴 관리", sub: "반복 업무 · 매일 알림 · 실행 기록" },
     { href: "/ideas", label: "아이디어 노트", sub: "메모·할 일·글 기획" },
     { href: "/calendar", label: "캘린더", sub: "시즌·행사별 일정" },
+    { href: "/convert", label: "문서 → 마크다운", sub: "PDF·워드·PPT·엑셀을 글로 (맥, 무료)" },
     { href: "/telegram", label: "텔레그램", sub: "연결·알림 설정 · 받은/보낸 메시지함" },
   ] },
   { id: "research", label: "콘텐츠 리서치", items: [

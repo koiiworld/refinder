@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import { api, useToast } from "@/components/client-utils";
 import { fmtDate } from "@/components/ui";
+import FileToMarkdown from "@/components/FileToMarkdown";
 
 type Ch = { id: string; label: string; hint: string };
 type Doc = { id: string; blog_id: string | null; project_id: string | null; title: string; source_url: string; source_text: string; result: Record<string, string>; updated_at: string };
 type Src = { title: string; text: string; blogId: string | null; postId: string | null; url: string };
 type Tab = "published" | "app" | "url" | "paste";
 
-export default function RepurposeBoard({ blogs, published, appPosts, channels, history: initialHistory, initialPost, initialUrl }: {
+export default function RepurposeBoard({ blogs, published, appPosts, channels, history: initialHistory, initialPost, initialUrl, initialConvert = "" }: {
+  initialConvert?: string;
   blogs: { id: string; name: string; color: string }[];
   published: { title: string; url: string; blogId: string }[];
   appPosts: { id: string; title: string; blogId: string }[];
@@ -18,7 +20,7 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
   initialPost: string;
   initialUrl: string;
 }) {
-  const [tab, setTab] = useState<Tab>(initialPost ? "app" : initialUrl ? "url" : "published");
+  const [tab, setTab] = useState<Tab>(initialPost ? "app" : initialUrl ? "url" : initialConvert ? "paste" : "published");
   const [blog, setBlog] = useState(blogs[0]?.id ?? "");
   const [url, setUrl] = useState(initialUrl);
   const [src, setSrc] = useState<Src | null>(null);
@@ -30,6 +32,18 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
   const [err, setErr] = useState("");
   const [toast, setToast] = useToast();
   const blogName = (id: string | null) => blogs.find((b) => b.id === id)?.name ?? "";
+  // 📄 파일(PDF·워드 등) → 마크다운 글을 원본으로
+  const fromFile = (md: string, name: string) => {
+    setSrc({ title: name.replace(/\.\w+$/, ""), text: md, blogId: blogs[0]?.id ?? null, postId: null, url: "" });
+    setDocId(null);
+    setResult({});
+  };
+  // 문서 → 마크다운 화면에서 '채널 변환으로' 보낸 글
+  useEffect(() => {
+    if (!initialConvert) return;
+    void api<{ filename: string; markdown: string }>(`/api/convert/${initialConvert}`).then((c) => fromFile(c.markdown, c.filename)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConvert]);
 
   async function load(body: { postId?: string; url?: string }) {
     setBusy("load");
@@ -108,7 +122,10 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
             </div>
           )}
           {tab === "paste" && (
-            <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => { setSrc({ title: "", text: "", blogId: blogs[0]?.id ?? null, postId: null, url: "" }); setDocId(null); setResult({}); }}>✏️ 빈 칸에 붙여넣기</button>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-sm" onClick={() => { setSrc({ title: "", text: "", blogId: blogs[0]?.id ?? null, postId: null, url: "" }); setDocId(null); setResult({}); }}>✏️ 빈 칸에 붙여넣기</button>
+              <FileToMarkdown onText={fromFile} />
+            </div>
           )}
           {busy === "load" && <span className="tiny muted"><span className="spinner" /> 글 불러오는 중…</span>}
           {err && <div className="notice notice-bad small">{err}</div>}

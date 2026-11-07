@@ -1764,3 +1764,35 @@ test("🗑 나머지도 지우면 휴지통으로 (아이디어·할 일 등) �
   const studio = (await (await fetch(`${BASE}/studio`)).text());
   assert.ok(studio.includes("만든 영상 프로젝트"));
 });
+
+test("📄 문서 → 마크다운 (MarkItDown, 맥): 올리기 → 변환 → 결과·.md 받기 → 휴지통 · 지원 안 하는 파일 거절", async () => {
+  const fd = new FormData();
+  fd.append("file", new Blob(["<html><body><h1>김장 준비물</h1><p>배추 <b>10포기</b></p><table><tr><td>소금</td><td>3kg</td></tr></table></body></html>"], { type: "text/html" }), "김장.html");
+  const up = await fetch(`${BASE}/api/convert`, { method: "POST", body: fd });
+  const { ids } = await up.json();
+  assert.equal(up.status, 200);
+  let c;
+  for (let i = 0; i < 120; i++) {
+    c = (await call(`/api/convert/${ids[0]}`)).data;
+    if (c.status === "done" || c.status === "error") break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  assert.equal(c.status, "done", c.message);
+  assert.match(c.markdown, /# 김장 준비물/);
+  assert.match(c.markdown, /\*\*10포기\*\*/);
+  assert.match(c.markdown, /\| 소금 \| 3kg \|/);
+  const dl = await fetch(`${BASE}/api/convert/${ids[0]}?download=1`);
+  assert.match(dl.headers.get("content-disposition"), /%EA%B9%80%EC%9E%A5\.md/);
+  assert.match(await dl.text(), /김장 준비물/);
+  assert.ok((await call("/api/convert")).data.some((x) => x.id === ids[0]));
+  const bad = new FormData();
+  bad.append("file", new Blob(["x"]), "a.exe");
+  assert.equal((await fetch(`${BASE}/api/convert`, { method: "POST", body: bad })).status, 400);
+  assert.equal((await call("/api/trash", "POST", { action: "trash", ids: [ids[0]] })).data.count, 1);
+  assert.ok(!(await call("/api/convert")).data.some((x) => x.id === ids[0]), "휴지통으로");
+  const pg = (await (await fetch(`${BASE}/convert`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(pg.includes("문서 → 마크다운") && pg.includes("PDF"));
+  const rp = (await (await fetch(`${BASE}/repurpose`)).text());
+  assert.equal((await fetch(`${BASE}/repurpose?convert=${ids[0]}`)).status, 200);
+  void rp;
+});

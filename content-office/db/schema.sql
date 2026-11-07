@@ -589,3 +589,16 @@ CREATE TABLE IF NOT EXISTS telegram_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS telegram_messages_dir ON telegram_messages (direction, created_at DESC);
+
+-- 📄 문서 → 마크다운 (MarkItDown, 맥): 원본은 변환 뒤 지움
+CREATE TABLE IF NOT EXISTS doc_conversions (
+  id         TEXT PRIMARY KEY,
+  filename   TEXT NOT NULL,
+  size       INTEGER NOT NULL DEFAULT 0,
+  input      BYTEA,
+  status     TEXT NOT NULL DEFAULT 'queued',   -- queued | running | done | error
+  message    TEXT NOT NULL DEFAULT '',
+  markdown   TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

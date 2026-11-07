@@ -5,6 +5,10 @@ import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import { Placeholder } from "@tiptap/extensions";
+import { FontSize, TextStyle } from "@tiptap/extension-text-style";
+
+/** 글자 크기 (네이버 블로그 편집기와 비슷한 단계) */
+const FONT_SIZES = ["11", "13", "15", "16", "19", "24", "28", "30", "34", "38"];
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AiPicker, Diff, Modal } from "./client-utils";
 
@@ -49,6 +53,8 @@ export default function DocEditor({
       StarterKit.configure({ link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" } } }),
       TableKit.configure({ table: { resizable: false } }),
       Image.configure({ allowBase64: true }),
+      TextStyle,
+      FontSize,
       Placeholder.configure({ placeholder: "여기에 본문을 작성하세요. 텍스트를 선택하면 AI 부분 수정을 쓸 수 있습니다." }),
     ],
     content: serverDoc?.content_html ?? "",
@@ -157,6 +163,7 @@ export default function DocEditor({
             link: e.isActive("link"),
             table: e.isActive("table"),
             hasSel: !e.state.selection.empty,
+            fontSize: String(e.getAttributes("textStyle").fontSize ?? ""),
           }
         : null,
   });
@@ -250,6 +257,18 @@ export default function DocEditor({
           {tb("I", active?.italic, () => editor.chain().focus().toggleItalic().run(), "기울임")}
           {tb("U", active?.underline, () => editor.chain().focus().toggleUnderline().run(), "밑줄")}
           {tb("S", active?.strike, () => editor.chain().focus().toggleStrike().run(), "취소선")}
+          <select
+            className="tb"
+            value={(active?.fontSize ?? "").replace("px", "")}
+            disabled={locked}
+            onChange={(e) => (e.target.value ? editor.chain().focus().setFontSize(`${e.target.value}px`).run() : editor.chain().focus().unsetFontSize().run())}
+            title="글자 크기 (글자를 고른 뒤 바꾸세요)"
+            aria-label="글자 크기"
+            style={{ width: "auto", paddingRight: 4 }}
+          >
+            <option value="">크기 기본</option>
+            {FONT_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
           <span className="tb-sep" />
           {tb("H2", active?.h2, () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "소제목")}
           {tb("H3", active?.h3, () => editor.chain().focus().toggleHeading({ level: 3 }).run(), "작은 소제목")}

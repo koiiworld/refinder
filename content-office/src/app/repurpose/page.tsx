@@ -6,7 +6,7 @@ import RepurposeBoard from "./RepurposeBoard";
 
 export const dynamic = "force-dynamic";
 
-export default async function RepurposePage({ searchParams }: { searchParams: Promise<{ post?: string; url?: string }> }) {
+export default async function RepurposePage({ searchParams }: { searchParams: Promise<{ post?: string; url?: string; convert?: string }> }) {
   const sp = await searchParams;
   const blogs = await listBlogs();
   // 내 블로그에 이미 올린 글 (RSS 최근 글) + 이 앱에서 만든 글
@@ -32,6 +32,7 @@ export default async function RepurposePage({ searchParams }: { searchParams: Pr
         history={JSON.parse(JSON.stringify(history))}
         initialPost={sp.post ?? ""}
         initialUrl={sp.url ?? ""}
+        initialConvert={sp.convert ?? ""}
       />
     </div>
   );
