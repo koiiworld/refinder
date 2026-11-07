@@ -29,6 +29,13 @@ http
       return send(res, 200, { ok: true });
     }
 
+    // 공개 인스타·핀터레스트 모의 페이지. 실제 외부 계정·키를 사용하지 않음.
+    if (/^\/p\/(learn|multi)\//.test(url.pathname) || url.pathname === "/pin/123456789/") {
+      const origin = `http://localhost:${PORT}`;
+      res.writeHead(200, {"content-type":"text/html; charset=utf-8"});
+      return res.end(url.pathname.includes("multi") ? `<script type="application/json">${JSON.stringify({data:{shortcode:"multi",edge_sidecar_to_children:{edges:[{node:{display_url:origin+"/img/a.jpg"}},{node:{display_url:origin+"/img/b.jpg"}}]}}})}</script>` : `<meta property="og:image" content="${origin}/img/learning.jpg"><meta property="og:description" content="김밥 밥을 식히는 이유, 단계별 설명과 여백">`);
+    }
+    if (url.pathname === "/p/blocked/") { res.writeHead(403); return res.end("login required"); }
     // 네이버 데이터랩 (NAVER API HUB 방식)
     if (url.pathname === "/search-trend/v1/search") {
       if (req.headers["x-ncp-apigw-api-key-id"] !== "test-dl-id" || req.headers["x-ncp-apigw-api-key"] !== "test-dl-key")
@@ -270,7 +277,16 @@ http
       if (system.includes("편집장이자 팩트체커")) return JSON.stringify({ summary: "모의 검수", score: 88, issues: [{ type: "fact", severity: "low", quote: "본문", comment: "확인", suggestion: "" }], factChecks: [], ruleChecks: [], imageChecks: [{ index: 1, ok: true, note: "좋음" }] });
       if (system.includes("교정")) return "AI가 다듬은 문장입니다.";
       if (system.includes("콘텐츠 전략가")) return JSON.stringify({ posts: [{ title: "양배추 두부전", titlePattern: "메뉴명 + 만들기 + 효익", hook: "인사 후 공감 질문", structure: "재료→순서→팁", whyPopular: "검색 의도에 바로 답함", keywords: ["양배추두부전"] }], common: ["재료를 목록으로"], apply: { titleIdeas: [{ title: "굴보쌈 집에서 만들기｜실패 없는 황금 비율", keyword: "굴보쌈", reason: "제철" }], keywords: [{ keyword: "굴보쌈", reason: "제철" }, { keyword: "깍두기", reason: "김장철" }], tips: ["사진 8장 이상"] } });
-      if (system.includes("카드뉴스) 카피라이터")) return JSON.stringify({ slides: [{ kind: "cover", headline: "김밥 옆구리\\n안 터지는 법", body: "저장 필수", image: 0 }, { kind: "content", headline: "밥은 식혀서", body: "뜨거운 밥은 김을 찢어요", image: 7 }, { kind: "content", headline: "재료 준비", body: "단무지·햄·계란", image: null }, { kind: "cta", headline: "김밥 좋아하는 친구 태그 🍙", body: "저장해두고 주말에", image: null }], hooks: ["10분 김밥집 맛", "이렇게 하면 다 터져요", "저장 안 하면 후회"], caption: "김밥 안 터지는 비법 🍙\n\n밥은 식혀서!", hashtags: ["#김밥", "김밥 만들기", "도시락"] });
+      if (system.includes("AI 학습지의")) return JSON.stringify({
+        categories:["hook","image","design","blog"],reason:"표지·구도·배치·설명 순서를 함께 참고할 수 있어요",summary:"제목은 구체적으로, 본문은 여백을 두고 단계별로 정리해요",
+        principles:["학습원칙마커: 구체적인 대상과 행동을 먼저"],avoid:["근거 없는 효과 보장"],
+        lessons:{hook:["후킹학습마커: 밥을 식히는 이유처럼 구체적으로"],image:["Use soft side light. ImageLearningMarker."],design:["디자인학습마커: 넓은 여백과 큰 제목"],blog:["블로그학습마커: 문제 다음에 근거와 순서를 설명"]},
+        hooks:[{quote:"밥을 식히는 이유",why:"행동의 이유를 명확히",pattern:"구체적 행동 + 이유"}],
+        recipe:{layout:"editorial",background:"#f6f1e8",foreground:"#172a28",accent:"#c44832",spacing:"airy",typography:"strong"},
+        tasks:[{kind:"required",title:"표지 주장을 본문과 대조하기",detail:"본문에 답이 있는지 확인하고 없는 주장은 고치기"},{kind:"study",title:"비교 기준을 담은 표지 연습",detail:"후보 3개를 써 보고 원문과 대조하기"},{kind:"setup",title:"계정 기본색 정리",detail:"브랜드 색과 대비를 점검하기"},{kind:"direction",title:"단계별 정보 캐러셀 실험",detail:"같은 내용을 새로운 배치로 시안 비교하기"}]
+      });
+      if (system.includes("카드뉴스) 카피라이터") && prompt.includes("후킹검증_과장")) return JSON.stringify({slides:[{kind:"cover",headline:"무조건 성공 보장",body:"3분에 두 배",image:null},{kind:"content",headline:"준비",body:"본문",image:null}],hooks:["100% 성공 보장","3분에 두 배","김밥 준비 순서"],caption:"김밥 준비",hashtags:["김밥"]});
+      if (system.includes("카드뉴스) 카피라이터")) return JSON.stringify({ slides: [{ kind: "cover", headline: "김밥 옆구리\\n안 터지는 법", body: "저장 필수", image: 0 }, { kind: "content", headline: "밥은 식혀서", body: "뜨거운 밥은 김을 찢어요", image: 7 }, { kind: "content", headline: "재료 준비", body: "단무지·햄·계란", image: null }, { kind: "cta", headline: "김밥 좋아하는 친구 태그 🍙", body: "저장해두고 주말에", image: null }], hooks: ["김밥 밥 식히는 이유", "김밥 재료 준비 기준", "김밥 마는 순서"], caption: "김밥 안 터지는 비법 🍙\n\n밥은 식혀서!", hashtags: ["#김밥", "김밥 만들기", "도시락"] });
       if (system.includes("인스타그램 성장 전략가")) return JSON.stringify({ ideas: [{ topic: "자취생 냉장고 정리 7가지", format: "save", hook: "이것만 알면 냉장고가 2배", why: "나중에 다시 볼 정보" }, { topic: "택배 반품 실수 TOP5", format: "mistake", hook: "이러면 반품비 다 내요", why: "친구에게 공유" }, { topic: "", format: "save", hook: "", why: "" }] });
       if (system.includes("블로그 글 분류 도우미")) return JSON.stringify({ keep: [...prompt.matchAll(/^(\d+): (.*)$/gm)].filter((m) => !m[2].includes("역노화")).map((m) => Number(m[1])) });
       if (system.includes("영상 프레임에서")) return JSON.stringify({ found: true, boxes: [{ box_2d: [800, 100, 900, 900], what: "아래 자막" }] });

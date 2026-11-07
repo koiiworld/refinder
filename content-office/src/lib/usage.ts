@@ -13,6 +13,7 @@ const STEP_OF: Record<string, [string, string]> = {
   outline: ["3b", "③-2 기획안 (목차·근거)"],
   write: ["4", "④ 글 작성 (이미지 프롬프트 포함)"],
   hashtags: ["4h", "④ 해시태그"],
+  "ai-learning": ["c1", "📚 AI 학습지"],
   carousel: ["c1", "📱 인스타 캐러셀"],
   "carousel-ideas": ["c1", "📱 인스타 캐러셀"],
   diagnose: ["d1", "🩺 블로그 진단"],

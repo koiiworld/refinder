@@ -205,6 +205,10 @@ export interface StepRunResult extends RunResult {
  * 아무 AI도 못 쓰면 template 이 있으면 템플릿(AI 아님), 없으면 오류.
  */
 export async function runStep(o: Omit<RunOptions, "role" | "override"> & { step: import("../steps").StepKey; role?: RoleKey }): Promise<StepRunResult> {
+  const { learningContext } = await import("../learning-context");
+  const category = o.step === "carousel" ? "hook" : o.step === "imageprompt" ? "image" : ["titles", "writing", "review"].includes(o.step) ? "blog" : null;
+  if (category) o = { ...o, prompt: o.prompt + await learningContext(category) };
+  if (o.step === "titles") o = { ...o, prompt: o.prompt + await learningContext("hook") };
   const { stepAi } = await getSettings();
   const { FALLBACK_MODELS } = await import("../steps");
   const primary = stepAi[o.step];

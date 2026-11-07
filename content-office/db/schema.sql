@@ -602,3 +602,31 @@ CREATE TABLE IF NOT EXISTS doc_conversions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 인스타 디자인 참고함: 원본은 참고 전용, 내 캐러셀의 사진으로 복제하지 않음
+CREATE TABLE IF NOT EXISTS ai_learning_refs (
+  id TEXT PRIMARY KEY,
+  source_url TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT 'other',
+  source_text TEXT NOT NULL DEFAULT '',
+  analyze_until TIMESTAMPTZ,
+  title TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  images JSONB NOT NULL DEFAULT '[]',
+  analysis JSONB,
+  favorite BOOLEAN NOT NULL DEFAULT FALSE,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  analyzed_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS ai_learning_tasks (
+  id TEXT PRIMARY KEY,
+  ref_id TEXT NOT NULL REFERENCES ai_learning_refs(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'study',
+  done BOOLEAN NOT NULL DEFAULT FALSE,
+  todo_id TEXT,
+  idea_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import { q, q1, newId, j } from "./db";
 import { getBlogForAi, getDocument, getProject } from "./repo";
 import { extractJson, runStep } from "./ai/run";
+import { HOOK_RULES, groundedHook } from "./hook-rules";
+import { cleanRecipe, type DesignRecipe } from "./carousel-design-types";
 import type { PostExtras } from "./posts-types";
 import { seasonEvents } from "./seasons";
 import { importPostWithImages } from "./sample-html";
@@ -18,7 +20,7 @@ export type Slide = { kind: "cover" | "content" | "cta"; headline: string; body:
 export type CarouselImage = { url: string; alt: string };
 /** 콘텐츠 유형별로 만들어 둔 결과 (다시 고르면 AI 없이 불러옴) */
 export type TypeVersion = { slides: Slide[]; caption: string; hashtags: string[]; hooks: string[] };
-export type CarouselStyle = { template: "photo" | "clean" | "bold"; accent: string; handle: string };
+export type CarouselStyle = { template: "photo" | "clean" | "bold"; accent: string; handle: string; design?: DesignRecipe | null; designRef?: string };
 export type Carousel = {
   id: string;
   blog_id: string | null;
@@ -145,7 +147,7 @@ export async function generate(id: string, feedback = "") {
   const fmt = FORMATS.find((f) => f.id === c.style?.format)?.label ?? "";
   const ctype = CONTENT_TYPES.find((t) => t.id === c.style?.contentType) ?? CONTENT_TYPES[1];
   const source = doc?.content_html ? text(doc.content_html).slice(0, 6000) : (c.style?.sourceText ?? "").slice(0, 6000);
-  const system = `당신은 저장·공유·친구 태그가 많이 나오는 인스타그램 캐러셀(카드뉴스) 카피라이터입니다. 짧고 리듬감 있게, 해요체로 씁니다. 확인할 수 없는 수치·효과를 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.`;
+  const system = `당신은 저장·공유·친구 태그가 많이 나오는 인스타그램 캐러셀(카드뉴스) 카피라이터입니다. 짧고 리듬감 있게, 해요체로 씁니다. 확인할 수 없는 수치·효과를 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.\n${HOOK_RULES}`;
   const prompt = `${blog ? `[계정 분야] ${blog.name} · ${blog.category}\n` : ""}${c.style?.niche ? `[계정 분야] ${c.style.niche}\n` : ""}[주제] ${c.title}
 ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내용만 근거로]\n${source}\n` : ""}${c.images.length ? `\n[쓸 수 있는 사진 (번호: 설명)]\n${c.images.map((im, i) => `${i}: ${im.alt || "(설명 없음)"}`).join("\n")}\n` : ""}${feedback ? `\n[수정 요청 - 반드시 반영]\n${feedback}\n` : ""}
 [콘텐츠 유형] ${ctype.label} — ${ctype.range} (기본 ${ctype.count}장)
@@ -154,7 +156,7 @@ ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내�
 위 유형에 맞춰 인스타 캐러셀을 ${ctype.range} (가능하면 ${ctype.count}장) 만드세요. 추천 구성 순서를 따르되 내용에 맞게 조절하세요.
 - 사진이 있으면 되도록 많은 장에 서로 다른 사진을 배치하세요 (같은 사진 반복은 최소로).
 - 1장(cover): 스크롤을 멈추게 하는 후킹. headline 18자 이내(줄바꿈 \\n 1번 가능), body 는 한 줄 보조 문구(20자 이내).
-  잘 먹히는 틀: 숫자+결과("10분이면 김밥집 맛"), 실수 경고("이렇게 하면 다 터져요"), 저장 유도("저장 안 하면 후회해요"), 반전·호기심("○○ 넣으면 달라져요").
+  구체적 대상과 도움: "김밥 말 때 밥 식히는 이유", "내게 맞는 충전기 고르는 기준"처럼 본문이 답하는 내용을 쓰세요. 이 예시의 주제는 복사하지 마세요.
 - 2장: 끝까지 넘기게 만드는 이유(결과 미리보기·공감).
 - 중간 장(content): 한 장에 한 가지만. headline 14자 이내, body 60자 이내. 재료·순서·체크리스트처럼 '나중에 다시 볼' 정보는 저장하고 싶게 정리.
 - 마지막 장(cta): 저장 + 친구 태그 + 팔로우 유도. 주제에 맞는 태그 문구 (예: "김밥 좋아하는 친구 태그 🍙", "같이 갈 친구 소환").
@@ -175,9 +177,12 @@ ${fmt ? `[형식] ${fmt}\n` : ""}${source ? `\n[원본 블로그 글 - 이 내�
     .filter((s) => s.headline || s.body)
     .slice(0, 15);
   if (!slides.length) throw new Error("AI가 장면을 만들지 못했습니다. 다시 시도해 주세요.");
+  const evidence = source || c.title;
+  if (slides[0] && !groundedHook(slides[0].headline, evidence)) slides[0].headline = c.title.slice(0,60);
+  if (slides[0] && !groundedHook(slides[0].body, evidence)) slides[0].body = "";
   const hashtags = Array.from(new Set((raw.hashtags ?? []).map((h) => String(h).replace(/^#/, "").replace(/\s+/g, "")).filter(Boolean))).slice(0, 5);
   await q("UPDATE carousels SET slides=$2, caption=$3, hashtags=$4, style=$5, ai=$6, updated_at=NOW() WHERE id=$1", [
-    id, j(slides), String(raw.caption ?? "").slice(0, 2200), j(hashtags), j({ ...DEFAULT_STYLE, ...c.style, hooks: (raw.hooks ?? []).map(String).slice(0, 3) }), j({ provider: res.provider, model: res.model, at: new Date().toISOString() }),
+    id, j(slides), String(raw.caption ?? "").slice(0, 2200), j(hashtags), j({ ...DEFAULT_STYLE, ...c.style, hooks: (raw.hooks ?? []).map(String).filter(h=>groundedHook(h,evidence)).slice(0, 3) }), j({ provider: res.provider, model: res.model, at: new Date().toISOString() }),
   ]);
 }
 
@@ -210,15 +215,17 @@ export async function regenerateHooks(id: string) {
   if (!c) throw new Error("캐러셀을 찾을 수 없습니다.");
   const blog = c.blog_id ? await getBlogForAi(c.blog_id) : null;
   const system = `당신은 저장·공유·친구 태그가 많이 나오는 인스타그램 캐러셀(카드뉴스) 표지 카피라이터입니다. 확인할 수 없는 수치를 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.`;
-  const prompt = `[주제] ${c.title}
+  const doc = c.project_id ? await getDocument(c.project_id) : null;
+  const evidence = doc?.content_html ? text(doc.content_html).slice(0,6000) : c.style?.sourceText || c.title;
+  const prompt = `[원문 근거] ${evidence}\n[주제] ${c.title}
 [지금 표지] ${c.slides[0]?.headline ?? ""}
 [이미 나온 후보 - 겹치지 않게] ${(c.style?.hooks ?? []).join(" / ") || "(없음)"}
 [내용 요약] ${c.slides.slice(1, 6).map((s) => s.headline).join(" / ")}
 
-스크롤을 멈추게 하는 새 표지 문구 3개를 만드세요. 18자 이내, 서로 다른 틀(숫자+결과, 실수 경고, 저장 유도, 반전·호기심 중)로.
+스크롤을 멈추게 하는 새 표지 문구 3개를 만드세요. 18자 이내, 문제 해결형·판단 기준형·방법 안내형으로 서로 다르게. ${HOOK_RULES}
 형식: {"hooks": ["", "", ""]}`;
   const res = await runStep({ step: "carousel", purpose: "carousel", blog, projectId: c.project_id, system, prompt, json: true, maxTokens: 400 });
-  const hooks = (extractJson<{ hooks?: string[] }>(res.text).hooks ?? []).map((h) => String(h).replace(/\\n/g, "\n").slice(0, 60)).filter(Boolean).slice(0, 3);
+  const hooks = (extractJson<{ hooks?: string[] }>(res.text).hooks ?? []).map((h) => String(h).replace(/\\n/g, "\n").slice(0, 60)).filter(h=>h && groundedHook(h,evidence)).slice(0, 3);
   if (!hooks.length) throw new Error("새 표지 문구를 받지 못했어요. 다시 눌러 주세요.");
   await q("UPDATE carousels SET style=$2, updated_at=NOW() WHERE id=$1", [id, j({ ...c.style, hooks })]);
   return hooks;
@@ -237,6 +244,8 @@ export async function saveCarousel(id: string, patch: { title?: string; slides?:
   if (style.accent && !/^#[0-9a-f]{6}$/i.test(style.accent)) style.accent = DEFAULT_STYLE.accent;
   if (!["photo", "clean", "bold"].includes(style.template)) style.template = "photo";
   if (style.contentType && !CONTENT_TYPES.some((t) => t.id === style.contentType)) style.contentType = "general";
+  if (style.design) style.design = cleanRecipe(style.design);
+  style.designRef = String(style.designRef ?? "").slice(0,100);
   style.handle = String(style.handle ?? "").slice(0, 40);
   await q("UPDATE carousels SET title=$2, slides=$3, caption=$4, hashtags=$5, style=$6, updated_at=NOW() WHERE id=$1", [
     id, String(patch.title ?? c.title).slice(0, 200), j(slides), String(patch.caption ?? c.caption).slice(0, 2200),
@@ -272,7 +281,7 @@ export async function carouselIdeas(niche: string, blogId?: string | null) {
   const soon = seasonEvents(Number(today.slice(0, 4)))
     .filter((e) => e.end >= today && e.start <= new Date(Date.now() + 40 * 86400000).toISOString().slice(0, 10))
     .map((e) => `${e.name} (${e.start}~${e.end})`);
-  const system = `당신은 인스타그램 성장 전략가입니다. 저장·공유(DM 보내기)·친구 태그가 잘 나오는 캐러셀 주제를 기획합니다. 반드시 JSON 객체 하나만 출력합니다. 한국어로 씁니다.`;
+  const system = `당신은 인스타그램 성장 전략가입니다. 정보가 구체적인 캐러셀 주제를 기획합니다. ${HOOK_RULES} 반드시 JSON 객체 하나만 출력합니다. 한국어로 씁니다.`;
   const prompt = `[계정 분야] ${n}${blog ? ` (연결 블로그: ${blog.name})` : ""}
 [오늘] ${today}
 [곧 다가오는 시즌] ${soon.join(", ") || "(없음)"}

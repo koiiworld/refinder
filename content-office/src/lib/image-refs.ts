@@ -166,5 +166,7 @@ export async function prepareImage(input: { modelId: string; prompt: string; blo
   const sent = info?.provider === "higgsfield" ? refUrls.length : refIds.length;
   // 스타일 문구도 한국어면 영어로 (키트에는 적은 그대로 둠)
   const style = r.style ? (await toEnglishPrompt(r.style, input.projectId)).prompt : "";
-  return { basePrompt: en.prompt, translated: en.translated, prompt: withStyle(en.prompt, style, sent), refIds, refUrls, soulId, note };
+  const { learningContext } = await import("./learning-context");
+  const learned = await learningContext("image");
+  return { basePrompt: en.prompt, translated: en.translated, prompt: withStyle(en.prompt, style, sent) + learned, refIds, refUrls, soulId, note };
 }

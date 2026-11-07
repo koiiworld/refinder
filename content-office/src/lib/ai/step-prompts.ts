@@ -1,3 +1,4 @@
+import { HOOK_RULES } from "../hook-rules";
 import type { Blog } from "../types";
 import { blogContext, styleSamplesText } from "./prompts";
 
@@ -36,7 +37,7 @@ const briefText = (b?: import("../posts-types").PostBrief) =>
   b ? `\n[이 글의 기획 - 핫이슈 리포트에서 블로그 주인이 승인한 글감]\n이슈: ${b.issue}\n추천 제목: ${b.title}\n선정 이유: ${b.why}\n콘텐츠 방향: ${b.direction}\n원출처: ${b.sources.map((s) => `${s.title} (${s.url})`).join(" / ") || "(없음)"}\n` : "";
 
 export function titlesPrompt(blog: Blog, keywords: string[], related: { keyword: string; total: number }[], written: string[] = [], brief?: import("../posts-types").PostBrief) {
-  const system = `당신은 네이버·구글 SEO 제목 전문가입니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
+  const system = `당신은 네이버·구글 SEO 제목 전문가입니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}\n${HOOK_RULES}`;
   const prompt = `${blogContext(blog)}
 ${styleSamplesText(blog)}
 [사용자가 고른 키워드 - 첫 번째가 메인]

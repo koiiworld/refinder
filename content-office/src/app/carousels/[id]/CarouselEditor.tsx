@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/components/client-utils";
 import type { Carousel, CarouselStyle, Slide } from "@/lib/carousel";
+import DesignPicker from "../DesignPicker";
 import { canvasBlob, FONT, renderSlide } from "../render";
 
 const TEMPLATES: { id: CarouselStyle["template"]; label: string }[] = [
@@ -51,7 +52,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
   const router = useRouter();
   const [c, setC] = useState(initial);
   const [slides, setSlides] = useState<Slide[]>(initial.slides);
-  const [style, setStyle] = useState<CarouselStyle>({ template: initial.style?.template ?? "photo", accent: initial.style?.accent ?? "#ff6b35", handle: initial.style?.handle ?? "" });
+  const [style, setStyle] = useState<CarouselStyle>({ ...initial.style, template: initial.style?.template ?? "photo", accent: initial.style?.accent ?? "#ff6b35", handle: initial.style?.handle ?? "" });
   const [caption, setCaption] = useState(initial.caption);
   const [tags, setTags] = useState(initial.hashtags.map((h) => "#" + h).join(" "));
   const [feedback, setFeedback] = useState("");
@@ -79,6 +80,10 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
     setTags(next.hashtags.map((h) => "#" + h).join(" "));
     setDirty(false);
   }
+  const setAccent = (accent: string) => {
+    setStyle(cur=>({...cur,accent,design:cur.design ? {...cur.design,accent} : cur.design}));
+    setHex(accent); setDirty(true);
+  };
   const edit = (i: number, patch: Partial<Slide>) => {
     setSlides((s) => s.map((x, k) => (k === i ? { ...x, ...patch } : x)));
     setDirty(true);
@@ -243,11 +248,11 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
         {msg && <div className={`notice ${msg.ok ? "notice-ok" : "notice-bad"} small`}>{msg.text}</div>}
         <div className="row" style={{ gap: 8 }}>
           {TEMPLATES.map((t) => (
-            <button key={t.id} className={`btn btn-sm ${style.template === t.id ? "btn-primary" : ""}`} onClick={() => { setStyle({ ...style, template: t.id }); setDirty(true); }}>{t.label}</button>
+            <button key={t.id} className={`btn btn-sm ${style.template === t.id ? "btn-primary" : ""}`} onClick={() => { setStyle({ ...style, template: t.id, design: null, designRef: "" }); setDirty(true); }}>{t.label}</button>
           ))}
           <span className="small row" style={{ gap: 4, flexWrap: "nowrap" }}>
             강조색
-            <input type="color" value={style.accent} onChange={(e) => { setStyle({ ...style, accent: e.target.value }); setHex(e.target.value); setDirty(true); }} aria-label="강조색 고르기" />
+            <input type="color" value={style.accent} onChange={(e) => { setAccent(e.target.value); }} aria-label="강조색 고르기" />
             <input
               className="input"
               style={{ width: 92, fontFamily: "monospace", padding: "4px 8px" }}
@@ -256,14 +261,14 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
                 const v = e.target.value.trim();
                 setHex(v);
                 const m = /^#?([0-9a-f]{6})$/i.exec(v);
-                if (m) { setStyle({ ...style, accent: `#${m[1].toLowerCase()}` }); setDirty(true); }
+                if (m) { setAccent(`#${m[1].toLowerCase()}`); }
               }}
               placeholder="#ff6b35"
               aria-label="강조색 HEX"
               title="HEX 색상 코드 (예: #ff6b35)"
             />
             {["#ff6b35", "#2f6bff", "#16a34a", "#e11d48", "#111827", "#f59e0b"].map((col) => (
-              <button key={col} type="button" onClick={() => { setStyle({ ...style, accent: col }); setHex(col); setDirty(true); }} aria-label={`강조색 ${col}`} title={col} style={{ width: 18, height: 18, borderRadius: 9, border: style.accent === col ? "2px solid var(--text)" : "1px solid var(--line)", background: col, cursor: "pointer", padding: 0 }} />
+              <button key={col} type="button" onClick={() => { setAccent(col); }} aria-label={`강조색 ${col}`} title={col} style={{ width: 18, height: 18, borderRadius: 9, border: style.accent === col ? "2px solid var(--text)" : "1px solid var(--line)", background: col, cursor: "pointer", padding: 0 }} />
             ))}
           </span>
           <input className="input" style={{ maxWidth: 180 }} placeholder="@인스타 계정 (선택)" value={style.handle} onChange={(e) => { setStyle({ ...style, handle: e.target.value }); setDirty(true); }} aria-label="인스타 계정" />
@@ -292,11 +297,12 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
           </div>
         )}
         <div className="row" style={{ flexWrap: "nowrap", gap: 8 }}>
-          <input className="input" placeholder="AI에게 수정 요청 (예: 표지를 더 자극적으로 / 7장으로 줄여줘 / 준비물 체크리스트 추가)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+          <input className="input" placeholder="AI에게 수정 요청 (예: 표지에서 얻는 정보를 더 명확히 / 7장으로 줄여줘 / 준비물 체크리스트 추가)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
           <button className="btn" disabled={!!busy} onClick={regenerate}>{busy === "ai" ? <><span className="spinner" /> 만드는 중…</> : "🔄 AI 다시 만들기"}</button>
         </div>
       </section>
 
+      {slides[0] && <DesignPicker total={slides.length} style={style} slide={slides[0]} img={slides[0].image != null ? imgs[slides[0].image] ?? null : null} disabled={!!busy} onChoose={next=>{setStyle(next);setHex(next.accent);setDirty(true);}} />}
       <section className="card card-pad stack" style={{ gap: 8 }}>
         <div className="row between">
           <b className="small">사진 ({c.images.length})</b>

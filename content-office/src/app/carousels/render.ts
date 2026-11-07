@@ -1,4 +1,5 @@
 // 캐러셀 한 장을 1080×1350(인스타 세로 4:5) 캔버스에 그림 — 미리보기와 저장에 같은 함수를 써서 보이는 그대로 저장
+import { cleanRecipe } from "@/lib/carousel-design-types";
 import type { CarouselStyle, Slide } from "@/lib/carousel";
 
 export const W = 1080;
@@ -92,6 +93,7 @@ export function renderSlide(canvas: HTMLCanvasElement, slide: Slide, index: numb
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
+  if (style.design) { renderLearned(ctx, slide, index, total, img, style); return; }
   const accent = style.accent || "#ff6b35";
   const pad = 88;
   const big = slide.kind === "cover";
@@ -218,4 +220,32 @@ export function renderSlide(canvas: HTMLCanvasElement, slide: Slide, index: numb
 
 export function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((ok, no) => canvas.toBlob((b) => (b ? ok(b) : no(new Error("이미지 만들기 실패"))), "image/png"));
+}
+
+/** 학습한 색·여백·글자 크기를 실제 내보내기에도 반영 */
+function renderLearned(ctx: CanvasRenderingContext2D, slide: Slide, index: number, total: number, img: HTMLImageElement | null, style: CarouselStyle) {
+  const d = cleanRecipe(style.design), pad = d.spacing === "airy" ? 100 : 64;
+  const weight = d.typography === "strong" ? 900 : 600;
+  ctx.textBaseline = "top"; ctx.textAlign = "left";
+  ctx.fillStyle=d.background; ctx.fillRect(0,0,W,H);
+  let y = slide.kind === "cover" ? 260 : 220;
+  if(d.layout === "editorial") {
+    ctx.fillStyle=d.accent; ctx.fillRect(pad,130,90,12);
+    if(img) { ctx.save();roundRect(ctx,W-pad-380,130,380,310,20);ctx.clip();cover(ctx,img,W-pad-380,130,380,310);ctx.restore();y=510; }
+  } else if(d.layout === "split") {
+    if(img) {cover(ctx,img,0,0,W,500);y=560;}
+    else {ctx.fillStyle=d.accent;ctx.fillRect(0,0,W,160);y=250;}
+  } else {
+    ctx.fillStyle=d.accent; ctx.globalAlpha=0.13;ctx.beginPath();ctx.arc(W,0,650,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+    if(img) {ctx.save();roundRect(ctx,pad,130,W-pad*2,360,60);ctx.clip();cover(ctx,img,pad,130,W-pad*2,360);ctx.restore();y=550;}
+  }
+  const width=W-pad*2, maxHead=img?3:4;
+  const head=fitLines(ctx,slide.headline,weight,slide.kind==="cover"?112:86,width,maxHead);
+  ctx.fillStyle=d.foreground;ctx.font=`${weight} ${head.size}px ${FONT}`;
+  y=drawText(ctx,head.lines,pad,y,head.size,1.18)+36;
+  const remaining=Math.max(1,Math.floor((H-150-y)/(42*1.4)));
+  const body=fitLines(ctx,slide.body,500,42,width,remaining);
+  ctx.font=`500 ${body.size}px ${FONT}`;drawText(ctx,body.lines,pad,y,body.size,1.4);
+  ctx.font=`600 30px ${FONT}`;ctx.fillText(style.handle ? '@'+style.handle.replace(/^@/,'') : '넘겨보세요 →',pad,H-85);
+  ctx.textAlign="right";ctx.fillText(`${index+1} / ${total}`,W-pad,H-85);ctx.textAlign="left";
 }

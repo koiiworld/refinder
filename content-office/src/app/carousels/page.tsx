@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { q } from "@/lib/db";
 import { listBlogs } from "@/lib/repo";
 import { naverPostStats, recentPosts } from "@/lib/blog-posts";
@@ -44,6 +45,7 @@ export default async function Carousels({ searchParams }: { searchParams: Promis
           <p className="sub">블로그 글을 카드뉴스로 바꾸거나, 저장·공유가 잘 되는 주제로 따로 만들어요. 이미지는 폰·컴퓨터 브라우저에서 바로 만들어 저장합니다.</p>
         </div>
       </div>
+      <Link href="/learn/design" className="btn">📚 AI 학습지 · 디자인 참고 자료 넣기</Link>
       <NewCarousel posts={posts} published={published} blogs={blogs} made={JSON.parse(JSON.stringify(made))} formats={FORMATS.map((f) => ({ id: f.id, label: f.label }))} defaultFrom={sp.from} defaultBlog={sp.blog} />
     </div>
   );

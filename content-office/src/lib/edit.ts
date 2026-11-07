@@ -23,7 +23,7 @@ const HOME = os.homedir();
 const RUNTIME = () => process.env.REMOTION_RUNTIME || path.join(HOME, ".ai-content-office", "remotion-runtime");
 const WHISPER_PY = () => process.env.WHISPER_PYTHON || path.join(HOME, ".ai-content-office", "whisper-venv", "bin", "python");
 const WHISPER_SCRIPT = () => process.env.WHISPER_SCRIPT || path.join(process.cwd(), "scripts", "transcribe.py");
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CHROME = process.env.REMOTION_BROWSER || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const sid = () => Math.random().toString(36).slice(2, 9);
 const r2 = (n: number) => Math.round(n * 100) / 100;
 

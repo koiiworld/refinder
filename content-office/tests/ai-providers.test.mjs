@@ -1905,3 +1905,76 @@ test("🎞 영상 편집 2단계 (맥 AI 도구): 배경 제거(투명 영상) �
   assert.equal(e.doc.texts.filter((x) => /감자전|안녕하세요/.test(x.text)).length, 2, "문장마다 자막");
   await call("/api/trash", "POST", { action: "trash", ids: [id] });
 });
+
+test("📚 AI 학습지: 링크 가져오기·복수 이미지·비용 확인·기타 자동 배정·재학습 중복 과금 방지", async()=>{
+  const hub=await (await fetch(`${BASE}/learn`)).text();
+  for(const word of ["AI 학습지","후킹 문구","이미지 생성","디자인","블로그","기타","과제물"]) assert.ok(hub.includes(word),word);
+  await call('/__reset','POST',undefined,MOCK);
+  const imported=await call('/api/learn','POST',{category:'other',url:'https://www.instagram.com/p/multi/?igsh=test',title:'전체학습자료',note:'여백과 구체적인 표지가 좋아요'});
+  assert.equal(imported.status,201,JSON.stringify(imported.data));
+  const id=imported.data.id; assert.equal(imported.data.images.length,2); assert.equal(imported.data.analysis,null);
+  assert.ok(!(await mockLog()).some(l=>l.path.includes('generateContent')||l.path.includes('/chat/completions')),"자료 수집만으로 AI 호출 금지");
+  const image=await fetch(BASE+imported.data.images[0]);assert.equal(image.status,200);assert.match(image.headers.get('cache-control'),/private/);
+  assert.equal((await call(`/api/learn/${id}`,'POST',{})).status,400,"분석 동의 필요");
+  await call(`/api/learn/${id}`,'PATCH',{favorite:true,note:'학습 전 취향 메모'});
+  const analyzed=await call(`/api/learn/${id}`,'POST',{confirm:true});assert.equal(analyzed.status,200,JSON.stringify(analyzed.data));
+  assert.deepEqual(analyzed.data.analysis.categories,['hook','image','design','blog']);assert.match(analyzed.data.analysis.lessons.hook[0],/후킹학습마커/);
+  const requests=await mockLog(); const analysis=requests.find(l=>JSON.stringify(l.body).includes('AI 학습지의'));
+  assert.ok(analysis&&JSON.stringify(analysis.body).includes('image/jpeg'),"실제 가져온 이미지를 AI에 전달");
+  const before=requests.filter(l=>JSON.stringify(l.body).includes('AI 학습지의')).length;
+  await call(`/api/learn/${id}`,'POST',{confirm:true});
+  assert.equal((await mockLog()).filter(l=>JSON.stringify(l.body).includes('AI 학습지의')).length,before,"완료된 자료는 재호출 없음");
+  const listing=(await call('/api/learn')).data; assert.ok(listing.items.some(x=>x.id===id));assert.equal(typeof listing.estimate.usd,'number');
+});
+
+test("📚 공개 링크 안전성·핀터레스트·캡처 대체·수동 분류", async()=>{
+  for(const url of ['http://127.0.0.1:4110/p/learn/','https://www.instagram.com.evil.test/p/learn/','https://www.instagram.com@evil.test/p/learn/','file:///etc/passwd']) assert.equal((await call('/api/learn','POST',{url})).status,400,url);
+  assert.equal((await call('/api/learn','POST',{url:'https://www.instagram.com/p/blocked/'})).status,400,"로그인 제한은 실패로 안내");
+  const pin=await call('/api/learn','POST',{url:'https://www.pinterest.com/pin/123456789/',category:'design',title:'핀 디자인'});assert.equal(pin.status,201,JSON.stringify(pin.data));assert.equal(pin.data.images.length,1);
+  const analyzed=(await call(`/api/learn/${pin.data.id}`,'POST',{confirm:true})).data;assert.deepEqual(analyzed.analysis.categories,['design'],"사용자가 고른 분야 존중");
+  const updated=await call(`/api/learn/${pin.data.id}`,'PATCH',{categories:['hook','design'],favorite:true,note:'학습취향마커'});assert.equal(updated.data.favorite,true);assert.deepEqual(updated.data.analysis.categories,['hook','design']);
+  const image=await fetch(`${MOCK}/img/capture.jpg`);const dataUrl='data:image/jpeg;base64,'+Buffer.from(await image.arrayBuffer()).toString('base64');
+  const capture=await call('/api/learn','POST',{category:'image',images:[dataUrl],title:'캡처 대체'});assert.equal(capture.status,201);assert.equal(capture.data.source_url,'');
+  assert.equal((await call('/api/learn','POST',{images:['data:text/html;base64,PHNjcmlwdD4=']})).status,400);
+  assert.equal((await call(`/api/learn/${pin.data.id}/image?index=99`)).status,404);
+});
+
+test("📋 학습 과제: 완료·되돌리기·할 일/아이디어 등록·동시 중복 방지·외부 발송 없음",async()=>{
+  const tasks=(await call('/api/learn/tasks')).data;const chosen=tasks.find(t=>t.source_title==='전체학습자료');assert.ok(chosen);
+  for(const kind of ['required','study','setup','direction'])assert.ok(tasks.some(t=>t.kind===kind));
+  let r=await call('/api/learn/tasks','POST',{ids:[chosen.id],action:'complete',done:true});assert.equal(r.data.find(t=>t.id===chosen.id).done,true);
+  await call('/api/learn/tasks','POST',{ids:[chosen.id],action:'complete',done:false});
+  await call('/__reset','POST',undefined,MOCK);
+  const sent=await Promise.all([1,2].map(()=>call('/api/learn/tasks','POST',{ids:[chosen.id],action:'todo'})));assert(sent.every(r=>r.status===200));
+  r=await call('/api/learn/tasks','POST',{ids:[chosen.id],action:'idea'});const result=r.data.find(t=>t.id===chosen.id);assert.ok(result.todo_id&&result.idea_id);assert.equal(result.done,false);
+  const todos=(await call('/api/todos')).data;assert.equal(todos.filter(t=>t.id===result.todo_id).length,1);assert.equal(todos.find(t=>t.id===result.todo_id).notify,false);
+  const ideas=(await call('/api/ideas')).data;assert.equal(ideas.filter(t=>t.id===result.idea_id).length,1);
+  assert.ok(!(await mockLog()).some(l=>l.path.includes('sendMessage')||JSON.stringify(l.body).includes('AI 학습지의')),"이동은 AI·텔레그램 호출 없음");
+  assert.equal((await call('/api/learn/tasks','POST',{ids:['missing'],action:'todo'})).status,400);
+});
+
+test("📚 학습 결과를 캐러셀 후킹·블로그·이미지 프롬프트에 반영하고 사용 끄면 제외",async()=>{
+  const refs=(await call('/api/learn')).data.items; const ref=refs.find(x=>x.title==='전체학습자료');
+  const c=(await call('/api/carousels','POST',{topic:'김밥 준비 방법'})).data;
+  assert.match(await stepPrompt('카드뉴스) 카피라이터'),/후킹학습마커/);
+  assert.match(JSON.stringify(await mockLog()),/과장 없이/);
+  await call(`/api/carousels/${c.id}`,'POST',{action:'hooks'});assert.match(await stepPrompt('표지 카피라이터'),/원문 근거/);assert.match(await stepPrompt('표지 카피라이터'),/후킹학습마커/);
+  const pick=await call('/api/keywords','POST',{action:'add',blogId:'blog_algokitchen',keyword:'김밥 학습 확인'});
+  const post=await call('/api/posts','POST',{blogId:'blog_algokitchen',pickIds:[pick.data.id]});
+  await waitPost(post.data.ids[0],b=>b.project.stage==='titles'&&idle(b),'학습 반영 제목');
+  assert.match(await stepPrompt('SEO 제목 전문가'),/블로그학습마커/);assert.match(await stepPrompt('SEO 제목 전문가'),/후킹학습마커/);
+  const posts=(await call('/api/posts')).data.filter(p=>p.stage==='ready');
+  const imagePost=posts[0].id;
+  await call(`/api/posts/${imagePost}`,'POST',{action:'image_prompt',index:0,prompt:'작은 몸집에 큰 머리 토끼 건축가'});
+  assert.match(await stepPrompt('expert prompt writer'),/ImageLearningMarker/);
+  const grounded=(await call(`/api/carousels/${c.id}`,'POST',{action:'regenerate',feedback:'후킹검증_과장'})).data;
+  assert.deepEqual(grounded.style.hooks,['김밥 준비 순서']);assert.equal(grounded.slides[0].headline,'김밥 준비 방법');assert.equal(grounded.slides[0].body,'');
+  // 디자인 값 저장·로드·기존 틀로 복귀. 원본 이미지·원고는 그대로.
+  const recipe=ref.analysis.recipe;
+  const saved=await call(`/api/carousels/${c.id}`,'PUT',{style:{design:recipe,designRef:ref.id}});assert.deepEqual(saved.data.style.design,recipe);
+  const page=await (await fetch(`${BASE}/carousels/${c.id}`)).text();assert.ok(page.includes('디자인 학습 시안'));
+  const cleared=await call(`/api/carousels/${c.id}`,'PUT',{style:{design:null,designRef:''}});assert.equal(cleared.data.style.design,null);
+  for(const r of refs.filter(r=>r.analysis?.categories.includes('hook')))await call(`/api/learn/${r.id}`,'PATCH',{enabled:false});
+  await call(`/api/carousels/${c.id}`,'POST',{action:'regenerate'});assert.doesNotMatch(await stepPrompt('카드뉴스) 카피라이터'),/후킹학습마커|학습취향마커/);
+  await call(`/api/learn/${ref.id}`,'PATCH',{enabled:true});
+});

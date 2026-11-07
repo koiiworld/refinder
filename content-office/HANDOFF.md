@@ -4,6 +4,21 @@
 
 ## ★ 지금 바로 이어서 (2026-11-07 밤, Claude 마지막 상태)
 
+### Codex 추가 작업 (2026-11-08)
+- **AI 학습지 `/learn`**: 후킹 문구·이미지 생성·디자인·블로그·기타(`/learn/[category]`), **과제물 `/learn/tasks`**. 기타는 AI가 복수 분야에 배정, 사용자가 수정 가능.
+- 링크 수집: 공개 인스타 게시물/릴스의 정지 이미지, 핀터레스트 핀·pin.it, 네이버/티스토리 본문. 로그인 우회 없음. 막히면 PNG/JPG/WEBP 캡처(최대 6장, 장당 4MB). 읽힌 이미지 수를 표시하며 전체 게시물·인기도·최신 유행을 봤다고 주장하지 않음.
+- 자료 가져오기는 AI 호출 없음 → 예상 비용(달러/원화)을 보고 학습 버튼으로 분석. 설정의 **릴스 분석 AI**를 재사용(기본 무료 Gemini 텍스트 키). 유료 AI로 자동 대체·자동 재시도 없음. 완료 자료 재클릭은 기존 결과 반환. 실제 유료 API 호출은 개발 검증에서 하지 않음.
+- `ai_learning_refs`(분야·비공개 원본 이미지·원칙·좋아한 점·선호/켜기), `ai_learning_tasks`(체크·할 일/아이디어 연결) 표 추가. 자료 이미지 `/api/learn/[id]/image`는 로그인 보호. 기존 공개 이미지 API에 저장하지 않음.
+- 학습 원칙은 켜진 자료 중 선호·최근 자료를 분야별 최대 3개 참고. `learning-context.ts` → 캐러셀/SEO 제목/블로그 작성·검수/이미지 프롬프트. 원문 수치·고유 문구는 다른 콘텐츠의 근거로 복사하지 않음. 현재 요청·블로그 설정 우선.
+- 캐러셀 편집기: 학습한 디자인의 실제 배색·여백·글자 강약·배치(editorial/split/poster)를 캔버스에 반영. 기존/학습/변형 3시안 비교는 AI 호출 없음, 선택 후 저장. 기존 틀로 돌아갈 땐 `design:null`로 해제.
+- 후킹: 과장·공포·근거 없는 수치 금지 프롬프트, 대표 과장 표현/원문에 없는 숫자 후보 제외. 완전한 사실 검증기는 아니므로 최종 문구를 확인할 것.
+- 과제는 같은 학습 호출에서 제안. 필수 점검/더 공부/설정/방향. 선택해서 오늘 할 일·아이디어로 보내며 중복 생성 방지. 실제 키·결제·삭제·알림은 실행하지 않음. 과제 체크와 할 일 완료는 별개.
+- 격리 테스트를 Linux/macOS 공용으로 수정: 복사 시 node_modules 심볼릭 링크 보존(절대 경로가 되면 React가 중복 로드됨), 실제 키·DB 제외, 각 테스트의 실패 종료 상태 보존. 로컬 비전 모델은 명시적 모의 프로세스(`tests/fake-visual-tool.cjs`)로 파일 변환/큐 통합 검증, 실제 모델 품질 검증과 구분. Remotion·MarkItDown은 실제 도구 사용. 실제 비전 도구로도 실행하려면 `AI_TOOLS_PYTHON`, `ESRGAN_BIN`, `RIFE_BIN` 지정.
+- Linux 테스트의 선택 환경: `REMOTION_RUNTIME`(@remotion/bundler·renderer 4.0.538), `REMOTION_BROWSER`(Chromium 경로), `MARKITDOWN_BIN`. 맥 기본 경로는 유지. 실제 맥 프로세스 재시작은 클라우드에서 할 수 없음.
+- 검증: 빌드·격리 테스트 10 + 64 통과. Playwright로 다섯 분야·캡처 저장·과제 체크/이동·디자인 미리보기/저장/복귀·390px 모바일 너비 확인. API/로컬 AI 모의, Remotion/MarkItDown 실제. Render 완료 확인은 클라우드 네트워크의 onrender.com 차단으로 미확인(허용 초안 추가).
+- **앱 내 ChatGPT chat/work 기능은 아직 미구현**: 사용자와 모델·비용 범위를 먼저 정해야 함.
+
+
 - 저장소: `https://github.com/koiiworld/refinder` · 브랜치 **`feature/ai-content-office`** · 앱 폴더 **`/Users/minemone/project/refinder/content-office`** (이 맥 폴더가 기준)
 - 배포: 이 브랜치에 push 하면 **Render 자동 배포**. 맥 앱 재시작: `osascript -e 'tell application "Terminal" to do script "zsh ~/.ai-content-office/restart-app.sh"'`
 - 사용자 허락: **사용자가 요청한 변경은 테스트 통과 후 바로 배포(push)해도 됨.** 키·외부 결제·운영 데이터 삭제는 물어볼 것.
