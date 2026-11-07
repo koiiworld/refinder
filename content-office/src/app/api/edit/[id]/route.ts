@@ -1,5 +1,5 @@
 import { body, fail, handle, ok, type Ctx } from "@/lib/api";
-import { deleteEdit, getEdit, saveEdit, startCaptions, startEditRender, startReverse } from "@/lib/edit";
+import { deleteEdit, getEdit, saveEdit, startCaptions, startClipFx, startEditRender, startReverse, startTts } from "@/lib/edit";
 import type { EditDoc } from "@/remotion/edit-types";
 
 export async function GET(_req: Request, ctx: Ctx) {
@@ -23,11 +23,13 @@ export async function PUT(req: Request, ctx: Ctx) {
 export async function POST(req: Request, ctx: Ctx) {
   return handle(async () => {
     const id = (await ctx.params).id;
-    const b = await body<{ action?: string; resolution?: string; clipId?: string }>(req);
+    const b = await body<{ action?: string; resolution?: string; clipId?: string; itemId?: string; fx?: string; text?: string; voice?: string; rate?: number; start?: number; captions?: boolean }>(req);
     try {
       if (b.action === "render") await startEditRender(id, String(b.resolution ?? "1080p"));
       else if (b.action === "captions") await startCaptions(id);
       else if (b.action === "reverse") await startReverse(id, String(b.clipId ?? ""));
+      else if (b.action === "fx") await startClipFx(id, String(b.itemId ?? ""), String(b.fx ?? ""));
+      else if (b.action === "tts") await startTts(id, b);
       else return fail("알 수 없는 작업이에요.");
       return ok(await getEdit(id));
     } catch (e) {

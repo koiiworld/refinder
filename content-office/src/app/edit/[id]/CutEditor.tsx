@@ -11,7 +11,13 @@ import { clipLen, clipStarts, editDuration, FILTERS, RATIO_SIZE, TRANSITIONS, ty
 type Media = { id: string; title: string; duration: number | null; thumb: boolean; kind: string };
 type Info = { id: string; title: string; status: string; message: string; output_video_id: string | null };
 type Sel = { kind: "clip" | "text" | "overlay" | "audio"; id: string } | null;
-type Panel = null | "media" | "audio" | "text" | "effect" | "overlay" | "caption" | "filter" | "ratio" | "bg" | "speed" | "volume" | "zoom" | "export";
+type Panel = null | "media" | "audio" | "text" | "effect" | "overlay" | "caption" | "filter" | "ratio" | "bg" | "speed" | "volume" | "zoom" | "export" | "hd" | "slow" | "tts";
+/** AI 음성 목소리 (서버 lib/edit.ts VOICES 와 같게) */
+const VOICE_LIST = [
+  { id: "ko-KR-SunHiNeural", label: "선희 (여성)" },
+  { id: "ko-KR-InJoonNeural", label: "인준 (남성)" },
+  { id: "ko-KR-HyunsuMultilingualNeural", label: "현수 (남성·다국어)" },
+];
 
 const sid = () => Math.random().toString(36).slice(2, 9);
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -43,6 +49,10 @@ const IC: Record<string, string> = {
   redo: "M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3",
   mute: "M4 9v6h4l5 4V5L8 9H4zM17 9l4 6M21 9l-4 6",
   sound: "M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6",
+  cutout: "M12 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 20c0-3.3 2.7-6 6-6s6 2.7 6 6M3 3h3M18 3h3M3 21h3M18 21h3",
+  hd: "M3 5h18v14H3zM7 9v6M7 12h3M10 9v6M14 9v6h2a3 3 0 0 0 0-6h-2z",
+  slow: "M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 7v5l-3 2",
+  voice: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
 };
 function Ico({ n, s = 24 }: { n: string; s?: number }) {
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={IC[n]} /></svg>;
@@ -57,6 +67,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   const [save, setSave] = useState<"saved" | "dirty" | "saving" | "error">("saved");
   const [sel, setSel] = useState<Sel>(null);
   const [panel, setPanel] = useState<Panel>(null);
+  const [tts, setTts] = useState({ text: "", voice: VOICE_LIST[0].id, rate: 0, captions: true });
   const [frame, setFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [media, setMedia] = useState(initialMedia);
@@ -298,11 +309,13 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   const half = tlW / 2;
   const clipTools: [string, string, () => void][] = [
     ["split", "분할", split], ["speed", "속도", () => setPanel("speed")], ["volume", "볼륨", () => setPanel("volume")], ["filter", "필터", () => setPanel("filter")], ["effect", "전환", () => setPanel("effect")],
-    ["zoom", "줌·키프레임", () => setPanel("zoom")], ["reverse", "역재생", () => selClip && mac({ action: "reverse", clipId: selClip.id })], ["copy", "복제", duplicate], ["left", "앞으로", () => moveClip(-1)], ["right", "뒤로", () => moveClip(1)], ["trash", "삭제", remove],
+    ["zoom", "줌·키프레임", () => setPanel("zoom")], ["reverse", "역재생", () => selClip && mac({ action: "reverse", clipId: selClip.id })],
+    ["cutout", "배경 제거", () => selClip && confirm(`이 클립의 배경을 지우고 사람만 남길까요?\n맥에서 1초에 15장씩 처리해요 (10초 클립이면 약 3분, 무료). 최대 20초.`) && mac({ action: "fx", itemId: selClip.id, fx: "bgremove" })],
+    ["hd", "화질 업", () => setPanel("hd")], ["slow", "슬로모션", () => setPanel("slow")], ["copy", "복제", duplicate], ["left", "앞으로", () => moveClip(-1)], ["right", "뒤로", () => moveClip(1)], ["trash", "삭제", remove],
   ];
   const mainTools: [string, string, () => void][] = [
     ["edit", "편집", () => { if (doc.clips[clipAt(t)]) setSel({ kind: "clip", id: doc.clips[clipAt(t)].id }); }],
-    ["audio", "오디오", () => setPanel("audio")], ["text", "텍스트", addText], ["effect", "편집효과", () => { if (doc.clips[clipAt(t)]) { setSel({ kind: "clip", id: doc.clips[clipAt(t)].id }); setPanel("effect"); } }],
+    ["audio", "오디오", () => setPanel("audio")], ["voice", "AI 음성", () => setPanel("tts")], ["text", "텍스트", addText], ["effect", "편집효과", () => { if (doc.clips[clipAt(t)]) { setSel({ kind: "clip", id: doc.clips[clipAt(t)].id }); setPanel("effect"); } }],
     ["overlay", "오버레이", () => setPickFor("overlay")], ["caption", "캡션", () => setPanel("caption")], ["filter", "필터", () => setPanel("filter")], ["ratio", "비율", () => setPanel("ratio")], ["bg", "배경", () => setPanel("bg")],
   ];
 
@@ -400,7 +413,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       {/* 아래 패널 */}
       {panel && (
         <div className="cut-panel">
-          <div className="cut-panel-head"><b>{{ media: "", audio: "오디오", text: "텍스트", effect: "전환 효과", overlay: "오버레이", caption: "캡션", filter: "필터", ratio: "비율", bg: "배경", speed: "속도", volume: "볼륨", zoom: "줌 · 키프레임", export: "" }[panel]}</b><button className="cut-icon" onClick={() => setPanel(null)}>✓</button></div>
+          <div className="cut-panel-head"><b>{{ media: "", audio: "오디오", text: "텍스트", effect: "전환 효과", overlay: "오버레이", caption: "캡션", filter: "필터", ratio: "비율", bg: "배경", speed: "속도", volume: "볼륨", zoom: "줌 · 키프레임", export: "", hd: "화질 업 (AI)", slow: "슬로모션 (AI)", tts: "AI 음성" }[panel]}</b><button className="cut-icon" onClick={() => setPanel(null)}>✓</button></div>
           {panel === "speed" && selClip && (
             <div className="stack" style={{ gap: 8 }}>
               <div className="cut-chips">{[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4].map((v) => <button key={v} className={selClip.speed === v ? "on" : ""} onClick={() => patchClip(selClip.id, { speed: v })}>{v}x</button>)}</div>
@@ -468,7 +481,44 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
               <label className="cut-row-ctl">투명도 <input type="range" min={0} max={1} step={0.05} value={selOv.opacity} onChange={(e) => patchOv(selOv.id, { opacity: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">둥글게 <input type="range" min={0} max={100} value={selOv.radius} onChange={(e) => patchOv(selOv.id, { radius: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">소리 <input type="range" min={0} max={2} step={0.05} value={selOv.volume} onChange={(e) => patchOv(selOv.id, { volume: Number(e.target.value) })} /></label>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <button className="cut-btn" disabled={busy} onClick={() => confirm("이 오버레이의 배경을 지우고 사람만 남길까요? (맥에서 무료, 영상은 20초 이하)") && mac({ action: "fx", itemId: selOv.id, fx: "bgremove" })}>✂️ 배경 제거</button>
+                <button className="cut-btn" disabled={busy} onClick={() => setPanel("hd")}>✨ 화질 업</button>
+                {selOv.kind === "video" && <button className="cut-btn" disabled={busy} onClick={() => setPanel("slow")}>🐢 슬로모션</button>}
+              </div>
               <div className="row" style={{ gap: 6 }}><button className="cut-btn" onClick={() => setPickFor("overlay")}>＋ 하나 더</button><button className="cut-btn" onClick={duplicate}>⧉ 복제</button><button className="cut-btn" onClick={remove}>🗑 삭제</button></div>
+            </div>
+          )}
+          {(panel === "hd" || panel === "slow") && (selClip || selOv) && (() => {
+            const it = (selClip ?? selOv)!;
+            const isImg = it.kind === "image";
+            if (panel === "slow" && isImg) return <span className="cut-hint">사진에는 슬로모션을 쓸 수 없어요.</span>;
+            const opts: [string, string][] = panel === "hd" ? [["upscale2", "2배"], ["upscale4", "4배"]] : [["slow2", "2배 느리게"], ["slow4", "4배 느리게"]];
+            return (
+              <div className="stack" style={{ gap: 6 }}>
+                <div className="row" style={{ gap: 6 }}>
+                  {opts.map(([fx, l]) => <button key={fx} className="cut-btn primary" disabled={busy} onClick={() => mac({ action: "fx", itemId: it.id, fx })}>{panel === "hd" ? "✨ 화질 " : "🐢 "}{l}</button>)}
+                </div>
+                <span className="cut-hint">
+                  {panel === "hd"
+                    ? "AI가 흐린 영상·사진을 선명하게 키워요 (Real-ESRGAN, 맥에서 무료). 영상은 2배 15초·4배 10초 이하, 최대 4K. 원본은 영상공장에 그대로 남아요."
+                    : "AI가 장면 사이 그림을 새로 그려 넣어 부드러운 슬로모션을 만들어요 (RIFE, 맥에서 무료). 2배 15초·4배 8초 이하. 소리도 같이 느려져요."}
+                </span>
+              </div>
+            );
+          })()}
+          {panel === "tts" && (
+            <div className="stack" style={{ gap: 6 }}>
+              <textarea className="cut-input" rows={3} value={tts.text} onChange={(e) => setTts({ ...tts, text: e.target.value })} placeholder="읽어 줄 글 (예: 오늘은 집에서 5분 만에 만드는 감자전을 알려드릴게요!)" aria-label="AI 음성으로 읽을 글" />
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <select className="cut-input" style={{ width: "auto" }} value={tts.voice} onChange={(e) => setTts({ ...tts, voice: e.target.value })} aria-label="목소리">
+                  {VOICE_LIST.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                </select>
+                <label className="cut-row-ctl" style={{ flex: 1, minWidth: 160 }}>빠르기 {tts.rate > 0 ? "+" : ""}{tts.rate}% <input type="range" min={-30} max={50} step={5} value={tts.rate} onChange={(e) => setTts({ ...tts, rate: Number(e.target.value) })} /></label>
+                <label className="cut-hint" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}><input type="checkbox" checked={tts.captions} onChange={(e) => setTts({ ...tts, captions: e.target.checked })} /> 자막도 넣기</label>
+              </div>
+              <button className="cut-btn primary" disabled={busy || !tts.text.trim()} onClick={() => mac({ action: "tts", text: tts.text, voice: tts.voice, rate: tts.rate, start: r2(t), captions: tts.captions })}>🗣 지금 위치에 AI 음성 넣기</button>
+              <span className="cut-hint">마이크로소프트 무료 음성(edge-tts)으로 맥에서 만들어요. 인터넷 연결이 필요해요. 오디오 줄에 들어가고, 영상공장에도 남아요.</span>
             </div>
           )}
           {panel === "audio" && (
@@ -477,7 +527,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
                 <button className="cut-btn" onClick={() => setPickFor("audio")}>♪ 음악·소리 추가 (지금 위치)</button>
                 <button className="cut-btn" onClick={() => setDoc((d) => ({ ...d, muteClips: !d.muteClips }))}>{doc.muteClips ? "🔊 클립 소리 켜기" : "🔇 클립 소리 끄기"}</button>
               </div>
-              <span className="cut-hint">영상공장에 있는 영상의 소리나 올린 음악(mp3·m4a·wav)을 넣어요. 음성 합성(TTS)은 다음 단계에서.</span>
+              <span className="cut-hint">영상공장에 있는 영상의 소리나 올린 음악(mp3·m4a·wav)을 넣어요. 글을 읽어 주는 목소리는 아래 'AI 음성'에서.</span>
             </div>
           )}
           {panel === "caption" && (

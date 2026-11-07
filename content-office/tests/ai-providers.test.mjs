@@ -1850,3 +1850,49 @@ test("🔁 대시보드에서 넣은 캡처 → 같은 기준일 루틴 항목 �
   assert.ok(dash.includes("오늘 쓴 AI 비용"), "대시보드로 옮김");
   assert.ok(!(await (await fetch(`${BASE}/posts`)).text()).includes("오늘 쓴 AI 비용"), "블로그 업로드에선 뺌");
 });
+
+test("🎞 영상 편집 2단계 (맥 AI 도구): 배경 제거(투명 영상) · 슬로모션 2배 · 화질 2배 · AI 음성+자막", { timeout: 15 * 60 * 1000 }, async () => {
+  const vid = (await call("/api/videos")).data.videos.find((v) => v.status === "ready" && v.kind === "upload").id;
+  const id = (await call("/api/edit", "POST", { videoIds: [vid, vid], title: "AI 도구 시험" })).data.id;
+  let e = (await call(`/api/edit/${id}`)).data;
+  // 1초씩만 (빠르게)
+  const doc = { ...e.doc, clips: e.doc.clips.map((c) => ({ ...c, in: 0, out: 1 })) };
+  await call(`/api/edit/${id}`, "PUT", { doc });
+  const wait = async (label) => {
+    for (let i = 0; i < 600; i++) {
+      e = (await call(`/api/edit/${id}`)).data;
+      if (e.status !== "working") break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    assert.equal(e.status, "ready", `${label}: ${e.message}`);
+  };
+  assert.equal((await call(`/api/edit/${id}`, "POST", { action: "fx", itemId: doc.clips[0].id, fx: "nope" })).status, 400);
+  // 배경 제거 → 투명(알파) webm 으로 교체
+  assert.equal((await call(`/api/edit/${id}`, "POST", { action: "fx", itemId: doc.clips[0].id, fx: "bgremove" })).status, 200);
+  assert.equal((await call(`/api/edit/${id}`, "POST", { action: "fx", itemId: doc.clips[1].id, fx: "slow2" })).status, 400, "작업 중엔 다른 작업 막음");
+  await wait("배경 제거");
+  const c0 = e.doc.clips[0];
+  assert.notEqual(c0.src, vid);
+  assert.equal(c0.alpha, true);
+  const head = Buffer.from(await (await fetch(`${BASE}/api/videos/${c0.src}/file`)).arrayBuffer()).subarray(0, 4);
+  assert.equal(head.toString("hex"), "1a45dfa3", "webm(투명) 파일");
+  // 슬로모션 2배 → 길이 약 2배
+  await call(`/api/edit/${id}`, "POST", { action: "fx", itemId: e.doc.clips[1].id, fx: "slow2" });
+  await wait("슬로모션");
+  const c1 = e.doc.clips[1];
+  assert.ok(c1.out > 1.6 && c1.out < 2.6, `길이 ${c1.out}`);
+  // 화질 2배
+  const before = (await call("/api/videos")).data.videos.find((v) => v.id === c1.src);
+  await call(`/api/edit/${id}`, "POST", { action: "fx", itemId: c1.id, fx: "upscale2" });
+  await wait("화질 2배");
+  const after = (await call("/api/videos")).data.videos.find((v) => v.id === e.doc.clips[1].src);
+  assert.ok(after.width >= Math.min(before.width * 2 - 4, 3840) || after.height >= Math.min(before.height * 2 - 4, 3840), `${before.width}x${before.height} → ${after.width}x${after.height}`);
+  // AI 음성 (시험용 가짜 edge-tts) → 오디오 줄 + 문장별 자막
+  assert.equal((await call(`/api/edit/${id}`, "POST", { action: "tts", text: " " })).status, 400);
+  await call(`/api/edit/${id}`, "POST", { action: "tts", text: "안녕하세요. 오늘은 감자전을 만들어요!", voice: "ko-KR-InJoonNeural", rate: 10, start: 0.5, captions: true });
+  await wait("AI 음성");
+  const au = e.doc.audios.find((a) => a.label.startsWith("🗣"));
+  assert.ok(au && au.start === 0.5 && au.dur > 1, JSON.stringify(au));
+  assert.equal(e.doc.texts.filter((x) => /감자전|안녕하세요/.test(x.text)).length, 2, "문장마다 자막");
+  await call("/api/trash", "POST", { action: "trash", ids: [id] });
+});
