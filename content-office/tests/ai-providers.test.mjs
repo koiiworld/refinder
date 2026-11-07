@@ -1978,3 +1978,13 @@ test("📚 학습 결과를 캐러셀 후킹·블로그·이미지 프롬프트�
   await call(`/api/carousels/${c.id}`,'POST',{action:'regenerate'});assert.doesNotMatch(await stepPrompt('카드뉴스) 카피라이터'),/후킹학습마커|학습취향마커/);
   await call(`/api/learn/${ref.id}`,'PATCH',{enabled:true});
 });
+
+test("📱 전체 메뉴: 학습지·과제물까지 접근 · 하위 기능 끄기는 상위 학습지를 유지", async()=>{
+  const html=await (await fetch(`${BASE}/learn`)).text();
+  for(const link of ['/todos','/routines','/learn/tasks','/ideas','/calendar','/convert','/telegram','/study','/studio','/trash'])assert.ok(html.includes(`href="${link}"`),link);
+  assert.ok(html.includes('전체 메뉴 열기')&&html.includes('mobile-menu-title'));
+  await call('/api/settings/features','POST',{off:['/learn/tasks']});
+  const disabled=await (await fetch(`${BASE}/learn/tasks`)).text();assert.ok(disabled.includes('이 기능은 꺼져 있어요'));
+  const parent=await (await fetch(`${BASE}/learn`)).text();assert.ok(!parent.includes('이 기능은 꺼져 있어요'),'상위 학습지는 계속 사용');
+  await call('/api/settings/features','POST',{off:[]});
+});

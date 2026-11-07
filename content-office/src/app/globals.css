@@ -658,3 +658,17 @@ body:has(.cut) .main .page { max-width: none; padding: 0; }
 /* 편집기는 캡컷처럼 화면 전체 (앱 위·아래 메뉴 숨김) */
 body:has(.cut) .bottomnav, body:has(.cut) .topbar, body:has(.cut) .side { display: none !important; }
 .cut { height: 100dvh; }
+
+
+/* 모바일 전체 메뉴: 오른쪽에서 슬라이드, dialog로 초점·배경 접근 보호 */
+.mobile-drawer { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(360px, 90vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; border-left: 1px solid var(--line); background: var(--panel); color: var(--text); overflow: hidden; }
+.mobile-drawer[open] { display: flex; flex-direction: column; animation: mobile-menu-in .22s ease-out; }
+.mobile-drawer::backdrop { background: rgba(0,0,0,.45); }
+.mobile-drawer-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: max(16px, env(safe-area-inset-top)) 16px 14px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.mobile-drawer-head h2 { font-size: 19px; }
+.mobile-drawer-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 10px 12px calc(24px + env(safe-area-inset-bottom)); }
+.mobile-drawer-group { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.mobile-drawer-group h3 { font-size: 12px; color: var(--muted); padding: 0 10px 6px; }
+.mobile-drawer .nav-child { min-height: 44px; padding: 10px; }
+@keyframes mobile-menu-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .mobile-drawer[open] { animation: none; } }

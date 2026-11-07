@@ -9,6 +9,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     { href: "/todos", label: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림" },
     { href: "/routines", label: "루틴 관리", sub: "반복 업무 · 매일 알림 · 실행 기록" },
     { href: "/learn", label: "AI 학습지", sub: "후킹·이미지 생성·디자인·블로그·기타" },
+    { href: "/learn/tasks", label: "과제물", sub: "학습에서 나온 실천 과제 · 할 일·아이디어로" },
     { href: "/ideas", label: "아이디어 노트", sub: "메모·할 일·글 기획" },
     { href: "/calendar", label: "캘린더", sub: "시즌·행사별 일정" },
     { href: "/convert", label: "문서 → 마크다운", sub: "PDF·워드·PPT·엑셀을 글로 (맥, 무료)" },
@@ -49,7 +50,7 @@ export function isOffPath(off: FeatureOff, path: string) {
   const p = path === "/new" || path.startsWith("/new/") ? "/posts" : path;
   for (const g of MENU_GROUPS) {
     for (const it of g.items) {
-      if (p === it.href || p.startsWith(it.href + "/")) return off.includes(it.href) || off.includes(`g:${g.id}`);
+      if ((p === it.href || p.startsWith(it.href + "/")) && (off.includes(it.href) || off.includes(`g:${g.id}`))) return true;
     }
   }
   if (p === MENU_TOP.href || p.startsWith(MENU_TOP.href + "/")) return off.includes(MENU_TOP.href);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isOffPath, MENU_BOTTOM, MENU_GROUPS, MENU_TOP, type MenuItem } from "@/lib/menu";
 
 const P = {
@@ -53,11 +53,29 @@ export default function Nav({ pending, brand, off = [] }: { pending: number; bra
     .filter((g) => g.items.length);
   const BOTTOM = MENU_BOTTOM.map(withIcon);
   const showTop = !isOffPath(off, TOP.href);
-  const MOBILE = [...(showTop ? [TOP] : []), ...GROUPS.flatMap((g) => g.items), ...BOTTOM].filter((x) => x.mobile);
+  const available = [...(showTop ? [TOP] : []), ...GROUPS.flatMap(g=>g.items), ...BOTTOM];
+  const MOBILE = ["/work", "/posts", "/carousels", "/learn"].flatMap(href=>available.filter(it=>it.href===href));
   const b = brand ?? { name: "콘텐츠 오피스", mark: "AI", color: "" };
   const markStyle = b.color ? { background: b.color, color: "#fff" } : undefined;
   const path = usePathname();
   const activeGroup = GROUPS.find((g) => g.items.some((it) => isOn(path, it.href)))?.id;
+  const drawer = useRef<HTMLDialogElement>(null);
+  const touch = useRef<{x:number;y:number}|null>(null);
+  const [menuOpen,setMenuOpen] = useState(false);
+  const closeMenu = () => drawer.current?.close();
+  const openMenu = () => { drawer.current?.showModal(); setMenuOpen(true); };
+  useEffect(()=>{ drawer.current?.close(); },[path]);
+  useEffect(()=>{
+    const desktop=window.matchMedia("(min-width: 861px)");
+    const closeOnDesktop=()=>{if(desktop.matches)drawer.current?.close();};
+    desktop.addEventListener("change",closeOnDesktop);
+    return ()=>desktop.removeEventListener("change",closeOnDesktop);
+  },[]);
+  useEffect(()=>{
+    if(!menuOpen)return;
+    const old=document.body.style.overflow;document.body.style.overflow="hidden";
+    return ()=>{document.body.style.overflow=old;};
+  },[menuOpen]);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   useEffect(() => {
     try {
@@ -73,7 +91,7 @@ export default function Nav({ pending, brand, off = [] }: { pending: number; bra
   if (path === "/login") return null;
 
   const link = (it: Item, child = false) => (
-    <Link key={it.href} href={it.href} className={`nav-link${child ? " nav-child" : ""} ${isOn(path, it.href) ? "on" : ""}`} style={{ alignItems: "flex-start" }}>
+    <Link key={it.href} href={it.href} onClick={closeMenu} aria-current={path===it.href||(it.href==="/posts"&&path==="/new")?"page":undefined} className={`nav-link${child ? " nav-child" : ""} ${isOn(path, it.href) ? "on" : ""}`} style={{ alignItems: "flex-start" }}>
       {!child && it.icon && <Icon d={it.icon} />}
       <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <span>{it.label}</span>
@@ -118,17 +136,31 @@ export default function Nav({ pending, brand, off = [] }: { pending: number; bra
         <Link href="/" className="brand" style={{ padding: 0 }}>
           <span className="brand-mark" style={markStyle}>{b.mark}</span> {b.name}
         </Link>
+        <button type="button" className="btn btn-sm" onClick={openMenu} aria-controls="mobile-menu" aria-expanded={menuOpen} aria-label="전체 메뉴 열기">☰ 메뉴</button>
       </header>
 
-      <nav className="bottomnav" aria-label="주요 메뉴" style={{ gridTemplateColumns: `repeat(${MOBILE.length}, 1fr)` }}>
+      <nav className="bottomnav" aria-label="주요 메뉴" style={{ gridTemplateColumns: `repeat(${MOBILE.length + 1}, 1fr)` }}>
         {MOBILE.map((it) => (
-          <Link key={it.href} href={it.href} className={isOn(path, it.href) ? "on" : ""}>
+          <Link key={it.href} href={it.href} onClick={closeMenu} aria-current={path===it.href||(it.href==="/posts"&&path==="/new")?"page":undefined} className={isOn(path, it.href) ? "on" : ""}>
             <Icon d={it.icon ?? P.list} />
             {it.short ?? it.label}
             {it.badge && pending > 0 && <span className="dot">{pending}</span>}
           </Link>
         ))}
+        <button type="button" onClick={openMenu} aria-controls="mobile-menu" aria-expanded={menuOpen} className={menuOpen?"on":""} aria-label="전체 메뉴 열기"><Icon d={P.list}/>전체 메뉴</button>
       </nav>
+      <dialog ref={drawer} id="mobile-menu" className="mobile-drawer" aria-labelledby="mobile-menu-title" onClose={()=>setMenuOpen(false)}
+        onClick={e=>{if(e.target===e.currentTarget){const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeMenu();}}}
+        onTouchStart={e=>{const t=e.touches[0];touch.current=t?{x:t.clientX,y:t.clientY}:null;}}
+        onTouchEnd={e=>{const t=e.changedTouches[0],start=touch.current;touch.current=null;if(t&&start&&t.clientX-start.x>80&&Math.abs(t.clientY-start.y)<60)closeMenu();}}>
+        <div className="mobile-drawer-head"><div><h2 id="mobile-menu-title">전체 메뉴</h2><span className="tiny muted">오른쪽으로 밀어서 닫기</span></div><button type="button" className="btn" onClick={closeMenu} aria-label="전체 메뉴 닫기" autoFocus>✕ 닫기</button></div>
+        <nav className="mobile-drawer-body" aria-label="전체 메뉴 목록">
+          <Link href="/" className={`nav-link ${path==="/"?"on":""}`} onClick={closeMenu}>대시보드</Link>
+          {showTop&&link(TOP)}
+          {GROUPS.map(g=><section className="mobile-drawer-group" key={g.id}><h3>{g.label}</h3>{g.items.map(it=>link(it,true))}</section>)}
+          <section className="mobile-drawer-group"><h3>앱 관리</h3>{BOTTOM.map(it=>link(it))}</section>
+        </nav>
+      </dialog>
     </>
   );
 }
