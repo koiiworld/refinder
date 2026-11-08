@@ -2004,71 +2004,28 @@ test('📚 모든 학습은 본문의 지식·조건·근거를 정리 · 대표
   const page=await (await fetch(`${BASE}/learn/other`)).text();assert.ok(page.includes('본문·마크다운'));
 });
 
-async function waitRadar(predicate,label){const start=Date.now();let last;while(Date.now()-start<30000){last=(await call('/api/radar')).data;if(predicate(last))return last;await new Promise(r=>setTimeout(r,250));}throw Error(label+': '+JSON.stringify(last));}
-
-test('📡 트렌드 레이더: 첫 번째 카드 · 계정 주간 일정 · RSS/유튜브/인스타 새 글 본문 학습 · 중복 방지',async()=>{
-  const hub=(await (await fetch(`${BASE}/learn`)).text()).replace(/<!--.*?-->/g,'');assert(hub.indexOf('📡 트렌드 레이더')<hub.indexOf('후킹 문구 학습'));
-  let state=(await call('/api/radar')).data;assert.equal(Number(state.settings.weekly_limit),1);
-  await call('/api/settings','PUT',{stepAi:{...(await call('/api/settings')).data.stepAi,reelstudy:{provider:'google',model:'gemini-3.5-flash'}}});
-  for(const [platform,url,name] of [['rss','https://example.org/radar-feed','RSS 레이더'],['youtube','https://www.youtube.com/@radar','유튜브 레이더'],['instagram','@jisick.chanel','인스타 레이더']]){
-    const saved=await call('/api/radar','POST',{action:'source',platform,url,name,weekday:2,time:'10:30'});assert.equal(saved.status,200,JSON.stringify(saved.data));
-    const source=saved.data.sources.find(s=>s.name===name);assert.equal(source.weekday,2);assert.equal(source.time,'10:30');assert(Date.parse(source.next_run_at)>Date.now());
-    assert.equal((await call('/api/radar','POST',{action:'check',id:source.id})).status,200);
-    state=await waitRadar(s=>s.items.some(i=>i.source_id===source.id&&i.state==='learned'),name);
-    const item=state.items.find(i=>i.source_id===source.id&&i.state==='learned');const learn=(await call('/api/learn')).data.items.find(x=>x.id===item.learn_id);assert(learn.analysis.knowledge.length>0);
-    if(platform==='youtube')assert.match(item.coverage,/영상 전체·자막은 미확인/);
-    const count=state.items.filter(i=>i.source_id===source.id).length;
-    await call('/api/radar','POST',{action:'check',id:source.id});await waitRadar(s=>!s.sources.find(x=>x.id===source.id).queued_until,'중복 확인 종료');
-    state=(await call('/api/radar')).data;assert.equal(state.items.filter(i=>i.source_id===source.id).length,count);
-  }
-  const sources=state.sources;const rssItem=state.items.find(i=>i.source_id===sources.find(s=>s.platform==='rss').id);
-  assert.equal((await call('/api/radar','POST',{action:'post',source_id:sources.find(s=>s.platform==='youtube').id,url:rssItem.url})).status,400,'다른 계정에서도 같은 게시물은 중복 등록하지 않음');
-  const log=await mockLog();assert(log.some(l=>l.path.endsWith(':countTokens')),'생성 전 공식 토큰 수 확인');
-  const gen=log.filter(l=>JSON.stringify(l.body).includes('AI 학습지의')&&l.path.includes('generateContent')).at(-1);assert.equal(gen.body.generationConfig.maxOutputTokens,6000,'자동 학습 출력 토큰 제한');
-  assert(Number(state.budget.spent)+Number(state.budget.reserved)<=1,'주간 합계 한도 이내');
-});
-
-test('📡 주간 예산 예약은 동시 실행에도 한도 이내 · 부족 시 생성 호출 없음 · 본문 부족 보류 · 계정 중단',async()=>{
-  const current=(await call('/api/radar')).data;
-  const committed=Number(current.budget.spent)+Number(current.budget.reserved),limit=Math.max(.01,Math.ceil((committed+.06)*100)/100);
-  const changed=await call('/api/radar','POST',{action:'settings',weekly_limit:limit,auto_learning:true,confirm:true});assert.equal(changed.status,200,JSON.stringify(changed.data));
-  const src=(await call('/api/radar','POST',{action:'source',platform:'rss',url:'https://example.org/radar-short',name:'자료 부족'})).data.sources.find(x=>x.name==='자료 부족');
-  await call('/api/radar','POST',{action:'check',id:src.id});await waitRadar(s=>s.items.some(i=>i.source_id===src.id&&i.state==='needs_material'),'짧은 본문 보류');
-  const source=current.sources.find(s=>s.platform==='rss');const text='Fincept Terminal은 AI 금융 도구이고 LLM 데이터 비용은 별도입니다. Open-Gen-AI는 로컬 GPU 또는 클라우드 키가 필요하며 수익은 보장되지 않아요. '.repeat(3);
+test('📡 관심 계정 바로가기: 저장·수정·중복 방지, 자동 수집 API 종료',async()=>{
   await call('/__reset','POST',undefined,MOCK);
-  await Promise.all([1,2,3].map(i=>call('/api/radar','POST',{action:'post',source_id:source.id,url:`https://example.org/budget-${i}`,text})));
-  const state=await waitRadar(s=>s.items.filter(i=>i.url.includes('/budget-')).every(i=>!['new','queued','processing'].includes(i.state))&&s.items.filter(i=>i.url.includes('/budget-')).length===3,'예산 보류');
-  assert(state.items.some(i=>i.url.includes('/budget-')&&i.state==='budget'));
-  assert(Number(state.budget.spent)+Number(state.budget.reserved)<=limit+1e-9);
-  const calls=(await mockLog()).filter(l=>l.path.includes('generateContent')&&JSON.stringify(l.body).includes('AI 학습지의'));assert(calls.length<3,'부족한 항목은 생성하지 않음');
-  await call('/api/radar','POST',{action:'source',id:source.id,enabled:false});assert.equal((await call('/api/radar','POST',{action:'check',id:source.id})).status,400);
-  assert.equal((await call('/api/radar','POST',{action:'source',platform:'rss',url:'http://127.0.0.1/internal'})).status,400);
-  assert.equal((await call('/api/radar','POST',{action:'source',platform:'instagram',url:'https://www.instagram.com/p/multi/'})).status,400);
-  await call('/api/radar','POST',{action:'settings',weekly_limit:1,auto_learning:false,confirm:true});
+  for(const [platform,url,name] of [['instagram','@jisick.chanel','인스타 참고'],['youtube','https://www.youtube.com/@radar','영상 참고'],['rss','https://example.org/blog','블로그 참고']]){
+    const result=await call('/api/radar','POST',{action:'source',platform,url,name});assert.equal(result.status,200,JSON.stringify(result.data));
+    const source=result.data.sources.find(x=>x.name===name);assert(source);assert(source.url.startsWith('https://'));
+    assert.equal((await call('/api/radar','POST',{action:'source',platform,url,name})).status,400);
+    const edited=await call('/api/radar','POST',{action:'source',id:source.id,name:name+' 수정'});assert.equal(edited.status,200);assert(edited.data.sources.some(x=>x.id===source.id&&x.name===name+' 수정'));
+    assert.equal((await call('/api/radar','POST',{action:'check',id:source.id})).status,400);
+  }
+  for(const action of ['settings','supplement','retry'])assert.equal((await call('/api/radar','POST',{action,confirm:true,auto_learning:true})).status,400);
+  for(const url of ['javascript:alert(1)','http://127.0.0.1/internal','https://localhost/path'])assert.equal((await call('/api/radar','POST',{action:'source',platform:'rss',url})).status,400);
+  assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'계정 저장·수정은 외부 요청과 AI 호출 없음');
+  const hub=await (await fetch(`${BASE}/learn`)).text();assert(!hub.includes('계정·일정 등록 →'));assert(!hub.includes('href="/learn/radar"><h2>'));
+  const page=await (await fetch(`${BASE}/learn/radar`)).text();assert(page.includes('관심 계정 바로가기'));assert(page.includes('게시물 직접 추가'));assert(!page.includes('주간 자동 학습'));
 });
 
-test('📡 인스타 429: Retry-After 보존·계정 간 반복 읽기 차단·마크다운 보충 허용·AI 비용 없음',async()=>{
-  const start=(await call('/api/radar')).data;await call('/__reset','POST',undefined,MOCK);
-  const added=await call('/api/radar','POST',{action:'source',platform:'instagram',url:'@limited_account',name:'429 확인'});assert.equal(added.status,200);
-  const source=added.data.sources.find(s=>s.name==='429 확인');await call('/api/radar','POST',{action:'check',id:source.id});
-  const state=await waitRadar(s=>s.sources.find(x=>x.id===source.id)?.last_error.includes('HTTP 429'),'429 응답 반영');
-  const blocked=state.sources.find(x=>x.id===source.id);assert(Date.parse(blocked.retry_after)>Date.now()+3500*1000);assert.match(blocked.last_error,/반복 요청을 멈춰/);
-  const other=state.sources.find(x=>x.platform==='instagram'&&x.id!==source.id);
-  assert(other.retry_after,'다른 인스타 계정도 동일 서버의 보호 기간 적용');
-  const before=(await mockLog()).length;
-  const retry=await call('/api/radar','POST',{action:'check',id:source.id});assert.equal(retry.status,429);assert(retry.data.retryAt);
-  assert.equal((await call('/api/radar','POST',{action:'check',id:other.id})).status,429);
-  assert.equal((await call('/api/learn','POST',{url:'https://www.instagram.com/p/multi/',category:'other'})).status,429,'개별 게시물 읽기도 제한 존중');
-  const extra=(await mockLog()).slice(before);assert.equal(extra.filter(l=>l.path==='/limited_account/'||l.path==='/jisick.chanel/'||l.path.startsWith('/p/')).length,0,'추가 인스타 요청 없음');
-  assert.equal((await mockLog()).filter(l=>l.path.includes('generateContent')).length,0,'읽기 제한만으로 AI 호출하지 않음');
-  const markdown='Fincept Terminal은 AI 금융 도구로 소개됐고 LLM 데이터 비용은 별도입니다. '.repeat(3);
-  const supplemented=await call('/api/learn','POST',{url:'https://www.instagram.com/p/multi/',text:markdown,category:'other'});assert.equal(supplemented.status,201,'네트워크 읽기 없이 본문 보충은 허용');
-  assert.equal(supplemented.data.needs_material,false);
-  const end=(await call('/api/radar')).data;assert.equal(Number(end.budget.spent),Number(start.budget.spent));assert.equal(Number(end.budget.reserved),Number(start.budget.reserved));
-  for(const [url,name,seconds] of [['https://date.example.org/radar-date-limited','날짜 헤더',7100],['https://fallback.example.org/radar-no-retry-after','헤더 없음',3500]]){
-    const src=(await call('/api/radar','POST',{action:'source',platform:'rss',url,name})).data.sources.find(s=>s.name===name);
-    await call('/api/radar','POST',{action:'check',id:src.id});
-    const result=await waitRadar(s=>s.sources.find(x=>x.id===src.id)?.retry_after,'다른 Retry-After 형식');
-    assert(Date.parse(result.sources.find(x=>x.id===src.id).retry_after)>Date.now()+seconds*1000,name);
-  }
+test('📡 게시물 직접 추가: 본문·마크다운을 학습지에 저장, 자동 AI 학습 없음',async()=>{
+  await call('/__reset','POST',undefined,MOCK);
+  const text='Fincept Terminal은 AI 금융 도구로 소개되며 LLM 데이터 비용은 별도입니다. Open-Gen-AI는 로컬 GPU 또는 클라우드 키가 필요합니다. 수익은 보장되지 않아요. '.repeat(3);
+  const added=await call('/api/radar','POST',{action:'post',url:'https://www.instagram.com/p/multi/',text,title:'직접 넣은 게시물'});
+  assert.equal(added.status,201,JSON.stringify(added.data));assert.equal(added.data.source_text,text.trim());assert.equal(added.data.needs_material,false);assert.equal(added.data.analysis,null);
+  assert((await call('/api/learn')).data.items.some(x=>x.id===added.data.id&&x.category==='other'));
+  assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'본문 직접 저장은 수집·AI 호출 없음');
+  const result=await call(`/api/learn/${added.data.id}`,'POST',{confirm:true});assert.equal(result.status,200);assert(result.data.analysis.knowledge.length>0,'기존 비용 확인 후 수동 학습은 유지');
 });

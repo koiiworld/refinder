@@ -661,3 +661,7 @@ SELECT 'instagram.com',MAX(last_checked)+INTERVAL '1 hour' FROM radar_sources
 WHERE platform='instagram' AND last_error LIKE '%HTTP 429%' AND last_checked>NOW()-INTERVAL '1 hour'
 HAVING MAX(last_checked) IS NOT NULL
 ON CONFLICT(host) DO NOTHING;
+
+-- 레이더는 관심 계정 바로가기로 전환. 기존 자료·사용/예약 비용 기록은 보존.
+UPDATE radar_settings SET auto_learning=FALSE WHERE auto_learning=TRUE;
+UPDATE radar_sources SET enabled=FALSE WHERE enabled=TRUE;

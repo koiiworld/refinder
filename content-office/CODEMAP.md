@@ -52,7 +52,7 @@
 | `posts-types.ts` | 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) | PostPlan, PostOutline, PostBrief, PostImage, PostExtras |
 | `pricing-refresh.ts` | AI 단가 새로고침: 공개 가격표(LiteLLM model_prices_and_context_window.json)에서 각 모델 단가를 찾아 | NEW_DAYS, PriceUpdate, pricingUpdates, refreshPricing |
 | `radar-sources.ts` |  | RadarPost, sourceAddress, radarFetch, collectRadarSource |
-| `radar.ts` |  | RadarSource, RadarItem, radarWeek, nextRadarRun, radarState, saveRadarSettings, saveRadarSource, queueRadarSource … |
+| `radar.ts` | 관심 계정 바로가기. 외부 사이트 수집·AI 호출 없이 기존 계정도 그대로 표시. | RadarSource, radarState, saveRadarSource |
 | `readiness.ts` | 발행 준비 판정 (서버·화면 공용) — 항상 '지금 원고' 기준 | ReadyState, READY_LABEL, Readiness, placeholderNumbers, readiness |
 | `reel-study.ts` | 🔍 릴스 분석기 (맥 전용 처리, AI는 무료 Gemini) | StudyReel, StudyAnalysis, STUDY_CATEGORIES, listStudies, getStudy, addStudies, deleteStudy, setCategory … |
 | `reels.ts` | ✂️ 릴스 편집기 (맥 전용 처리) | ReelProject, FONT_FILE, listReels, getReel, createReel, deleteReel, saveDoc, run … |

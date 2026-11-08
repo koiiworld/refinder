@@ -23,7 +23,7 @@ export default function LearningBoard({category}:{category:LearnCategory}) {
   async function update(r:LearningRef,patch:Record<string,unknown>){setBusy(r.id);try{change(await api<LearningRef>(`/api/learn/${r.id}`,"PATCH",patch));}catch(e){setMsg((e as Error).message);}finally{setBusy("");}}
   const shown=items.filter(r=>r.category===category||r.analysis?.categories.includes(category as never));
   return <>
-    <nav className="row" aria-label="학습 분야"><Link className="btn btn-sm" href="/learn">AI 학습지</Link><Link className="btn btn-sm" href="/learn/radar">트렌드 레이더</Link><Link className="btn btn-sm" href="/learn/tasks">과제물</Link>{LEARN_CATEGORIES.map(c=><Link className={`btn btn-sm ${category===c.id?"btn-primary":""}`} key={c.id} href={`/learn/${c.id}`}>{c.label}</Link>)}</nav>
+    <nav className="row" aria-label="학습 분야"><Link className="btn btn-sm" href="/learn">AI 학습지</Link><Link className="btn btn-sm" href="/learn/tasks">과제물</Link>{LEARN_CATEGORIES.map(c=><Link className={`btn btn-sm ${category===c.id?"btn-primary":""}`} key={c.id} href={`/learn/${c.id}`}>{c.label}</Link>)}</nav>
     <section className="card card-pad stack" style={{gap:10}}>
       <b>참고 링크 붙여넣기</b><p className="small muted">인스타 게시물·핀터레스트 핀(pin.it 포함)·네이버/티스토리 글을 지원해요. 공개 자료만 읽으며, 접근이 막히면 캡처를 올려 주세요. 최대 6장만 분석해요.</p>
       <input className="input" aria-label="참고 링크" placeholder="https://www.instagram.com/p/… 또는 핀터레스트·블로그 링크" value={url} onChange={e=>setUrl(e.target.value)}/>

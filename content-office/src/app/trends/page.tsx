@@ -19,7 +19,6 @@ export default async function Trends({ searchParams }: { searchParams: Promise<{
           <h1>트렌드 뷰어</h1>
           <p className="sub">유튜브 한국 인기 급상승 영상입니다. 마음에 드는 건 📌 스크랩해 두고, ✍️ 글감으로 누르면 그 주제로 키워드 추천을 시작합니다.</p>
         </div>
-        <Link href="/hot" className="btn btn-sm">📰 블로그 핫이슈</Link>
       </div>
 
       <nav className="trend-tabs" aria-label="카테고리">
@@ -48,6 +47,10 @@ export default async function Trends({ searchParams }: { searchParams: Promise<{
         <div className="card empty">YouTube API 키가 연결되지 않았습니다. 설정에서 YOUTUBE_API_KEY를 확인해 주세요.</div>
       ) : (
         <>
+          {data.at > 0 && <div className="notice small" style={{marginBottom:12}}>
+            <strong>순위 기준: <time dateTime={new Date(data.at).toISOString()}>{fmtDate(new Date(data.at).toISOString())}</time> (한국 시간) 조회 자료</strong>
+            <p className="tiny muted" style={{marginTop:4}}>{data.ranked === "speed" ? "묶음별 시간당 조회수 순으로 정렬해 번갈아 표시해요." : "YouTube 한국 인기 영상 API에서 받은 순서예요."} 실시간 순위가 아니며, 마지막 조회 후 {data.nextRefreshHours >= 1 ? `${data.nextRefreshHours}시간` : "30분"}이 지나면 페이지를 열 때 새로 조회해요.</p>
+          </div>}
           {(tab.blog || tab.note) && (
             <div className="row small" style={{ gap: 8, marginBottom: 12 }}>
               {tab.blog && <span className="badge badge-accent">✍️ {tab.blog} 글감</span>}
@@ -67,7 +70,6 @@ export default async function Trends({ searchParams }: { searchParams: Promise<{
           ) : (
             !data.error && <div className="card empty">지금은 이 탭에 보여 줄 영상이 없습니다.</div>
           )}
-          {data.at > 0 && <p className="tiny muted" style={{ marginTop: 12 }}>{fmtDate(new Date(data.at).toISOString())} 기준 · {data.nextRefreshHours >= 1 ? `${data.nextRefreshHours}시간` : "30분"}마다 새로 불러옵니다 · YouTube Data API 공식 데이터</p>}
         </>
       )}
     </div>
