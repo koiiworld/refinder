@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "콘텐츠 오피스 보내기",
+  "version": "1.0.0",
+  "description": "ChatGPT·제미나이에서 만든 글과 사진을 AI 콘텐츠 오피스의 글로 보내요. (내 계정 그대로 사용)",
+  "permissions": ["storage", "contextMenus"],
+  "host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "콘텐츠 오피스 보내기" },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*", "https://gemini.google.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

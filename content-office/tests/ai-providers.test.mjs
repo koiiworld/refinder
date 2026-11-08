@@ -2187,3 +2187,35 @@ test("✍️ 직접 쓰기 (AI 글쓰기 안 함): 제목 다음에 바로 · �
   assert.ok(!(await mockLog()).some((l) => JSON.stringify(l.body).includes("전속 작가")), "AI 글쓰기 안 부름");
   for (const id of [a, c]) await call("/api/trash", "POST", { action: "trash", ids: [id] });
 });
+
+test("🧩 크롬 확장 프로그램: 글 목록 → ChatGPT 답변(HTML 정리)·제미나이 사진 받기 → 받은 내용 · N번 자리에 쓰기 · 작업 기록", async () => {
+  const list = (await call("/api/ext/posts")).data.posts;
+  assert.ok(list.length > 0 && list[0].id && list[0].blog, "보낼 글 목록");
+  const id = (await call("/api/posts")).data.find((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen").id;
+  const chatHtml = `<div class="markdown prose"><h1>제육볶음 양념</h1><p class="x" data-start="1">고추장 <strong>2큰술</strong> <button>복사</button></p><table><tr><th>재료</th><td colspan="2">양</td></tr></table><svg><path/></svg><p><a href="https://example.com/a" class="y">출처</a></p></div>`;
+  let r = await call("/api/ext/inbox", "POST", { projectId: id, kind: "text", html: chatHtml, text: "제육볶음 양념 고추장 2큰술", source: { site: "chatgpt", url: "https://chatgpt.com/c/abc", title: "제육 대화" } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  r = await call("/api/ext/inbox", "POST", { projectId: id, kind: "image", image: png, source: { site: "gemini", url: "https://gemini.google.com/app/x", title: "사진 대화" } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal((await call("/api/ext/inbox", "POST", { kind: "text", html: "<p>x</p>" })).status, 400, "글을 안 고르면 안내");
+  const items = (await call(`/api/posts/${id}/inbox`)).data.items;
+  const t = items.find((x) => x.kind === "text");
+  assert.equal(t.html, '<div><h2>제육볶음 양념</h2><p>고추장 <strong>2큰술</strong> </p><table><tr><th>재료</th><td colspan="2">양</td></tr></table><p><a href="https://example.com/a" target="_blank" rel="noopener noreferrer">출처</a></p></div>'.replace(/<\/?div>/g, ""), "버튼·아이콘·클래스 제거, h1→h2");
+  const im = items.find((x) => x.kind === "image");
+  assert.match(im.image_url, /\/api\/img\/img_[0-9a-f]{24}\.jpg$/);
+  assert.equal((await fetch(BASE + new URL(im.image_url).pathname)).status, 200);
+  // 사진 → 1번 자리, 글 → 편집기에 넣었다는 기록
+  r = await call(`/api/posts/${id}/inbox`, "POST", { action: "slot", itemId: im.id, slot: 0 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal((await call(`/api/posts/${id}`)).data.project.package.images[0].url, im.image_url);
+  await call(`/api/posts/${id}/inbox`, "POST", { action: "used", itemId: t.id, how: "커서 위치에 넣음" });
+  const evs = (await call(`/api/posts/${id}`)).data.events.map((e) => e.message);
+  assert.ok(evs.some((m) => /📥 ChatGPT에서 글 받음 \(\d+자\): "제육볶음 양념/.test(m)), "받은 기록");
+  assert.ok(evs.some((m) => /📥 제미나이에서 사진 받음/.test(m)));
+  assert.ok(evs.some((m) => /이미지 1번 자리에 씀/.test(m)) && evs.some((m) => /커서 위치에 넣음: "제육볶음 양념/.test(m)), "쓴 기록");
+  await call(`/api/posts/${id}/inbox`, "POST", { action: "delete", itemId: t.id });
+  assert.ok(!(await call(`/api/posts/${id}/inbox`)).data.items.some((x) => x.id === t.id));
+  const st = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
+  assert.ok(st.includes("크롬 확장 프로그램") && st.includes("연결 코드"), "설정 화면 안내");
+});

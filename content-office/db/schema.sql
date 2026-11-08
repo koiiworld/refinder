@@ -669,3 +669,17 @@ UPDATE radar_sources SET enabled=FALSE WHERE enabled=TRUE;
 -- 블로그마다 저장하는 제목 작성 규칙·문자 그대로 금지할 표현
 ALTER TABLE blogs ADD COLUMN IF NOT EXISTS title_rules JSONB NOT NULL DEFAULT '["키워드를 나열하지 않고 자연스러운 한 문장으로 쓴다","과장하거나 확인되지 않은 효과·수익을 약속하지 않는다"]'::jsonb;
 ALTER TABLE blogs ADD COLUMN IF NOT EXISTS title_forbidden JSONB NOT NULL DEFAULT '["|","｜"]'::jsonb;
+
+-- 📥 크롬 확장 프로그램으로 받은 내용 (ChatGPT·제미나이 답변·이미지) — 글마다
+CREATE TABLE IF NOT EXISTS post_inbox (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  kind       TEXT NOT NULL,                 -- text | image
+  html       TEXT NOT NULL DEFAULT '',
+  text       TEXT NOT NULL DEFAULT '',
+  image_url  TEXT NOT NULL DEFAULT '',
+  source     JSONB NOT NULL DEFAULT '{}'::jsonb, -- {site, url, title}
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS post_inbox_project ON post_inbox (project_id, created_at DESC);

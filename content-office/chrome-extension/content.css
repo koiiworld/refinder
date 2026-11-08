@@ -1,0 +1,8 @@
+.co-bar { position: fixed; z-index: 2147483646; display: none; gap: 6px; align-items: center; background: #fff; border: 1px solid #d0d5e2; border-radius: 999px; padding: 4px 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); font: 13px/1.2 -apple-system, "Apple SD Gothic Neo", sans-serif; color: #111; }
+.co-bar button, .co-sel { border: 0; background: #3355ff; color: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.co-bar button[data-a="img"] { background: #0f9d58; }
+.co-target { color: #667; font-size: 12px; padding-right: 6px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.co-sel { position: fixed; z-index: 2147483646; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.15); font: 13px -apple-system, "Apple SD Gothic Neo", sans-serif; }
+.co-toast { position: fixed; z-index: 2147483647; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); opacity: 0; transition: all .2s; background: #1d2433; color: #fff; padding: 10px 16px; border-radius: 10px; font: 14px -apple-system, "Apple SD Gothic Neo", sans-serif; pointer-events: none; }
+.co-toast.show { opacity: 1; transform: translateX(-50%); }
+.co-toast.bad { background: #c62828; }

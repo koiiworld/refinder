@@ -172,6 +172,22 @@ export default function DocEditor({
     editor?.setEditable(!locked);
   }, [editor, locked]);
 
+  // 📥 받은 내용(확장 프로그램) → 커서 위치에 넣기 / 선택한 부분 바꾸기
+  useEffect(() => {
+    if (!editor) return;
+    const h = (e: Event) => {
+      const d = (e as CustomEvent<{ html: string; done?: (how: string) => void }>).detail;
+      if (locked) return alert("AI가 본문을 고치는 중이라 지금은 넣을 수 없어요.");
+      const replacing = !editor.state.selection.empty;
+      editor.chain().focus().insertContent(d.html).run();
+      markDirty();
+      d.done?.(replacing ? "선택한 부분과 바꿈" : "커서 위치에 넣음");
+    };
+    window.addEventListener("co-editor-insert", h);
+    return () => window.removeEventListener("co-editor-insert", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, locked]);
+
   // 서버에서 원고가 바뀐 경우(AI 작성·복원) — 사용자가 수정 중이 아닐 때만 반영
   useEffect(() => {
     if (!editor || !serverDoc) return;

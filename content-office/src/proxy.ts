@@ -17,6 +17,12 @@ export async function proxy(req: NextRequest) {
   }
   if (!pw) return NextResponse.next();
   const { pathname } = req.nextUrl;
+  // 🧩 크롬 확장 프로그램: 연결 코드(비밀번호에서 만든 값)가 맞을 때만 /api/ext 사용
+  if (pathname.startsWith("/api/ext/")) {
+    const code = req.headers.get("x-co-ext") ?? "";
+    if (code && code === (await extCode(pw))) return NextResponse.next();
+    return NextResponse.json({ error: "확장 프로그램 연결 코드가 맞지 않아요. 앱 설정의 코드를 다시 넣어 주세요." }, { status: 401 });
+  }
   if (pathname === "/login" || pathname === "/api/login") return NextResponse.next();
   const token = req.cookies.get("co_auth")?.value;
   if (token && token === (await hash(pw))) return NextResponse.next();
@@ -25,6 +31,11 @@ export async function proxy(req: NextRequest) {
   url.pathname = "/login";
   url.searchParams.set("next", pathname);
   return NextResponse.redirect(url);
+}
+
+/** 확장 프로그램 연결 코드 (비밀번호가 바뀌면 코드도 바뀜) */
+export async function extCode(pw: string) {
+  return (await hash("ext:" + pw)).slice(0, 24);
 }
 
 export async function hash(s: string) {

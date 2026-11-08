@@ -6,6 +6,7 @@ import { naverAdConnected } from "@/lib/searchad";
 import { youtubeConnected } from "@/lib/youtube";
 import SettingsClient from "./SettingsClient";
 import KeysCard from "./KeysCard";
+import ExtensionCard from "./ExtensionCard";
 import BrandCard from "./BrandCard";
 import FeaturesCard from "./FeaturesCard";
 import SoulCard from "./SoulCard";
@@ -47,6 +48,7 @@ export default async function SettingsPage() {
         priceUpdates={await pricingUpdates()}
         keysCard={<KeysCard initial={keys} canSave={canSaveKeys()} />}
       />
+      <div style={{ marginTop: 16 }}><ExtensionCard /></div>
       <div className="card card-pad small" style={{ marginTop: 16 }}>🔔 텔레그램 연결·알림 설정·메시지함은 <a href="/telegram" style={{ color: "var(--accent)", fontWeight: 700 }}>워크스페이스 → 텔레그램</a>으로 옮겼어요.</div>
       <div style={{ marginTop: 16 }}><SoulCard initial={await listSouls().catch(() => [])} connected={hfConnected()} /></div>
       <div style={{ marginTop: 16 }}><FeaturesCard initial={await getFeatureOff()} /></div>

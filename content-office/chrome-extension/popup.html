@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<style>
+  body { width: 340px; margin: 0; padding: 14px; font: 13px -apple-system, "Apple SD Gothic Neo", sans-serif; color: #111; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  label { display: block; font-weight: 600; margin: 10px 0 4px; }
+  input, select { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid #ccd; border-radius: 8px; font: inherit; }
+  button { margin-top: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: #3355ff; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  .muted { color: #667; font-size: 12px; margin-top: 6px; line-height: 1.5; }
+  .ok { color: #0f7d3a; } .bad { color: #c62828; }
+  details { margin-top: 12px; }
+</style>
+</head>
+<body>
+  <h1>📥 콘텐츠 오피스 보내기</h1>
+  <label for="target">보낼 글</label>
+  <select id="target"><option value="">(먼저 연결하세요)</option></select>
+  <div class="muted">ChatGPT·제미나이 답변에 마우스를 올리면 '📥 글 보내기 · 🖼 사진 보내기' 버튼이 떠요. 드래그한 부분이나 오른쪽 클릭으로도 보낼 수 있어요.</div>
+  <details id="setup">
+    <summary>앱 연결 설정</summary>
+    <label for="app">앱 주소</label>
+    <input id="app" placeholder="https://...onrender.com" />
+    <label for="code">연결 코드</label>
+    <input id="code" placeholder="앱 설정 → 🧩 크롬 확장 프로그램" />
+    <button id="save">연결 확인</button>
+  </details>
+  <div id="msg" class="muted"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -12,6 +12,7 @@ import { api, Modal, useToast } from "@/components/client-utils";
 import { BlogTag, fmtDate, fmtUsd, Steps } from "@/components/ui";
 import DocEditor from "@/components/DocEditor";
 import AiSideOpen from "./AiSideOpen";
+import InboxPanel from "./InboxPanel";
 import BackButton from "@/components/BackButton";
 import { IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel } from "@/lib/image-models";
 import RefPicker from "@/components/RefPicker";
@@ -160,6 +161,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                   return `아래 블로그 글을 같이 다듬어 줘. (블로그: ${b.blog?.name ?? ""})\n\n제목: ${title}\n\n본문:\n${body}`;
                 }}
               />
+              <InboxPanel projectId={p.id} kind="text" />
               <DocEditor
                 key={p.id}
                 projectId={p.id}
@@ -197,6 +199,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
             <p className="small muted">글이 완성되면 AI가 이미지 프롬프트를 만들어 둡니다.</p>
           ) : (
             <div className="stack">
+              {!extras.images.every((im) => im.kind === "official") && <InboxPanel projectId={p.id} kind="image" slots={extras.images.length} onChanged={() => void refresh()} />}
               {!extras.images.every((im) => im.kind === "official") && (
                 <AiSideOpen
                   kind="gemini"
