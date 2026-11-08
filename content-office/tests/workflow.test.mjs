@@ -22,6 +22,8 @@ async function waitPost(id, pred, label, timeout = 30000) {
   while (Date.now() - t < timeout) {
     last = (await call(`/api/posts/${id}`)).data;
     if (pred(last)) return last;
+    // 글을 다 쓰면 검수는 자동으로 안 함 → 사용자가 '검수 시작'을 누른 것처럼
+    if (last?.project?.stage === "reviewing" && last.project.status === "waiting") await call(`/api/posts/${id}`, "POST", { action: "rerun", step: "review" });
     await new Promise((r) => setTimeout(r, 400));
   }
   throw new Error(`시간 초과: ${label} stage=${last?.project?.stage} status=${last?.project?.status} ${last?.project?.status_message}`);

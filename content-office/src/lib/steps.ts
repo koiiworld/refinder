@@ -51,6 +51,7 @@ export const STEP_NAMES = ["키워드 추천", "키워드 선택", "SEO 제목",
 export function stageLabel(stage: string, status?: string) {
   if (status === "error") return "오류";
   if (stage === "titles" && status === "waiting") return "제목·기획안 승인 대기";
+  if (stage === "reviewing" && status === "waiting") return "확인·수정 후 검수 시작 대기";
   return POST_STAGES.find((s) => s.key === stage)?.label ?? "이전 방식 글";
 }
 

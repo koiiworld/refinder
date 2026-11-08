@@ -418,9 +418,9 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
       publishedAt: prevExtras?.publishedAt ?? null,
     };
     const { applied } = await writeAiDraft(project.id, html, { provider: res.provider, model: res.model, label: feedback ? "수정 요청 반영" : "④ AI 원고" });
-    await updateProject(project.id, { package: extras, stage: "reviewing", status: "running", status_message: "" });
-    await addEvent(project.id, "ai", `④ 글 작성 완료 (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""})${applied ? "" : " · 직접 고친 원고 보호: AI 원고는 제안으로 보관"}`);
-    await enqueue("review", { projectId: project.id });
+    // 검수는 자동으로 하지 않음: 사용자가 글·이미지를 읽고 고친 뒤 직접 '검수 시작'을 누름
+    await updateProject(project.id, { package: extras, stage: "reviewing", status: "waiting", status_message: "글과 이미지를 확인·수정한 뒤 '검수 시작'을 눌러 주세요." });
+    await addEvent(project.id, "ai", `④ 글 작성 완료 (${res.provider}/${res.model}${res.substitutedFor ? ` · ${res.substitutedFor} 대신` : ""})${applied ? "" : " · 직접 고친 원고 보호: AI 원고는 제안으로 보관"} · 검수는 직접 시작`);
   },
 
   // ⑥ 글·이미지 검수

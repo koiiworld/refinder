@@ -209,10 +209,19 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
           n={6}
           title="글·이미지 검수"
           ai={review ? { provider: review.provider, model: review.model, substitutedFor: review.substitutedFor ?? null } : undefined}
-          right={doc?.content_html && !running && <button className="btn btn-sm" onClick={() => act({ action: "rerun", step: "review" }, "다시 검수합니다.")}>다시 검수</button>}
+          right={review && doc?.content_html && !running && <button className="btn btn-sm" onClick={() => act({ action: "rerun", step: "review" }, "다시 검수합니다.")}>다시 검수</button>}
         >
           {!review ? (
-            <p className="small muted">{running ? "글이 완성되면 검수합니다." : "아직 검수 전입니다."}</p>
+            running ? (
+              <p className="small muted">{b.jobs.some((j) => j.type === "review") ? "검수 중이에요…" : "글을 쓰는 중이에요. 다 쓰면 여기서 직접 검수를 시작해요."}</p>
+            ) : doc?.content_html ? (
+              <div className="stack" style={{ gap: 8 }}>
+                <p className="small" style={{ margin: 0 }}>글과 이미지를 먼저 읽어 보고 고친 다음, 준비되면 검수를 시작하세요. 검수는 자동으로 하지 않아요.</p>
+                <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={() => act({ action: "rerun", step: "review" }, "검수를 시작합니다.")}>🔍 검수 시작</button>
+              </div>
+            ) : (
+              <p className="small muted">글이 완성되면 여기서 검수를 시작할 수 있어요.</p>
+            )
           ) : (
             <ReviewView
               review={review}

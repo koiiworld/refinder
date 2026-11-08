@@ -18,6 +18,8 @@ async function waitPost(id, pred, label, timeout = 40000) {
   while (Date.now() - t < timeout) {
     last = (await call(`/api/posts/${id}`)).data;
     if (pred(last)) return last;
+    // 글을 다 쓰면 검수는 자동으로 안 함 → 사용자가 '검수 시작'을 누른 것처럼
+    if (last?.project?.stage === "reviewing" && last.project.status === "waiting") await call(`/api/posts/${id}`, "POST", { action: "rerun", step: "review" });
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error(`시간 초과: ${label} stage=${last?.project?.stage} status=${last?.project?.status} ${last?.project?.status_message}`);
@@ -119,6 +121,12 @@ test("③ 제목을 직접 고쳐서 글 쓰기 → 그 제목 그대로 쓰고 
   await call("/__reset", "POST", undefined, MOCK);
   const mine = "앤커 프라임 보조배터리 27650 상위 모델 비교, 고속충전 기준 정리";
   await call(`/api/posts/${id}`, "POST", { action: "write", title: mine });
+  // 글을 다 써도 검수는 자동으로 안 함 (사용자가 읽고 고친 뒤 직접 '검수 시작')
+  const w = await waitPost(id, (x) => x.project.stage === "reviewing" && x.project.status === "waiting" && x.jobs.length === 0, "글 작성 후 검수 대기");
+  assert.equal(w.project.review, null, "자동 검수 안 함");
+  assert.match(w.project.status_message, /검수 시작/);
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.equal((await call(`/api/posts/${id}`)).data.project.review, null, "기다려도 검수 안 함");
   const b = await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "직접 고친 제목으로 작성");
   assert.equal(b.document.title, mine, "본문 제목 = 직접 고친 제목");
   assert.equal(b.project.plan.selectedTitle, mine);

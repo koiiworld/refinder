@@ -42,6 +42,8 @@
 - 배포: 이 브랜치에 push 하면 **Render 자동 배포**. 맥 앱 재시작: `osascript -e 'tell application "Terminal" to do script "zsh ~/.ai-content-office/restart-app.sh"'`
 - 사용자 허락: **사용자가 요청한 변경은 테스트 통과 후 바로 배포(push)해도 됨.** 키·외부 결제·운영 데이터 삭제는 물어볼 것.
 - 테스트: `bash tests/run-isolated.sh` (5~10분, /tmp/co-test 에 복사해 모의 AI로 돌림, 실제 DB 안 건드림). 마지막 통과: 10 + 60.
+- **사용자 규칙(11-08): 글을 처음 쓴 뒤 검수를 자동으로 하지 않는다.** ④ 글 작성이 끝나면 `stage=reviewing, status=waiting`("확인·수정 후 검수 시작 대기")로 멈추고, 사용자가 ⑥의 "🔍 검수 시작"(= `rerun review`)을 눌러야 검수. (`jobs.ts` write 핸들러) 테스트의 `waitPost` 는 이 상태를 보면 검수 시작을 대신 눌러 줌.
+- 글 이미지는 눌러서 크게 보기(`PostView.tsx` `ZoomImg`).
 - **커밋 안 된 작업 없음.** 모든 작업이 커밋·배포됨 (마지막: 블로그 진단 개선 — 테스트 10 + 60 통과, 브라우저 확인 완료).
   - 블로그 진단(`diagnose.ts`, `DiagnoseView.tsx`): AI 진단 JSON 에 `problems[].steps/example`, `fixes[]`(점검표 줄별 고치는 법·실제 제목 기존→개선 예시), `growth[]`(조회수·유입 늘리기, 대시보드 조회수 캡처 `topPosts` 근거). 점검표 줄마다 "💡 고치는 법"·"🔄 다시 진단하기"(AI 없이 수치만). 이번 주 할 일 문구 수정(`POST /api/diagnose {blogId, next}`) + 체크 → 할 일로 보내기 팝업(`/api/todos`)
 - 다음 요청 예정(사용자가 코덱스에 직접 요청): **앱 안 ChatGPT (chat 모드 / work 모드)** — OpenAI 키 사용이라 대화마다 비용 발생, 사용자와 범위 확인 후 시작.
