@@ -1,5 +1,6 @@
 "use client";
 
+import {useRouter} from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, useToast } from "@/components/client-utils";
 import { fmtDate } from "@/components/ui";
@@ -20,6 +21,8 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
   initialPost: string;
   initialUrl: string;
 }) {
+  const router=useRouter();
+  async function openCarousel(){if(!docId)return;setBusy("carousel");setErr("");try{const made=await api<{id:string}>(`/api/repurpose/${docId}`,"POST",{action:"carousel"});router.push(`/carousels/${made.id}`);}catch(e){setErr((e as Error).message);setBusy("");}}
   const [tab, setTab] = useState<Tab>(initialPost ? "app" : initialUrl ? "url" : initialConvert ? "paste" : "published");
   const [blog, setBlog] = useState(blogs[0]?.id ?? "");
   const [url, setUrl] = useState(initialUrl);
@@ -161,7 +164,7 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
               <div className="row" style={{ gap: 6 }}>
                 <button className="btn btn-sm" onClick={() => copy(result[c.id], c.label)}>복사</button>
                 {c.id === "reel" && <a className="btn btn-sm" href={`/studio?prompt=${encodeURIComponent(result[c.id].slice(0, 1500))}`}>🎬 영상 스튜디오로</a>}
-                {c.id === "cards" && (src.postId ? <a className="btn btn-sm" href={`/carousels?from=${src.postId}`}>📱 캐러셀로 만들기</a> : <a className="btn btn-sm" href="/carousels">📱 캐러셀로 만들기</a>)}
+                {c.id === "cards" && <button className="btn btn-sm" disabled={!!busy||!docId} onClick={openCarousel}>{busy==="carousel"?"캐러셀 여는 중…":"📱 캐러셀로 만들기"}</button>}
               </div>
             </details>
           ))}

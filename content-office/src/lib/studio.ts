@@ -23,7 +23,7 @@ export type StudioClip = { jobId?: string; url?: string; status?: string; error?
 export type StudioScene = { n: number; seconds: number; visual: string; motion: string; caption: string; narration: string; image: StudioImage; video: StudioClip };
 export type StudioPlan = { title: string; concept: string; hook: string; caption: string; hashtags: string[]; style: string; ai?: string };
 export type StudioCharacter = { name: string; description: string; prompt: string; image: StudioImage };
-export type StudioOptions = { seconds: number; style: string; aspect: "9:16"; imageModel: string; clipSeconds: 5 | 10; resolution: "480p" | "720p" | "1080p"; captions: boolean; lockCharacter?: string; seriesId?: string; episode?: number };
+export type StudioOptions = { subjectMode?: "food"|"character"; seconds: number; style: string; aspect: "9:16"; imageModel: string; clipSeconds: 5 | 10; resolution: "480p" | "720p" | "1080p"; captions: boolean; lockCharacter?: string; seriesId?: string; episode?: number };
 export type StudioProject = { id: string; title: string; prompt: string; options: StudioOptions; plan: StudioPlan; character: StudioCharacter; scenes: StudioScene[]; video_id: string | null; status: string; message: string; created_at: string; updated_at: string };
 
 export const STUDIO_STYLES = [
@@ -57,10 +57,10 @@ async function publicBase(fallback?: string) {
 }
 
 /** 원래 입력은 보존하고 새 문구·장면 구성 안만 제안. 프로젝트/이미지/영상 생성 없음. */
-export async function rewriteStudioIdea(input:{prompt:string;feedback?:string;seconds?:number;style?:string}){
+export async function rewriteStudioIdea(input:{prompt:string;feedback?:string;seconds?:number;style?:string;subjectMode?:string}){
   const original=String(input.prompt??'').trim().slice(0,2000);if(!original)throw new Error('다시 만들 영상 아이디어를 먼저 넣어 주세요.');
   const system='당신은 영상 아이디어 재구성 편집자입니다. 과장 없이 구체적인 후킹·자막·내레이션과 장면 순서를 새로 제안합니다. 반드시 JSON 객체 하나만 출력합니다.';
-  const prompt=`[기존 문구·구성]\n${original}\n[수정 요청] ${String(input.feedback??'문구와 장면 순서를 새로 구성해 주세요.').slice(0,1000)}\n[길이] ${Number(input.seconds)||20}초\n[그림체] ${String(input.style??'realistic').slice(0,100)}\n주제·사실·재료·제품 정보는 유지하면서 표현과 전개를 바꾸세요. 기존 자막·대사를 조금만 바꾸거나 그대로 반복하지 마세요. 첫 장면 후킹→핵심 정보→마무리의 흐름을 구체적으로 새로 만들고 각 장면에 화면·대사·자막을 적으세요. 과장·근거 없는 효과·추가 사실은 금지. 요청 길이에 맞는 3~6장면을 제안하세요. 한국어로 쓰고 prompt 전체는 1,800자 이내로 간결하게. 형식: {"prompt":"장면별 새 화면·대사·자막","changes":["달라진 점"]}`;
+  const prompt=`[기존 문구·구성]\n${original}\n[수정 요청] ${String(input.feedback??'문구와 장면 순서를 새로 구성해 주세요.').slice(0,1000)}\n[길이] ${Number(input.seconds)||20}초\n[그림체] ${String(input.style??'realistic').slice(0,100)}\n${input.subjectMode==='food'?'음식 클로즈업 모드: 음식과 조리 과정만. 사람·손·얼굴·캐릭터·마스코트는 넣지 마세요.':''}\n주제·사실·재료·제품 정보는 유지하면서 표현과 전개를 바꾸세요. 기존 자막·대사를 조금만 바꾸거나 그대로 반복하지 마세요. 첫 장면 후킹→핵심 정보→마무리의 흐름을 구체적으로 새로 만들고 각 장면에 화면·대사·자막을 적으세요. 과장·근거 없는 효과·추가 사실은 금지. 요청 길이에 맞는 3~6장면을 제안하세요. 한국어로 쓰고 prompt 전체는 1,800자 이내로 간결하게. 형식: {"prompt":"장면별 새 화면·대사·자막","changes":["달라진 점"]}`;
   const res=await runStep({step:'studio',purpose:'studio-idea-rewrite',blog:null,system,prompt,json:true,maxTokens:2200,retries:0,noFallback:true});
   const raw=extractJson<{prompt?:string;changes?:string[]}>(res.text);
   if(typeof raw.prompt!=='string'||!raw.prompt.trim())throw new Error('새 문구·구성을 받지 못했어요. 원래 입력은 유지돼요.');
@@ -68,17 +68,18 @@ export async function rewriteStudioIdea(input:{prompt:string;feedback?:string;se
 }
 
 /** ① 기획 */
-export async function createStudio(input: { prompt: string; seconds?: number; style?: string; imageModel?: string; clipSeconds?: number; resolution?: string; lockCharacter?: string; seriesId?: string; episode?: number }) {
+export async function createStudio(input: { prompt: string; subjectMode?:string; seconds?: number; style?: string; imageModel?: string; clipSeconds?: number; resolution?: string; lockCharacter?: string; seriesId?: string; episode?: number }) {
   const prompt = input.prompt.trim().slice(0, 2000);
   if (!prompt) throw new Error("어떤 영상을 만들지 적어 주세요.");
   const options: StudioOptions = {
     ...DEFAULT_OPTIONS,
+    subjectMode:input.subjectMode==="food"?"food":"character",
     seconds: [15, 20, 30, 45, 60].includes(Number(input.seconds)) ? Number(input.seconds) : DEFAULT_OPTIONS.seconds,
-    style: STUDIO_STYLES.some((s) => s.id === input.style) ? String(input.style) : DEFAULT_OPTIONS.style,
+    style: input.subjectMode==="food"?"real":STUDIO_STYLES.some((s) => s.id === input.style) ? String(input.style) : DEFAULT_OPTIONS.style,
     imageModel: /^(google|openai):/.test(String(input.imageModel ?? "")) ? String(input.imageModel) : DEFAULT_OPTIONS.imageModel,
     clipSeconds: Number(input.clipSeconds) === 10 ? 10 : 5,
     resolution: ["480p", "720p", "1080p"].includes(String(input.resolution)) ? (input.resolution as StudioOptions["resolution"]) : "720p",
-    ...(input.lockCharacter ? { lockCharacter: String(input.lockCharacter).slice(0, 1200) } : {}),
+    ...(input.lockCharacter&&input.subjectMode!=="food" ? { lockCharacter: String(input.lockCharacter).slice(0, 1200) } : {}),
     ...(input.seriesId ? { seriesId: input.seriesId, episode: Number(input.episode) || undefined } : {}),
   };
   const id = newId("std_");
@@ -91,20 +92,21 @@ export async function plan(id: string, feedback = "") {
   const s = await getStudio(id);
   if (!s) throw new Error("프로젝트를 찾을 수 없습니다.");
   const o = s.options;
+  const food=o.subjectMode==="food";
   const n = Math.max(2, Math.min(12, Math.round(o.seconds / o.clipSeconds)));
   const style = STUDIO_STYLES.find((x) => x.id === o.style) ?? STUDIO_STYLES[1];
   const system = `당신은 인스타 릴스·유튜브 쇼츠 기획 PD입니다. 첫 1초에 시선을 잡고 끝까지 보게 만드는 짧은 세로 영상을 기획합니다. 반드시 JSON 객체 하나만 출력합니다. 화면 설명·움직임 프롬프트는 영어, 자막·내레이션은 한국어로 씁니다.`;
-  const userPrompt = `[만들 영상] ${s.prompt}
+  const userPrompt = `${food?"[음식 클로즈업 모드] 음식과 조리 과정만 촬영하는 실사 레시피 릴스. 사람·손·얼굴·캐릭터·마스코트·의인화는 금지. 음식·재료·냄비·도구만 매크로 또는 탑뷰로 보여 주세요. 원문에 없는 재료·수치·조리법을 새로 만들지 마세요. 화면마다 조리 과정 한 단계만 보여 주고, 김·끓음·재료 변화 등 음식 움직임을 중심으로 구성하세요.":"[인물·캐릭터 모드]"}\n[만들 영상] ${s.prompt}
 [길이] 약 ${o.seconds}초 · 장면 ${n}개 (장면당 ${o.clipSeconds}초)
 [그림체] ${style.label} — ${style.prompt}
-${o.lockCharacter ? `[캐릭터 고정 문장 — character.prompt 에도 그대로]\n${o.lockCharacter}\n` : ""}${s.plan?.title ? `[이전 기획 제목] ${s.plan.title}\n` : ""}${feedback ? `[수정 요청 - 반드시 반영]\n${feedback}\n` : ""}
+${!food&&o.lockCharacter ? `[캐릭터 고정 문장 — character.prompt 에도 그대로]\n${o.lockCharacter}\n` : ""}${s.plan?.title ? `[이전 기획 제목] ${s.plan.title}\n` : ""}${feedback ? `[수정 요청 - 반드시 반영]\n${feedback}\n` : ""}
 기획하세요.
 - title: 영상 제목 (한국어, 짧게)
 - concept: 한두 문장 콘셉트
 - hook: 첫 장면 자막(3초 안에 멈추게 하는 한 줄, 15자 이내)
-- character: 영상 전체에 나오는 주인공 1명. name(한국어 이름), description(한국어 한 줄), prompt(영어: 외모·옷·색·체형을 아주 구체적으로 — 모든 장면에서 같은 인물로 그리기 위한 기준, 배경 없이 전신, 그림체 포함)
+${food?'- character: 빈 객체 {}. 캐릭터를 만들지 마세요.':'- character: 영상 전체의 주인공 1명. name(한국어), description(한국어 한 줄), prompt(영어: 외모·옷·색·체형·그림체를 구체적으로, 배경 없이 전신).'}
 - scenes: ${n}개. 각 장면:
-  - visual: 영어 이미지 프롬프트 (주인공이 무엇을 하는 장면인지 + 배경 + 구도. 세로 9:16, 글자 넣지 말 것). 한 장면에 동작은 딱 하나만 (동작이 여러 개면 AI가 엉뚱한 장면을 만듦)${o.lockCharacter ? `
+  - visual: 영어 이미지 프롬프트 (${food?"음식·재료·조리 상태 + 탑뷰 또는 매크로 구도":"주인공 동작 + 배경 + 구도"}. 세로 9:16, 글자 넣지 말 것). 한 장면에 동작은 딱 하나만 (동작이 여러 개면 AI가 엉뚱한 장면을 만듦)${!food&&o.lockCharacter ? `
   - 모든 visual 맨 앞에 아래 [캐릭터 고정 문장]을 한 글자도 바꾸지 말고 그대로 넣기` : ""}
   - motion: 영어 움직임 프롬프트 (카메라·인물 움직임 한 문장, ${o.clipSeconds}초 분량)
   - caption: 화면 자막 (한국어, 18자 이내, 첫 장면은 hook)
@@ -115,7 +117,7 @@ ${o.lockCharacter ? `[캐릭터 고정 문장 — character.prompt 에도 그대
   try {
     const res = await runStep({ step: "studio", purpose: "studio-plan", blog: null, system, prompt: userPrompt, json: true, maxTokens: 4000 });
     const raw = extractJson<{ title?: string; concept?: string; hook?: string; character?: { name?: string; description?: string; prompt?: string }; scenes?: Partial<StudioScene>[]; caption?: string; hashtags?: string[] }>(res.text);
-    const lock = o.lockCharacter?.trim();
+    const lock = food?undefined:o.lockCharacter?.trim();
     const scenes: StudioScene[] = (raw.scenes ?? []).slice(0, 12).map((x, i) => ({
       n: i + 1,
       seconds: o.clipSeconds,
@@ -128,11 +130,11 @@ ${o.lockCharacter ? `[캐릭터 고정 문장 — character.prompt 에도 그대
       video: {},
     }));
     if (!scenes.length) throw new Error("AI가 장면을 만들지 못했어요. 다시 시도해 주세요.");
-    const keepChar = s.character?.image?.id && feedback && !/캐릭터|인물|주인공/.test(feedback);
+    const keepChar = !food&&s.character?.image?.id && feedback && !/캐릭터|인물|주인공/.test(feedback);
     await save(id, {
       title: String(raw.title ?? s.prompt).slice(0, 80),
       plan: { title: String(raw.title ?? ""), concept: String(raw.concept ?? ""), hook: String(raw.hook ?? ""), caption: String(raw.caption ?? ""), hashtags: (raw.hashtags ?? []).map((h) => String(h).replace(/^#/, "").replace(/\s+/g, "")).filter(Boolean).slice(0, 5), style: style.id, ai: `${res.provider}/${res.model}` },
-      character: keepChar ? s.character : { name: String(raw.character?.name ?? "주인공"), description: String(raw.character?.description ?? ""), prompt: lock || String(raw.character?.prompt ?? ""), image: {} },
+      character: food?{name:"음식 클로즈업",description:"음식과 조리 과정만",prompt:"",image:{}}:keepChar ? s.character : { name: String(raw.character?.name ?? "주인공"), description: String(raw.character?.description ?? ""), prompt: lock || String(raw.character?.prompt ?? ""), image: {} },
       scenes,
       status: "planned",
       message: "",
@@ -171,6 +173,7 @@ export async function updateStudio(id: string, patch: { character?: Partial<Stud
 export async function makeCharacter(id: string) {
   const s = await getStudio(id);
   if (!s) throw new Error("프로젝트를 찾을 수 없습니다.");
+  if(s.options.subjectMode==="food")throw new Error("음식 클로즈업은 캐릭터를 만들지 않아요. 장면 이미지부터 시작해 주세요.");
   const style = STUDIO_STYLES.find((x) => x.id === s.options.style) ?? STUDIO_STYLES[1];
   // 한국어로 고쳤으면 영어로 바꿔 저장한 뒤 그리기
   const { toEnglishPrompt } = await import("./image-prompt");
@@ -210,9 +213,11 @@ export async function makeSceneImage(id: string, index: number) {
   const { toEnglishPrompt } = await import("./image-prompt");
   const en = await toEnglishPrompt(sc.visual, id);
   if (en.translated) sc.visual = en.prompt;
-  const ref = s.character.image?.id ? await getGeneratedImage(s.character.image.id) : null;
+  const food=s.options.subjectMode==="food";
+  const referenceId=food?(index>0?s.scenes[0]?.image?.id:undefined):s.character.image?.id;
+  const ref = referenceId ? await getGeneratedImage(referenceId) : null;
   const refs = ref ? [{ mime: ref.mime, data: Buffer.from(ref.data) }] : [];
-  const prompt = `${refs.length ? "Use the attached image as the exact reference for the main character (same face, hair, outfit, colors, proportions). " : `Main character: ${s.character.prompt}. `}Scene: ${sc.visual}. ${style.prompt}. Vertical 9:16 composition. No text, no captions, no watermark.`;
+  const prompt = food?`Food-only photorealistic recipe close-up, macro or overhead framing. No people, no hands, no faces, no characters, no mascots, no anthropomorphism. ${refs.length?"Use the food reference for consistent dish, tableware and lighting. ":""}Scene: ${sc.visual}. Natural food photography lighting. Vertical 9:16. No text, captions or watermark.`:`${refs.length ? "Use the attached image as the exact reference for the main character (same face, hair, outfit, colors, proportions). " : `Main character: ${s.character.prompt}. `}Scene: ${sc.visual}. ${style.prompt}. Vertical 9:16 composition. No text, no captions, no watermark.`;
   const imgId = await generateDirect({ modelId: s.options.imageModel, prompt, aspect: "9:16", projectId: id, refs });
   const scenes = s.scenes.slice();
   scenes[index] = { ...sc, image: { id: imgId, url: `/api/img/${imgId}.jpg`, model: s.options.imageModel, status: "done" }, video: {} };
@@ -221,7 +226,7 @@ export async function makeSceneImage(id: string, index: number) {
 }
 
 function clipBody(s: StudioProject, sc: StudioScene, base: string) {
-  return { model: "wan-2.6-i2v", prompt: `${sc.motion}. Keep the main character consistent. No text.`, image_url: `${base}${sc.image.url}`, duration: s.options.clipSeconds, resolution: s.options.resolution, negative_prompt: "text, subtitles, watermark, distorted face, extra limbs" };
+  return { model: "wan-2.6-i2v", prompt: s.options.subjectMode==="food"?`${sc.motion}. Food-only macro recipe footage, keep the dish and ingredients consistent. No people, hands, faces, characters or mascots. No text.`:`${sc.motion}. Keep the main character consistent. No text.`, image_url: `${base}${sc.image.url}`, duration: s.options.clipSeconds, resolution: s.options.resolution, negative_prompt: s.options.subjectMode==="food"?"people, hands, faces, characters, mascots, anthropomorphism, text, subtitles, watermark":"text, subtitles, watermark, distorted face, extra limbs" };
 }
 
 /** ④ 장면 영상 예상 비용 (생성 안 함) */

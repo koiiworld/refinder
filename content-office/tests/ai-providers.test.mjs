@@ -2254,3 +2254,25 @@ test('🎬 영상 아이디어 문구·구성 다시 생성: 비용 확인 필�
  const sent=await stepPrompt('영상 아이디어 재구성 편집자');assert(sent.includes('조리 과정 먼저, 뻔한 문구 줄이기'));assert(sent.includes('완성 냄비'));
  assert.equal((await call('/api/studio')).data.length,before,'아이디어 재작성만으로 프로젝트 생성 없음');assert(!(await mockLog()).some(x=>x.path.includes('/images/')||x.path.includes('/video/')),'이미지·영상 생성 없음');
 });
+
+
+test('📱 채널 변환 카드뉴스 → 기존 7장 문구 그대로 제작 편집기로 연결, 중복 생성·추가 AI 호출 없음',async()=>{
+ const text='직접캐러셀연결테스트 닭한마리 레시피를 준비합니다. 닭, 양파, 대파를 넣고 국물을 끓이는 과정을 소개합니다. '.repeat(3);
+ const doc=(await call('/api/repurpose','POST',{action:'make',title:'닭한마리 레시피',text,blogId:'blog_algokitchen',channels:['cards']})).data;
+ await call('/__reset','POST',undefined,MOCK);
+ const made=await call('/api/repurpose/'+doc.id,'POST',{action:'carousel'});assert.equal(made.status,201,JSON.stringify(made.data));
+ const c=(await call('/api/carousels/'+made.data.id)).data;assert.equal(c.slides.length,7);assert.equal(c.slides[0].headline,'닭한마리 집에서 만들기');assert.equal(c.slides[0].body,'소개');assert.equal(c.slides[3].body,'닭, 양파, 대파를 준비해 주세요.');assert.equal(c.slides[6].kind,'cta');assert.equal(c.blog_id,'blog_algokitchen');assert.equal(c.project_id,null);
+ const repeated=await Promise.all([call('/api/repurpose/'+doc.id,'POST',{action:'carousel'}),call('/api/repurpose/'+doc.id,'POST',{action:'carousel'})]);assert(repeated.every(x=>x.data.id===made.data.id));
+ assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'기존 문구 연결은 외부/AI 호출 없음');
+ const editor=await (await fetch(BASE+'/carousels/'+made.data.id)).text();assert(editor.includes('닭한마리 집에서 만들기'));assert.equal((await call('/api/repurpose/missing-id','POST',{action:'carousel'})).status,400);
+});
+
+test('🍲 음식 클로즈업 릴스: 캐릭터 단계 생략, 음식 장면 이미지·영상 프롬프트에 사람/손 제외',async()=>{
+ const made=await call('/api/studio','POST',{prompt:'닭한마리 레시피 조리 과정만 확대해서 보여줘',subjectMode:'food',style:'3d',imageModel:'openai:gpt-image-2',seconds:20});assert.equal(made.status,200,JSON.stringify(made.data));const id=made.data.id;
+ let s=(await call('/api/studio/'+id)).data;assert.equal(s.options.subjectMode,'food');assert.equal(s.options.style,'real');assert.equal(s.character.prompt,'');assert(!s.character.image?.id);assert(s.scenes.length>=2);
+ assert((await stepPrompt('쇼츠 기획 PD')).includes('[음식 클로즈업 모드]'));
+ await call('/__reset','POST',undefined,MOCK);assert.equal((await call('/api/studio/'+id,'POST',{action:'character'})).status,502);assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'음식 모드 캐릭터 요청은 AI 호출 전에 거절');
+ const image=await call('/api/studio/'+id,'POST',{action:'scene_image',index:0});assert.equal(image.status,200,JSON.stringify(image.data));const sent=(await mockLog()).find(x=>x.path.includes('/images/generations'));assert(sent.body.prompt.includes('Food-only'));assert(sent.body.prompt.includes('No people, no hands'));assert(!sent.body.prompt.includes('Main character:'));
+ await call('/__reset','POST',undefined,MOCK);const clip=await call('/api/studio/'+id,'POST',{action:'scene_clip',index:0});assert.equal(clip.status,200,JSON.stringify(clip.data));const request=(await mockLog()).find(x=>x.body?.negative_prompt?.includes('people, hands'));assert(request);assert(request.body.prompt.includes('Food-only'));assert(!request.body.prompt.includes('Keep the main character'));
+ const html=await (await fetch(BASE+'/studio/'+id)).text();assert(!html.includes('② 캐릭터'));assert(html.includes('음식 클로즈업'));
+});

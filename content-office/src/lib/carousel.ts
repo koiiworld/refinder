@@ -1,3 +1,4 @@
+import {parseRepurposeCards} from "./repurpose-cards";
 import "server-only";
 import crypto from "node:crypto";
 import { q, q1, newId, j } from "./db";
@@ -68,6 +69,15 @@ export async function listCarousels() {
 }
 export async function getCarousel(id: string) {
   return q1<Carousel>("SELECT * FROM carousels WHERE id=$1", [id]);
+}
+
+/** 채널 변환에서 이미 만든 카드뉴스 문구를 그대로 캐러셀 초안으로 연결. */
+export async function createFromRepurpose(docId:string){
+ const {getRepurposeDoc}=await import('./repurpose');const doc=await getRepurposeDoc(docId);if(!doc)throw new Error('채널 변환 자료를 찾을 수 없어요.');
+ const cards=String(doc.result.cards??'').trim();if(!cards)throw new Error('먼저 카드뉴스 문구를 만들어 주세요.');
+ const slides=parseRepurposeCards(cards),hash=crypto.createHash('sha256').update(cards).digest('hex').slice(0,16),id=`car_${doc.id}_${hash}`;
+ const style={...DEFAULT_STYLE,template:'clean',sourceText:doc.source_text,sourceUrl:doc.source_url,repurposeId:doc.id,contentType:'general'};
+ await q(`INSERT INTO carousels(id,blog_id,project_id,title,topic,slides,caption,hashtags,images,style,ai) VALUES($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO NOTHING`,[id,doc.blog_id,doc.project_id,doc.title,j(slides),String(doc.result.insta??''),j([]),j([]),j(style),j({source:'repurpose',at:new Date().toISOString()})]);return id;
 }
 
 /** 블로그 글에서 캐러셀 만들기 (사진은 글에 들어간 사진·만든 이미지 재사용) */

@@ -19,6 +19,7 @@ export default function StudioEditor({ initial, styles, imageModels }: { initial
   const [recs, setRecs] = useState<{ id: string; reason: string }[] | null>(null);
   const [est, setEst] = useState<{ perClip: number | null; total: number | null; count: number } | null>(null);
 
+  const food=s.options.subjectMode==="food";
   const running = s.scenes.some(CLIP_RUNNING) || s.status === "rendering";
   useEffect(() => {
     if (!running) return;
@@ -94,7 +95,7 @@ export default function StudioEditor({ initial, styles, imageModels }: { initial
         <p className="tiny muted" style={{ margin: 0 }}>다시 기획하면 만든 장면 이미지·영상은 비워져요. 캐릭터는 요청에 캐릭터 이야기가 없으면 그대로 둬요.</p>
       </section>
 
-      <section className="card card-pad stack" style={{ gap: 10 }}>
+      {!food&&<section className="card card-pad stack" style={{ gap: 10 }}>
         <b className="small">② 캐릭터 · {s.character.name}</b>
         <div className="studio-char">
           <div className="studio-thumb">
@@ -148,17 +149,17 @@ export default function StudioEditor({ initial, styles, imageModels }: { initial
             <span className="tiny muted">프롬프트를 한국어로 직접 고쳐도 돼요. 그릴 때 영어로 바꿔서 보내요.</span>
           </div>
         </div>
-      </section>
-
+      </section>}
+      {food&&<p className="notice small">🍲 음식 클로즈업 · 캐릭터 제작 없이 음식·조리 장면 이미지를 만든 뒤 장면 영상으로 이어가세요.</p>}
       <section className="card card-pad stack" style={{ gap: 10 }}>
         <div className="row between">
           <b className="small">③ 장면 이미지 ({imgCount}/{s.scenes.length}) · ④ 장면 영상 ({clipCount}/{s.scenes.length})</b>
           <div className="row" style={{ gap: 6 }}>
-            <button className="btn btn-sm" disabled={!!busy || !s.character.image?.url || imgCount === s.scenes.length} onClick={allImages}>🖼 남은 이미지 모두</button>
+            <button className="btn btn-sm" disabled={!!busy || (!food&&!s.character.image?.url) || imgCount === s.scenes.length} onClick={allImages}>🖼 남은 이미지 모두</button>
             <button className="btn btn-sm" disabled={!!busy || !imgCount || clipCount === s.scenes.length} onClick={allClips}>🎞 남은 영상 모두{est?.total != null ? ` (${fmtUsd(est.total)})` : ""}</button>
           </div>
         </div>
-        {!s.character.image?.url && <div className="tiny muted">캐릭터를 먼저 만들면 장면마다 같은 인물로 그려요.</div>}
+        {!food&&!s.character.image?.url && <div className="tiny muted">캐릭터를 먼저 만들면 장면마다 같은 인물로 그려요.</div>}
         {est?.perClip != null && <div className="tiny muted">장면 영상 1개 예상 {fmtUsd(est.perClip)} (Higgsfield Wan 2.6 · {s.options.clipSeconds}초 · {s.options.resolution})</div>}
         <div className="studio-scenes">
           {s.scenes.map((sc, i) => (

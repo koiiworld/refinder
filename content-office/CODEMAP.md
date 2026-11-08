@@ -63,6 +63,7 @@
 | `reels.ts` | ✂️ 릴스 편집기 (맥 전용 처리) | ReelProject, FONT_FILE, listReels, getReel, createReel, deleteReel, saveDoc, run … |
 | `remote-read-limit.ts` | 웹사이트가 보낸 429를 존중. 같은 서버·계정들의 반복 읽기도 함께 잠시 멈춤. | remoteReadHost, RemoteReadLimited, assertRemoteReadAllowed, stopOnRemote429, remoteReadLimits |
 | `repo.ts` | 말투 예시 파일(사용 중인 것)을 붙인 블로그 — AI 작업 전용 | listBlogs, getBlog, getBlogForAi, getProject, getDocument, getVersion, listVersions, listIdeas … |
+| `repurpose-cards.ts` | 이미 만든 장별 문구를 편집 가능한 슬라이드로 옮김. AI 재생성 없음. | parseRepurposeCards |
 | `repurpose-channels.ts` | 📣 블로그 글 → 다른 채널 (클라이언트·서버 공용) | CHANNELS, ChannelId |
 | `repurpose.ts` | 📣 채널 변환: 블로그 글 하나 → 다른 채널용 초안 (원소스 멀티유즈) | RepurposeResult, RepurposeDoc, loadSource, listRepurpose, getRepurposeDoc, deleteRepurpose, repurpose |
 | `research.ts` | 경쟁·참고 콘텐츠 URL에서 제목/설명을 실제로 수집 (수집일 기록) | fetchUrlMeta, naverConnected, naverTrend |
@@ -161,7 +162,7 @@
 | `api/reels/font/route.ts` | 미리보기용 글꼴 (내보내기와 같은 Noto Sans KR) | GET |
 | `api/reels/route.ts` | { videoId } 영상공장 영상으로 릴스 편집 시작 (맥이 받아쓰기로 초안) | GET, POST |
 | `api/refs/route.ts` | 🎨 레퍼런스 사진 저장: 폼 'files'(최대 5장) 또는 JSON { url } (만든 이미지에서 고르기) → { ids } | POST |
-| `api/repurpose/[id]/route.ts` |  | GET, DELETE |
+| `api/repurpose/[id]/route.ts` |  | GET, DELETE, POST |
 | `api/repurpose/route.ts` | action: load {postId/url} → 글 미리보기 · make {id?, title, text, blogId, postId, url, channels} → 초안 | GET, POST |
 | `api/research/benchmark/route.ts` | 인기 글 주소(최대 5개) 분석 → 내 블로그 적용 제안 | GET, POST |
 | `api/research/creator/image/route.ts` | 크리에이터 어드바이저 캡처 → AI가 화면의 유입 검색어 목록을 읽어 붙여넣기 형식(한 줄에 하나)으로 돌려줌 | POST |

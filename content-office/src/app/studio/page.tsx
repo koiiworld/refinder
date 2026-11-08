@@ -19,7 +19,7 @@ export default async function Studio({ searchParams }: { searchParams: Promise<{
       <div className="page-head">
         <div>
           <h1>🎬 영상 제작 스튜디오</h1>
-          <p className="sub">만들고 싶은 쇼츠·릴스를 적으면 AI가 기획하고, 캐릭터 → 장면 이미지 → 장면 영상 → 합치기 순서로 만들어요. 이미지·영상은 버튼을 눌러야 만들어져요(비용 발생).</p>
+          <p className="sub">음식 클로즈업 또는 인물·캐릭터 영상을 골라 AI로 기획해요. 음식 모드는 캐릭터 제작 없이 장면 이미지 → 장면 영상 → 합치기로 진행해요. 이미지·영상은 버튼을 눌러야 만들어져요(비용 발생).</p>
         </div>
       </div>
       <NewSeries styles={STUDIO_STYLES.map((s) => ({ id: s.id, label: s.label }))} list={series.map((x) => ({ id: x.id, title: x.title, count: x.episodes.length, made: x.episodes.filter((e) => e.studioId).length }))} />
