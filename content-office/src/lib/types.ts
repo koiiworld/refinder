@@ -20,6 +20,8 @@ export interface Blog {
   description: string;
   style_guide: string;
   review_rules: string[];
+  title_rules?: string[];
+  title_forbidden?: string[];
   image_style: string;
   /** 이미지 방식: ai = Higgsfield로 생성, official = 제조사 공식 홈페이지 이미지 사용 */
   image_source: "ai" | "official";

@@ -1,5 +1,7 @@
 "use client";
 
+import {TitleRulesFields} from "./TitleRulesEditor";
+import {titleLists} from "@/lib/title-rules";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AiRoles, Blog, RoleKey } from "@/lib/types";
@@ -34,6 +36,8 @@ export default function BlogForm({ blog, connections }: { blog?: Blog; connectio
     color: blog?.color ?? "#7c3aed",
     style_guide: blog?.style_guide ?? "",
     review_rules: (blog?.review_rules ?? ["확인되지 않은 수치·통계를 단정적으로 쓰지 않는다", "출처가 필요한 주장에는 출처를 표기하거나 '확인 필요'로 남긴다"]).join("\n"),
+    title_rules: titleLists(blog??{}).rules.join("\n"),
+    title_forbidden: titleLists(blog??{}).forbidden.join("\n"),
     image_style: blog?.image_style ?? "",
     image_source: (blog?.image_source ?? "ai") as "ai" | "official",
     ai_roles: { ...DEFAULT_ROLES, ...(blog?.ai_roles ?? {}) } as AiRoles,
@@ -47,7 +51,7 @@ export default function BlogForm({ blog, connections }: { blog?: Blog; connectio
   async function submit() {
     setBusy(true);
     setMsg(null);
-    const payload = { ...f, review_rules: f.review_rules.split("\n").map((s) => s.trim()).filter(Boolean) };
+    const payload = { ...f, title_rules:f.title_rules.split("\n").map(s=>s.trim()).filter(Boolean),title_forbidden:f.title_forbidden.split("\n").map(s=>s.trim()).filter(Boolean), review_rules: f.review_rules.split("\n").map((s) => s.trim()).filter(Boolean) };
     try {
       if (blog) {
         await api(`/api/blogs/${blog.id}`, "PUT", payload);
@@ -88,6 +92,8 @@ export default function BlogForm({ blog, connections }: { blog?: Blog; connectio
       <section className="card card-pad stack">
         <h3 style={{ fontSize: 15 }}>작성 문체</h3>
         <textarea className="textarea" style={{ minHeight: 110 }} value={f.style_guide} onChange={(e) => set("style_guide", e.target.value)} placeholder="말투, 문단 길이, 금지 표현, 자주 쓰는 구성 등" />
+        <h3 style={{fontSize:15}}>제목 생성 규칙</h3>
+        <TitleRulesFields rules={f.title_rules} forbidden={f.title_forbidden} onRules={v=>set("title_rules",v)} onForbidden={v=>set("title_forbidden",v)}/>
         <h3 style={{ fontSize: 15 }}>검수 규칙 (한 줄에 하나)</h3>
         <textarea className="textarea" style={{ minHeight: 110 }} value={f.review_rules} onChange={(e) => set("review_rules", e.target.value)} />
         <h3 style={{ fontSize: 15 }}>이미지 방식</h3>

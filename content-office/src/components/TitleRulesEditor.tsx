@@ -1,0 +1,12 @@
+"use client";
+import {useState} from 'react';
+import {api} from './client-utils';
+import type {Blog} from '@/lib/types';
+import {titleLists} from '@/lib/title-rules';
+export function TitleRulesFields({rules,forbidden,onRules,onForbidden}:{rules:string;forbidden:string;onRules:(v:string)=>void;onForbidden:(v:string)=>void}){return <div className="stack" style={{gap:8}}><label className="label">제목 작성 규칙 (한 줄에 하나)<textarea className="textarea" aria-label="제목 작성 규칙" value={rules} onChange={e=>onRules(e.target.value)} placeholder="예: 제목 끝에 총정리를 붙이지 않는다"/></label><label className="label">제목 금지 문자·표현 (한 줄에 하나)<textarea className="textarea" aria-label="제목 금지 문자·표현" value={forbidden} onChange={e=>onForbidden(e.target.value)} placeholder={'|\n｜\n무조건\n인생템'}/></label><p className="tiny muted">금지 문자·표현은 적힌 그대로 제목에 포함되지 않게 확인해요. ‘기호를 쓰지 말 것’ 같은 설명은 작성 규칙에 넣어 주세요. 블로그별로 저장하며 다음 제목 생성·다시 뽑기·검수부터 적용해요. 이미 저장한 제목은 자동으로 바꾸지 않아요.</p></div>;}
+export default function TitleRulesEditor({blogId,disabled=false}:{blogId:string;disabled?:boolean}){
+  const [rules,setRules]=useState(''),[forbidden,setForbidden]=useState(''),[loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[msg,setMsg]=useState('');
+  async function load(){if(loaded||busy)return;setBusy(true);try{const b=await api<Blog>(`/api/blogs/${blogId}`),lists=titleLists(b);setRules(lists.rules.join('\n'));setForbidden(lists.forbidden.join('\n'));setLoaded(true);}catch(e){setMsg((e as Error).message);}finally{setBusy(false);}}
+  async function save(){setBusy(true);try{await api(`/api/blogs/${blogId}`,'PUT',{title_rules:rules.split('\n').map(x=>x.trim()).filter(Boolean),title_forbidden:forbidden.split('\n').map(x=>x.trim()).filter(Boolean)});setMsg('이 블로그의 제목 규칙을 저장했어요. 다음 제목 생성·다시 뽑기부터 적용해요.');}catch(e){setMsg((e as Error).message);}finally{setBusy(false);}}
+  return <details className="card card-pad" onToggle={e=>{if(e.currentTarget.open)void load();}}><summary>제목 규칙·금지 표현 직접 설정</summary><div className="stack" style={{gap:10,marginTop:12}}>{loaded?<><TitleRulesFields rules={rules} forbidden={forbidden} onRules={setRules} onForbidden={setForbidden}/><button className="btn btn-sm" disabled={busy||disabled} onClick={save}>제목 규칙 저장 (AI 호출 없음)</button></>:<button className="btn btn-sm" disabled={busy} onClick={load}>{busy?'불러오는 중…':'규칙 불러오기'}</button>}{msg&&<p className="small notice" role="status">{msg}</p>}</div></details>;
+}

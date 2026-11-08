@@ -1,3 +1,4 @@
+import {cleanTitleCandidate,forbiddenInTitle} from "./title-rules";
 import "server-only";
 import { q, q1, newId, j } from "./db";
 import type { Blog, Job, Project, ReviewResult } from "./types";
@@ -332,16 +333,17 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
       template: () => JSON.stringify({ candidates: [{ title: `${keyword} 총정리`, reason: "템플릿" }, { title: `${keyword} 알아보기`, reason: "템플릿" }], best: 0, bestReason: "⚠ AI 미연결: 템플릿 제목", subKeywords: [] }),
     });
     const raw = extractJson<{ candidates?: { title?: string; reason?: string }[]; best?: number; bestReason?: string; subKeywords?: string[] }>(res.text);
-    const candidates = arr(raw.candidates).map((c: { title?: string; reason?: string }) => ({ title: String(c?.title ?? "").trim(), reason: String(c?.reason ?? "") })).filter((c) => c.title);
-    if (!candidates.length) throw new AiError("AI가 제목 후보를 돌려주지 않았습니다.", true);
-    const best = Math.min(Math.max(0, Number(raw.best) || 0), candidates.length - 1);
+    const candidates = arr(raw.candidates).map((c: { title?: string; reason?: string }) => ({ title: cleanTitleCandidate(String(c?.title ?? "").trim(),blog), reason: String(c?.reason ?? "") })).filter((c) => c.title);
+    if (!candidates.length) throw new AiError("제목 규칙을 통과한 후보가 없어요. 금지 표현·규칙을 확인한 뒤 직접 다시 요청해 주세요. 자동 재호출하지 않아요.", false);
+    const originalBest=arr(raw.candidates)[Math.max(0,Math.floor(Number(raw.best)||0))];
+    const best = Math.max(0,candidates.findIndex(c=>c.title===cleanTitleCandidate(String(originalBest?.title??""),blog)));
     const plan: PostPlan = {
       ...(brief ? { brief } : {}),
       keyword,
       candidates,
       best,
       selectedTitle: candidates[best].title,
-      bestReason: String(raw.bestReason ?? ""),
+      bestReason: candidates[best].reason || String(raw.bestReason ?? ""),
       subKeywords: Array.from(new Set([...keywords.slice(1), ...arr(raw.subKeywords).map(String)])).slice(0, 8),
       related,
       ai: { provider: res.provider, model: res.model, substitutedFor: res.substitutedFor ?? null },
@@ -438,12 +440,13 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
       template: () => JSON.stringify(reviewTemplate(blog, html)),
     });
     const raw = extractJson<Partial<ReviewResult> & { imageChecks?: { index: number; ok: boolean; note: string }[] }>(res.text);
+    const titleBans=forbiddenInTitle(doc?.title || plan?.selectedTitle || project.title,blog);
     const result = {
       summary: String(raw.summary ?? ""),
       score: typeof raw.score === "number" ? raw.score : null,
-      issues: arr(raw.issues),
+      issues: [...titleBans.map(term=>({type:"rule",severity:"medium",quote:term,comment:`제목에 저장된 금지 문자·표현 ${JSON.stringify(term)}이 포함되어 있어요.`,suggestion:"제목 규칙에 맞게 자연스러운 문장으로 고쳐 주세요."})),...arr(raw.issues)],
       factChecks: arr(raw.factChecks),
-      ruleChecks: arr(raw.ruleChecks),
+      ruleChecks: [...titleBans.map(term=>({rule:`제목 금지: ${term}`,passed:false,note:"앱에서 제목 포함 여부를 직접 확인했어요."})),...arr(raw.ruleChecks)],
       imageChecks: arr(raw.imageChecks),
       provider: res.provider,
       model: res.model,

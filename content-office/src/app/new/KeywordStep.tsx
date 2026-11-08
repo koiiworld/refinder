@@ -1,5 +1,6 @@
 "use client";
 
+import TitleRulesEditor from "@/components/TitleRulesEditor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeywordPick } from "@/lib/keywords";
@@ -75,6 +76,7 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
 
   return (
     <div className="stack" style={{ gap: 16 }}>
+      {blogId&&<TitleRulesEditor key={blogId} blogId={blogId} disabled={!!busy}/>}
       <Steps current={fresh.length ? 2 : 1} />
 
       <div className="row">

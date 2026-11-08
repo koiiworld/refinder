@@ -2029,3 +2029,21 @@ test('📡 게시물 직접 추가: 본문·마크다운을 학습지에 저장,
   assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'본문 직접 저장은 수집·AI 호출 없음');
   const result=await call(`/api/learn/${added.data.id}`,'POST',{confirm:true});assert.equal(result.status,200);assert(result.data.analysis.knowledge.length>0,'기존 비용 확인 후 수동 학습은 유지');
 });
+
+
+test('✍️ 블로그별 제목 규칙 저장·후보 금지 표현 확인·최신 규칙 재적용·검수 반영',async()=>{
+  const rules=['제목 끝에 총정리를 붙이지 않는다','독자가 얻는 정보를 구체적으로 쓴다'],forbidden=['|','｜','금지단어'];
+  const created=await call('/api/blogs','POST',{name:'제목 규칙 전용',title_rules:rules,title_forbidden:forbidden});assert.equal(created.status,201);const blogId=created.data.id;
+  let blog=(await call(`/api/blogs/${blogId}`)).data;assert.deepEqual(blog.title_rules,rules);assert.deepEqual(blog.title_forbidden,forbidden);
+  assert.equal((await call(`/api/blogs/${blogId}`,'PUT',{title_rules:'잘못된 형식'})).status,400);assert.equal((await call(`/api/blogs/${blogId}`,'PUT',{title_forbidden:[42]})).status,400);
+  assert(!(await call('/api/blogs/blog_algokitchen')).data.title_forbidden.includes('금지단어'),'다른 블로그와 독립 저장');
+  const pick=await call('/api/keywords','POST',{action:'add',blogId,keyword:'제목규칙테스트'});const posts=await call('/api/posts','POST',{blogId,pickIds:[pick.data.id]});const id=posts.data.ids[0];
+  let b=await waitPost(id,x=>idle(x)&&x.project.stage==='titles','규칙 적용 제목 생성');
+  assert.equal(b.project.plan.candidates.length,2);assert(b.project.plan.candidates.every(x=>!/[|｜]/.test(x.title)&&!x.title.includes('금지단어')));assert.equal(b.project.plan.selectedTitle,'제목규칙테스트 안전한 제목');assert.equal(b.project.plan.bestReason,'규칙 통과');
+  assert((await stepPrompt('SEO 제목 전문가')).includes(rules[0]));
+  await call(`/api/blogs/${blogId}`,'PUT',{title_forbidden:[...forbidden,'안전한']});
+  await call(`/api/posts/${id}`,'POST',{action:'rerun',step:'titles'});b=await waitPost(id,x=>idle(x)&&x.project.stage==='titles','저장한 최신 규칙 다시 적용');assert.equal(b.project.plan.candidates.length,1);assert.equal(b.project.plan.selectedTitle,'제목규칙테스트 다른 제목');
+  // 직접 입력한 제목은 보존하되, 검수에서 실제 금지 문자 포함을 지적한다.
+  await call(`/api/posts/${id}`,'POST',{action:'write',title:'제목규칙테스트 | 직접 입력'});b=await waitPost(id,x=>idle(x)&&x.project.stage==='ready','제목 규칙 검수');assert(b.project.review.issues.some(x=>x.type==='rule'&&x.quote==='|'));assert(b.project.review.ruleChecks.some(x=>x.rule==='제목 금지: |'&&x.passed===false));assert((await stepPrompt('편집장이자 팩트체커')).includes(rules[0]));
+  await call(`/api/blogs/${blogId}`,'PUT',{title_forbidden:[],title_rules:[]});blog=(await call(`/api/blogs/${blogId}`)).data;assert.deepEqual(blog.title_forbidden,[]);assert.deepEqual(blog.title_rules,[]);
+});

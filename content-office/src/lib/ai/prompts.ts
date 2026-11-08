@@ -1,3 +1,4 @@
+import {titleRulesText} from "../title-rules";
 import type { Blog, Plan, Project, ReviewResult, Source } from "../types";
 
 const BASE_RULES = `
@@ -14,7 +15,8 @@ export function blogContext(blog: Blog) {
 작성 문체: ${blog.style_guide}
 이미지 스타일: ${blog.image_style}
 검수 규칙:
-${blog.review_rules.map((r, i) => `${i + 1}. ${r}`).join("\n")}`;
+${blog.review_rules.map((r, i) => `${i + 1}. ${r}`).join("\n")}
+${titleRulesText(blog)}`;
 }
 
 function sourcesText(sources: Source[]) {

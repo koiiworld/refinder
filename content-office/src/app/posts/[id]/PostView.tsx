@@ -1,5 +1,6 @@
 "use client";
 
+import TitleRulesEditor from "@/components/TitleRulesEditor";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -115,6 +116,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
       <div className="stack" style={{ gap: 16 }}>
         {/* ③ 제목 */}
         <Section n={3} title="SEO 제목" ai={plan?.ai} right={plan && !running && <button className="btn btn-sm" onClick={() => confirm("제목 후보를 새로 뽑을까요?") && act({ action: "rerun", step: "titles" }, "제목 후보를 다시 뽑습니다.")}>후보 다시 뽑기</button>}>
+          <TitleRulesEditor key={p.blog_id} blogId={p.blog_id} disabled={running}/>
           {!plan ? (
             <p className="small muted">{running ? "AI가 네이버 연관 키워드 검색량을 보고 제목 후보를 만들고 있습니다…" : "아직 제목이 없습니다."}</p>
           ) : (

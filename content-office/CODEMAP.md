@@ -71,6 +71,7 @@
 | `steps.ts` | 글(프로젝트) 진행 단계 | StepKey, STEP_AI_LABEL, DEFAULT_STEP_AI, FALLBACK_MODELS, POST_STAGES, STEP_NAMES, stageLabel, stageStep |
 | `studio.ts` | 🎬 영상 제작 스튜디오 (쇼츠·릴스) | StudioImage, StudioClip, StudioScene, StudioPlan, StudioCharacter, StudioOptions, StudioProject, STUDIO_STYLES … |
 | `telegram.ts` | 💬 텔레그램 메시지함: 앱이 보낸 메시지(보낸 메시지함)와 봇에게 온 메시지·버튼(받은 메시지함)을 기록 | TgMessage, TG_KIND, tgBase, logTg, listTg, tgCounts, markInboxSeen, sendManual |
+| `title-rules.ts` | 기호 금지는 공백으로 정리하고, 단어 금지를 어긴 후보는 사용하지 않음. 유료 재호출 없음. | DEFAULT_TITLE_FORBIDDEN, DEFAULT_TITLE_RULES, titleLists, parseTitleList, titleRulesText, forbiddenInTitle, cleanTitleCandidate |
 | `todos.ts` | ✅ 할 일 + 🔔 텔레그램 알림 | TODO_CATEGORIES, TodoCategory, categoryOf, Todo, kstToday, kstToDate, telegramConnected, listTodos … |
 | `top-posts.ts` | 블로그별 인기 글 TOP 10 | ViewItem, ViewKind, ViewsBlock, ReactionTop, viewsOf, captureDays, viewsOnDay, viewsInRange … |
 | `trash-snap.ts` | 🗑 휴지통 (나머지 항목용): 지울 때 그 줄(+딸린 기록)을 통째로 trash_items 에 보관하고 원래 표에서 뺌 | SNAP_KINDS, SnapKind, snapKindOf, TRASH_DAYS, snapToTrash, restoreSnaps, purgeSnaps |
@@ -281,6 +282,7 @@
 | `PostedButton.tsx` | ✅ 게시함 표시: 인스타·유튜브에 실제로 올린 뒤 직접 누름 (앱이 대신 올리지 않음) |  |
 | `RefPicker.tsx` | 🎨 레퍼런스 사진 고르기: 올리기 · 만든 이미지에서 고르기 · 빼기 (사진은 /api/refs 에 저장되고 아이디만 돌려받음) | uploadRefs, refFromUrl |
 | `StyleSamples.tsx` |  |  |
+| `TitleRulesEditor.tsx` |  | TitleRulesFields |
 | `TodayCost.tsx` | 오늘 쓴 AI 비용 (한국 시간 0시부터) — 단계별·모델별 (대시보드) |  |
 | `TrashButton.tsx` | 상세 화면의 🗑 휴지통으로 버튼 → 옮긴 뒤 목록으로 |  |
 | `TrashableList.tsx` | 목록 + 체크박스 → 🗑 휴지통으로 (휴지통에서 되살리기·완전 삭제) | TrashableItem |

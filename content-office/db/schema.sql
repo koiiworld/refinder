@@ -665,3 +665,7 @@ ON CONFLICT(host) DO NOTHING;
 -- 레이더는 관심 계정 바로가기로 전환. 기존 자료·사용/예약 비용 기록은 보존.
 UPDATE radar_settings SET auto_learning=FALSE WHERE auto_learning=TRUE;
 UPDATE radar_sources SET enabled=FALSE WHERE enabled=TRUE;
+
+-- 블로그마다 저장하는 제목 작성 규칙·문자 그대로 금지할 표현
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS title_rules JSONB NOT NULL DEFAULT '["키워드를 나열하지 않고 자연스러운 한 문장으로 쓴다","과장하거나 확인되지 않은 효과·수익을 약속하지 않는다"]'::jsonb;
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS title_forbidden JSONB NOT NULL DEFAULT '["|","｜"]'::jsonb;
