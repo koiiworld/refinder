@@ -2147,3 +2147,43 @@ test("🖼 편집기에 직접 올린 사진(base64)은 따로 저장하고 본�
   assert.ok(evs.some((m) => /📋 붙여넣기 글 320자 · 사진 1장: "ChatGPT 가 고쳐 준 도입부/.test(m)), JSON.stringify(evs.slice(0, 3)));
   assert.ok((await call(`/api/projects/${id}/versions`)).data.some((v) => v.label === "📋 붙여넣기 전"));
 });
+
+test("✍️ 직접 쓰기 (AI 글쓰기 안 함): 제목 다음에 바로 · 기획안을 고쳐 확정한 뒤 목차 뼈대로 · AI 요금 없음", async () => {
+  const mk = async (kw) => {
+    const add = await call("/api/keywords", "POST", { action: "add", blogId: "blog_algokitchen", keyword: kw });
+    const id = (await call("/api/posts", "POST", { blogId: "blog_algokitchen", pickIds: [add.data.id] })).data.ids[0];
+    await waitPost(id, (x) => x.project.stage === "titles" && idle(x), "제목 대기");
+    return id;
+  };
+  // ① 제목 다음 바로 직접 쓰기
+  const a = await mk("직접쓰기 시험 제육");
+  await call("/__reset", "POST", undefined, MOCK);
+  let r = await call(`/api/posts/${a}`, "POST", { action: "manual_write", title: "내가 직접 쓰는 제육볶음 이야기" });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  let b = (await call(`/api/posts/${a}`)).data;
+  assert.equal(b.project.stage, "reviewing");
+  assert.equal(b.project.status, "waiting", "검수는 직접 시작");
+  assert.equal(b.document.title, "내가 직접 쓰는 제육볶음 이야기");
+  assert.equal(b.jobs.length, 0, "AI 작업 없음");
+  await new Promise((res) => setTimeout(res, 800));
+  assert.ok(!(await mockLog()).some((l) => JSON.stringify(l.body).includes("전속 작가")), "AI 글쓰기 안 부름");
+  // 직접 쓴 글 저장 → 검수 시작 가능
+  const d = (await call(`/api/projects/${a}/document`)).data;
+  assert.equal((await call(`/api/projects/${a}/document`, "PUT", { html: "<p>내가 쓴 본문</p>", title: d.title, revision: d.revision })).status, 200);
+  // ② 기획안 → 고쳐서 직접 쓰기 (목차 뼈대)
+  const c = await mk("직접쓰기 시험 굴보쌈");
+  await call(`/api/posts/${c}`, "POST", { action: "outline", title: "굴보쌈 직접 쓰기" });
+  b = await waitPost(c, (x) => !!x.project.plan?.outline && idle(x), "기획안");
+  const o = b.project.plan.outline;
+  await call("/__reset", "POST", undefined, MOCK);
+  r = await call(`/api/posts/${c}`, "POST", { action: "manual_write", outline: { ...o, sections: [{ ...o.sections[0], heading: "내가 고친 첫 소제목" }, { ...o.sections[1], removed: true }] } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  b = (await call(`/api/posts/${c}`)).data;
+  assert.equal(b.project.stage, "reviewing");
+  assert.match(b.document.content_html, /<h2>내가 고친 첫 소제목<\/h2><ul><li>/, "고친 목차가 뼈대로");
+  assert.ok(!b.document.content_html.includes(o.sections[1].heading), "지운 목차는 빠짐");
+  assert.equal(b.project.plan.outline.approved, true);
+  assert.ok(b.project.package.images.length >= 1 && b.project.package.images[0].prompt === "", "이미지 자리만");
+  assert.ok(!(await mockLog()).some((l) => JSON.stringify(l.body).includes("전속 작가")), "AI 글쓰기 안 부름");
+  for (const id of [a, c]) await call("/api/trash", "POST", { action: "trash", ids: [id] });
+});

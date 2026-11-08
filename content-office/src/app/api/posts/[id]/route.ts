@@ -2,7 +2,7 @@ import { updateProject } from "@/lib/repo";
 import { q } from "@/lib/db";
 import { postBundle } from "@/lib/post-bundle";
 import { ensureWorker } from "@/lib/jobs";
-import { approveOutline, cancelJobs, insertImage, markPublished, requestOutline, rerun, selectTitle, setHashtags, setImage, startWriting, requestFix, requestEdit, saveIssueNotes, WorkflowError } from "@/lib/workflow";
+import { approveOutline, cancelJobs, insertImage, markPublished, requestOutline, rerun, selectTitle, setHashtags, setImage, startManual, startWriting, requestFix, requestEdit, saveIssueNotes, WorkflowError } from "@/lib/workflow";
 import { createMediaJob, estimateMedia } from "@/lib/media";
 import { HF_MODELS, HiggsfieldError } from "@/lib/higgsfield";
 import { generateDirect, ImageGenError } from "@/lib/image-gen";
@@ -90,6 +90,10 @@ export async function POST(req: Request, { params }: Ctx) {
         break;
       case "write":
         await startWriting(id, { index: b.index, title: b.title });
+        break;
+      case "manual_write":
+        // ✍️ 직접 쓰기 (AI 글쓰기 안 함): 제목 다음에 바로, 또는 기획안을 고쳐 확정한 뒤
+        await startManual(id, { index: b.index, title: b.title, outline: b.outline });
         break;
       case "hashtags":
         await setHashtags(id, b.hashtags ?? []);

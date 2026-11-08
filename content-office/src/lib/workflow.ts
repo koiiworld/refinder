@@ -1,6 +1,6 @@
 import "server-only";
 import { q, q1, newId, j } from "./db";
-import { addEvent, createVersion, getDocument, getProject, updateProject } from "./repo";
+import { addEvent, createVersion, getDocument, getProject, updateProject, writeAiDraft } from "./repo";
 import { enqueue } from "./jobs";
 import type { PostExtras, PostPlan } from "./posts-types";
 
@@ -110,6 +110,39 @@ export async function approveOutline(projectId: string, edited?: Partial<import(
   await updateProject(projectId, { plan: { ...plan, outline } });
   await addEvent(projectId, "approve", "③-2 기획안 승인");
   await startWriting(projectId);
+}
+
+/**
+ * ✍️ 직접 쓰기 (AI 글쓰기 안 함 · 무료): 제목만 정하고(또는 기획안을 고쳐 확정하고) 바로 편집기로
+ * - 기획안이 있으면 목차를 뼈대(소제목 + 들어갈 내용 메모)로 깔아 줌, 없으면 빈 본문
+ * - 다 쓰면 사용자가 직접 '검수 시작' (stage=reviewing, status=waiting)
+ */
+export async function startManual(projectId: string, input: { index?: number; title?: string; outline?: Partial<import("./posts-types").PostOutline> } = {}) {
+  const p = await getProject(projectId);
+  if (!p?.plan) throw new WorkflowError("제목 후보가 아직 없습니다.");
+  await noRunningJob(projectId);
+  if (input.index !== undefined || input.title) await selectTitle(projectId, input);
+  let plan = (await getProject(projectId))!.plan as unknown as import("./posts-types").PostPlan;
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  let html = "<p></p>";
+  if (plan.outline) {
+    const o = plan.outline;
+    const sections = (Array.isArray(input.outline?.sections) ? cleanSections(input.outline!.sections) : o.sections).filter((x) => !x.removed);
+    const claims = (Array.isArray(input.outline?.claims) ? cleanClaims(input.outline!.claims) : o.claims).filter((c) => !c.removed);
+    plan = { ...plan, outline: { ...o, sections, claims, approved: true } };
+    await updateProject(projectId, { plan });
+    if (sections.length) html = sections.map((s) => `<h2>${esc(s.heading)}</h2>${s.points.length ? `<ul>${s.points.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}<p></p>`).join("");
+  }
+  const doc = await q<{ content_html: string }>("SELECT content_html FROM documents WHERE project_id=$1", [projectId]);
+  // 이미 쓴 본문이 있으면 덮어쓰지 않음
+  if (!doc[0]?.content_html?.replace(/<[^>]+>/g, "").trim()) await writeAiDraft(projectId, html, { provider: "user", model: "", label: plan.outline ? "✍️ 직접 쓰기 시작 (기획안 뼈대)" : "✍️ 직접 쓰기 시작", force: true });
+  // 이미지 자리: 기획안의 이미지 계획이 있으면 자리만 만들어 둠 (프롬프트는 '컨셉 잡기'나 직접 입력)
+  const extras = ((await getProject(projectId))!.package as unknown as PostExtras | null) ?? { hashtags: [], images: [] };
+  if (!extras.images?.length && plan.outline?.images?.length) {
+    extras.images = plan.outline.images.map((m) => ({ prompt: "", alt: m.what, aspect: "4:3" }));
+  }
+  await updateProject(projectId, { package: { ...extras, hashtags: extras.hashtags?.length ? extras.hashtags : [plan.keyword.replace(/\s+/g, "")] }, stage: "reviewing", status: "waiting", status_message: "직접 쓰는 중 · 다 쓰면 '검수 시작'을 눌러 주세요." });
+  await addEvent(projectId, "approve", `③ 제목 확정 → ✍️ 직접 쓰기 (AI 글쓰기 안 함)${plan.outline ? " · 기획안 목차를 뼈대로" : ""}`);
 }
 
 async function noRunningJob(projectId: string) {

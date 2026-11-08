@@ -123,7 +123,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
             <p className="small muted">{running ? "AI가 네이버 연관 키워드 검색량을 보고 제목 후보를 만들고 있습니다…" : "아직 제목이 없습니다."}</p>
           ) : (
             <div className="stack" style={{ gap: 12 }}>
-              {choosing && <div className="notice small">후보를 누르거나 &apos;선택한 제목&apos; 칸에 원하는 대로 고친 뒤 <b>이 제목으로 글 쓰기</b>를 누르세요. 칸에 적힌 제목 그대로 글을 씁니다.</div>}
+              {choosing && <div className="notice small">후보를 누르거나 &apos;선택한 제목&apos; 칸에 원하는 대로 고친 뒤, 아래에서 <b>기획안 먼저</b> · <b>바로 AI 글쓰기</b> · <b>직접 쓰기(AI 안 씀)</b> 중에 고르세요.</div>}
               <TitlePicker plan={plan} current={title} draft={titleDraft} setDraft={setTitleDraft} choosing={choosing} disabled={running} onPick={(payload) => act({ action: "select_title", ...payload }, "제목을 저장했습니다.")} />
               {choosing && !plan.outline && (
                 <WriteStart
@@ -131,6 +131,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                   disabled={running || !titleDraft.trim()}
                   onOutline={() => act({ action: "outline", title: titleDraft.trim() }, "기획안(목차·근거)을 만들고 있어요.")}
                   onWrite={() => act({ action: "write", title: titleDraft.trim() }, "글 작성을 시작합니다.")}
+                  onManual={() => act({ action: "manual_write", title: titleDraft.trim() }, "직접 쓰기로 시작해요. ④에서 바로 쓰세요.")}
                 />
               )}
               {plan.outline && !plan.outline.approved && !running && p.stage === "titles" && (
@@ -138,6 +139,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                   projectId={p.id}
                   outline={plan.outline}
                   onApprove={(outline) => act({ action: "approve_outline", outline }, "기획안을 승인했어요. 글 작성을 시작합니다.")}
+                  onManual={(outline) => act({ action: "manual_write", outline }, "기획안 목차를 뼈대로 깔았어요. ④에서 직접 쓰세요.")}
                   onVerify={(outline, indexes, sectionIndexes) => act({ action: "verify_claims", outline, indexes, sectionIndexes })}
                   onRedo={() => act({ action: "outline", title: titleDraft.trim() || title }, "기획안을 다시 만들고 있어요.")}
                 />
@@ -185,7 +187,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
               {doc?.content_html && !running && <Rewrite onRun={(feedback) => act({ action: "rerun", step: "write", feedback }, "글을 다시 씁니다.")} />}
             </div>
           ) : (
-            <p className="small muted">③에서 제목을 고르고 &apos;이 제목으로 글 쓰기&apos;를 누르면 AI가 글을 씁니다.</p>
+            <p className="small muted">③에서 제목을 고른 뒤 &apos;바로 AI 글쓰기&apos;를 누르면 AI가 쓰고, &apos;직접 쓰기&apos;를 누르면 여기서 바로 직접 쓸 수 있어요.</p>
           )}
         </Section>
 
@@ -1028,13 +1030,14 @@ function useEstimates(projectId: string) {
 const estLine = (e?: Est | null) => (!e ? "" : e.steps.map((s) => `${s.label}: ${s.model}${s.usd != null ? ` ${fmtUsd(s.usd)}` : ""}`).join(" → "));
 
 /** 제목 다음: 기획안(추천) 또는 바로 쓰기 — 누르기 전에 모델·예상 비용·자동으로 이어질 단계를 보여 줌 */
-function WriteStart({ projectId, disabled, onOutline, onWrite }: { projectId: string; disabled: boolean; onOutline: () => void; onWrite: () => void }) {
+function WriteStart({ projectId, disabled, onOutline, onWrite, onManual }: { projectId: string; disabled: boolean; onOutline: () => void; onWrite: () => void; onManual: () => void }) {
   const e = useEstimates(projectId);
   return (
     <div className="card card-pad stack" style={{ gap: 8, padding: 12 }}>
       <div className="row" style={{ gap: 8 }}>
         <button className="btn btn-primary" disabled={disabled} onClick={onOutline}>📋 기획안 먼저 보기 (목차·근거·이미지 계획){e?.outline.total != null ? ` · 약 ${fmtUsd(e.outline.total)}` : ""}</button>
-        <button className="btn" disabled={disabled} onClick={() => confirm(`기획안 없이 바로 글을 쓸까요?\n자동으로 이어지는 단계: ${estLine(e?.write)}`) && onWrite()}>기획안 없이 바로 글 쓰기 →</button>
+        <button className="btn" disabled={disabled} onClick={() => confirm(`기획안 없이 바로 AI가 글을 쓸까요?\n자동으로 이어지는 단계: ${estLine(e?.write)}`) && onWrite()}>🤖 기획안 없이 바로 AI 글쓰기 →</button>
+        <button className="btn" disabled={disabled} onClick={() => confirm("AI 없이 내가 직접 쓸까요?\n제목만 확정하고 ④ 편집기로 바로 가요. AI 요금은 나가지 않아요.") && onManual()}>✍️ 직접 쓰기 (AI 안 씀 · 무료)</button>
       </div>
       <span className="tiny muted">기획안: {estLine(e?.outline) || "불러오는 중…"} · 승인하면 이어서 {estLine(e?.write)}{e?.write.total != null ? ` (합계 약 ${fmtUsd(e.write.total)})` : ""}. 예상치는 토큰 × 단가 추정이에요.</span>
     </div>
@@ -1042,7 +1045,7 @@ function WriteStart({ projectId, disabled, onOutline, onWrite }: { projectId: st
 }
 
 /** ③-2 기획안 확인·수정 → 승인하면 글 작성 */
-function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { projectId: string; outline: NonNullable<PostPlan["outline"]>; onApprove: (o: NonNullable<PostPlan["outline"]>) => void; onRedo: () => void; onVerify: (o: NonNullable<PostPlan["outline"]>, indexes: number[], sectionIndexes: number[]) => Promise<boolean> }) {
+function OutlineCard({ projectId, outline, onApprove, onManual, onRedo, onVerify }: { projectId: string; outline: NonNullable<PostPlan["outline"]>; onApprove: (o: NonNullable<PostPlan["outline"]>) => void; onManual: (o: NonNullable<PostPlan["outline"]>) => void; onRedo: () => void; onVerify: (o: NonNullable<PostPlan["outline"]>, indexes: number[], sectionIndexes: number[]) => Promise<boolean> }) {
   const e = useEstimates(projectId);
   const [o, setO] = useState(outline);
   useEffect(() => setO(outline), [outline]);
@@ -1146,7 +1149,8 @@ function OutlineCard({ projectId, outline, onApprove, onRedo, onVerify }: { proj
       )}
       {checks > 0 && <div className="notice notice-warn small">출처 없이 &apos;확인 필요&apos;인 사실 {checks}개 — 🔎 AI 확인을 눌러 보세요. 확인완료면 출처가 채워지고, 확인안됨은 지우거나 그대로 두면 글에서 단정하지 않고 [확인 필요]로 남겨요.</div>}
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-primary" onClick={() => onApprove({ ...o, sections: o.sections.map((sec) => ({ ...sec, points: sec.points.map((x) => x.trim()).filter(Boolean) })) })}>✅ 승인하고 글 쓰기{e?.write.total != null ? ` · 약 ${fmtUsd(e.write.total)}` : ""}</button>
+        <button className="btn btn-primary" onClick={() => onApprove({ ...o, sections: o.sections.map((sec) => ({ ...sec, points: sec.points.map((x) => x.trim()).filter(Boolean) })) })}>✅ 승인하고 AI 글쓰기{e?.write.total != null ? ` · 약 ${fmtUsd(e.write.total)}` : ""}</button>
+        <button className="btn" onClick={() => confirm("이 기획안대로 내가 직접 쓸까요?\n목차(소제목·들어갈 내용)를 ④ 편집기에 뼈대로 깔아 드려요. AI 글쓰기 요금은 나가지 않아요.") && onManual({ ...o, sections: o.sections.map((sec) => ({ ...sec, points: sec.points.map((x) => x.trim()).filter(Boolean) })) })}>✍️ 기획안대로 직접 쓰기 (무료)</button>
         {removed.length + removedSec.length > 0 && <button className="btn" onClick={() => setShowRemoved(true)}>🗑 삭제한 내용 ({removed.length + removedSec.length})</button>}
       </div>
       {showRemoved && (
