@@ -1,4 +1,5 @@
 import "server-only";
+import {assertRemoteReadAllowed,stopOnRemote429,RemoteReadLimited} from "./remote-read-limit";
 
 // 공개 게시물만 읽음. 로그인·쿠키 우회 없이, 실패하면 캡처 업로드를 안내.
 const FAILURE = "공개 게시물 이미지를 읽지 못했어요. 비공개·로그인 제한이거나 페이지 형식이 바뀌었을 수 있어요. 게시물 캡처를 올려 주세요.";
@@ -32,10 +33,13 @@ async function bounded(res: Response, max: number) {
   } finally { await reader.cancel(); }
   return Buffer.concat(chunks);
 }
-async function fetchInstagram(raw: string, media = false) {
+async function fetchInstagram(raw: string, media = false, originalUrl?:string) {
   let u = allowed(raw, media);
   for (let i = 0; i < 4; i++) {
+    const policyUrl=testOrigin()&&u.origin===new URL(testOrigin()!).origin&&originalUrl?originalUrl:u.href;
+    await assertRemoteReadAllowed(policyUrl);
     const res = await fetch(u, { redirect: "manual", headers: { "user-agent": "Mozilla/5.0", accept: media ? "image/*" : "text/html" }, signal: AbortSignal.timeout(15000) });
+    await stopOnRemote429(policyUrl,res);
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) { await res.body?.cancel(); u = allowed(new URL(res.headers.get("location")!, u).href, media); continue; }
     if (!res.ok) { await res.body?.cancel(); throw new Error(FAILURE); }
     const mime = res.headers.get("content-type")?.split(";")[0] ?? "";
@@ -93,14 +97,14 @@ export async function importInstagramImages(raw: string) {
   let parsed: ReturnType<typeof parseInstagramPost> | null = null;
   for (const suffix of url.includes("instagram.com") ? ["", "embed/captioned/"] : [""]) {
     try {
-      const result=parseInstagramPost((await fetchInstagram(target+suffix)).data.toString("utf8"),code);
+      const result=parseInstagramPost((await fetchInstagram(target+suffix,false,url)).data.toString("utf8"),code);
       if(!parsed || Number(result.caption)>Number(parsed.caption) || result.urls.length>parsed.urls.length)parsed=result;
       if(result.caption && result.expected!==null && result.urls.length===result.expected)break;
-    }catch{ /* 다른 공개 형식도 시도 */ }
+    }catch(e){if(e instanceof RemoteReadLimited)throw e; /* 다른 공개 형식도 시도 */ }
   }
   if(!parsed || (!parsed.urls.length&&!parsed.sourceText))throw new Error(FAILURE);
   const downloaded=[];
-  for(const img of parsed.urls)downloaded.push(await fetchInstagram(img,true));
+  for(const img of parsed.urls)downloaded.push(await fetchInstagram(img,true,url));
   const instagram=url.includes('instagram.com');
   const complete=instagram ? parsed.caption && parsed.sourceText.length>=80 : parsed.caption;
   return {url,downloaded,sourceText:parsed.sourceText,coverage:{caption:parsed.caption,imageCount:downloaded.length,expectedImages:parsed.expected,complete,method:instagram?'인스타 게시물 설명문·확보한 이미지':'공개 게시물',note:complete?`설명문 본문을 읽었어요. 이미지 ${downloaded.length}장${parsed.expected!==null?' / 전체 '+parsed.expected+'장':''}을 확보했으며 나머지는 읽었다고 하지 않아요.`:"본문이나 전체 장을 확인하지 못했어요. 텍스트·마크다운 또는 캡처를 보충해 주세요."}};

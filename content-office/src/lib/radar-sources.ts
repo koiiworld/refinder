@@ -1,4 +1,5 @@
 import "server-only";
+import {assertRemoteReadAllowed,stopOnRemote429} from "./remote-read-limit";
 import net from "node:net";
 import { checkImageUrl } from "./official-images";
 export type RadarPost={title:string;url:string;date:string|null;text:string;coverage:string};
@@ -23,10 +24,12 @@ export async function radarFetch(raw:string){
   let u=new URL(raw);
   for(let i=0;i<4;i++){
     sourceAddress(u.href,'rss');
+    await assertRemoteReadAllowed(u.href);
     const test=process.env.VIDEO_ALLOW_LOCAL==='1'?process.env.RADAR_TEST_ORIGIN:undefined;
     if(!test)await checkImageUrl(u.href);
     const target=test?new URL(u.pathname+u.search,test):u;
     const res=await fetch(target,{redirect:'manual',headers:{'user-agent':'Mozilla/5.0 (compatible; ContentOffice/1.0)'},signal:AbortSignal.timeout(20000)});
+    await stopOnRemote429(u.href,res);
     if(res.status>=300&&res.status<400&&res.headers.get('location')){await res.body?.cancel();u=new URL(res.headers.get('location')!,u);continue;}
     if(!res.ok){await res.body?.cancel();throw new Error(`공개 피드를 읽지 못했어요 (HTTP ${res.status}). 로그인 제한이면 게시물 본문을 직접 보충해 주세요.`);}
     const reader=res.body?.getReader();if(!reader)throw new Error('빈 응답이에요.');let n=0;const chunks:Uint8Array[]=[];

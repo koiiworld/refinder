@@ -652,3 +652,12 @@ CREATE TABLE IF NOT EXISTS radar_weeks (week TEXT PRIMARY KEY, limit_usd NUMERIC
 CREATE TABLE IF NOT EXISTS radar_attempts (id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES radar_items(id), week TEXT NOT NULL, reserved NUMERIC NOT NULL, actual NUMERIC, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 ALTER TABLE radar_items ADD COLUMN IF NOT EXISTS processing_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS radar_items_url_unique ON radar_items(url);
+
+-- 429 후 같은 호스트의 반복 읽기 차단. 서버 재시작·여러 계정에도 유효.
+CREATE TABLE IF NOT EXISTS remote_read_limits(host TEXT PRIMARY KEY,retry_at TIMESTAMPTZ NOT NULL);
+-- 이전 버전에서 방금 관측한 인스타 429도 기본 1시간 보호 기간을 이어받음.
+INSERT INTO remote_read_limits(host,retry_at)
+SELECT 'instagram.com',MAX(last_checked)+INTERVAL '1 hour' FROM radar_sources
+WHERE platform='instagram' AND last_error LIKE '%HTTP 429%' AND last_checked>NOW()-INTERVAL '1 hour'
+HAVING MAX(last_checked) IS NOT NULL
+ON CONFLICT(host) DO NOTHING;

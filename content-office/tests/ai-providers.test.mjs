@@ -2046,3 +2046,29 @@ test('📡 주간 예산 예약은 동시 실행에도 한도 이내 · 부족 �
   assert.equal((await call('/api/radar','POST',{action:'source',platform:'instagram',url:'https://www.instagram.com/p/multi/'})).status,400);
   await call('/api/radar','POST',{action:'settings',weekly_limit:1,auto_learning:false,confirm:true});
 });
+
+test('📡 인스타 429: Retry-After 보존·계정 간 반복 읽기 차단·마크다운 보충 허용·AI 비용 없음',async()=>{
+  const start=(await call('/api/radar')).data;await call('/__reset','POST',undefined,MOCK);
+  const added=await call('/api/radar','POST',{action:'source',platform:'instagram',url:'@limited_account',name:'429 확인'});assert.equal(added.status,200);
+  const source=added.data.sources.find(s=>s.name==='429 확인');await call('/api/radar','POST',{action:'check',id:source.id});
+  const state=await waitRadar(s=>s.sources.find(x=>x.id===source.id)?.last_error.includes('HTTP 429'),'429 응답 반영');
+  const blocked=state.sources.find(x=>x.id===source.id);assert(Date.parse(blocked.retry_after)>Date.now()+3500*1000);assert.match(blocked.last_error,/반복 요청을 멈춰/);
+  const other=state.sources.find(x=>x.platform==='instagram'&&x.id!==source.id);
+  assert(other.retry_after,'다른 인스타 계정도 동일 서버의 보호 기간 적용');
+  const before=(await mockLog()).length;
+  const retry=await call('/api/radar','POST',{action:'check',id:source.id});assert.equal(retry.status,429);assert(retry.data.retryAt);
+  assert.equal((await call('/api/radar','POST',{action:'check',id:other.id})).status,429);
+  assert.equal((await call('/api/learn','POST',{url:'https://www.instagram.com/p/multi/',category:'other'})).status,429,'개별 게시물 읽기도 제한 존중');
+  const extra=(await mockLog()).slice(before);assert.equal(extra.filter(l=>l.path==='/limited_account/'||l.path==='/jisick.chanel/'||l.path.startsWith('/p/')).length,0,'추가 인스타 요청 없음');
+  assert.equal((await mockLog()).filter(l=>l.path.includes('generateContent')).length,0,'읽기 제한만으로 AI 호출하지 않음');
+  const markdown='Fincept Terminal은 AI 금융 도구로 소개됐고 LLM 데이터 비용은 별도입니다. '.repeat(3);
+  const supplemented=await call('/api/learn','POST',{url:'https://www.instagram.com/p/multi/',text:markdown,category:'other'});assert.equal(supplemented.status,201,'네트워크 읽기 없이 본문 보충은 허용');
+  assert.equal(supplemented.data.needs_material,false);
+  const end=(await call('/api/radar')).data;assert.equal(Number(end.budget.spent),Number(start.budget.spent));assert.equal(Number(end.budget.reserved),Number(start.budget.reserved));
+  for(const [url,name,seconds] of [['https://date.example.org/radar-date-limited','날짜 헤더',7100],['https://fallback.example.org/radar-no-retry-after','헤더 없음',3500]]){
+    const src=(await call('/api/radar','POST',{action:'source',platform:'rss',url,name})).data.sources.find(s=>s.name===name);
+    await call('/api/radar','POST',{action:'check',id:src.id});
+    const result=await waitRadar(s=>s.sources.find(x=>x.id===src.id)?.retry_after,'다른 Retry-After 형식');
+    assert(Date.parse(result.sources.find(x=>x.id===src.id).retry_after)>Date.now()+seconds*1000,name);
+  }
+});

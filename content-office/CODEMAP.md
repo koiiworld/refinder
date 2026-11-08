@@ -56,6 +56,7 @@
 | `readiness.ts` | 발행 준비 판정 (서버·화면 공용) — 항상 '지금 원고' 기준 | ReadyState, READY_LABEL, Readiness, placeholderNumbers, readiness |
 | `reel-study.ts` | 🔍 릴스 분석기 (맥 전용 처리, AI는 무료 Gemini) | StudyReel, StudyAnalysis, STUDY_CATEGORIES, listStudies, getStudy, addStudies, deleteStudy, setCategory … |
 | `reels.ts` | ✂️ 릴스 편집기 (맥 전용 처리) | ReelProject, FONT_FILE, listReels, getReel, createReel, deleteReel, saveDoc, run … |
+| `remote-read-limit.ts` | 웹사이트가 보낸 429를 존중. 같은 서버·계정들의 반복 읽기도 함께 잠시 멈춤. | remoteReadHost, RemoteReadLimited, assertRemoteReadAllowed, stopOnRemote429, remoteReadLimits |
 | `repo.ts` | 말투 예시 파일(사용 중인 것)을 붙인 블로그 — AI 작업 전용 | listBlogs, getBlog, getBlogForAi, getProject, getDocument, getVersion, listVersions, listIdeas … |
 | `repurpose-channels.ts` | 📣 블로그 글 → 다른 채널 (클라이언트·서버 공용) | CHANNELS, ChannelId |
 | `repurpose.ts` | 📣 채널 변환: 블로그 글 하나 → 다른 채널용 초안 (원소스 멀티유즈) | RepurposeResult, RepurposeDoc, loadSource, listRepurpose, getRepurposeDoc, deleteRepurpose, repurpose |

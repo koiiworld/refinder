@@ -1,10 +1,11 @@
 import "server-only";
+import {assertRemoteReadAllowed,remoteReadLimits,remoteReadHost,RemoteReadLimited} from "./remote-read-limit";
 import { q,q1,j,newId } from './db';
 import { sourceAddress,collectRadarSource } from './radar-sources';
 import { addLearning,analyzeLearning,getLearning,learningEstimate } from './learning';
 import { getSettings } from './settings';
 import { countGoogleInput } from './ai/providers';
-export type RadarSource={id:string;platform:string;url:string;name:string;enabled:boolean;weekday:number;time:string;next_run_at:string;last_checked:string|null;last_error:string};
+export type RadarSource={id:string;platform:string;url:string;name:string;enabled:boolean;weekday:number;time:string;next_run_at:string;last_checked:string|null;last_error:string;retry_after?:string|null};
 export type RadarItem={id:string;source_id:string;url:string;title:string;source_text:string;published_at:string|null;coverage:string;state:string;message:string;learn_id:string|null;source_name?:string};
 export function radarWeek(now=new Date()){
   const kst=new Date(now.getTime()+9*3600000);kst.setUTCDate(kst.getUTCDate()-((kst.getUTCDay()+6)%7));return kst.toISOString().slice(0,10);
@@ -19,7 +20,8 @@ async function budget(){
   return (await q1<{week:string;limit_usd:number;spent:number;reserved:number}>('SELECT * FROM radar_weeks WHERE week=$1',[week]))!;
 }
 export async function radarState(){
-  return {sources:await q<RadarSource>('SELECT * FROM radar_sources ORDER BY created_at DESC'),items:await q<RadarItem>('SELECT i.*,s.name AS source_name FROM radar_items i JOIN radar_sources s ON s.id=i.source_id ORDER BY i.created_at DESC LIMIT 150'),settings:await q1<{auto_learning:boolean;weekly_limit:number}>('SELECT * FROM radar_settings WHERE id=1'),budget:await budget(),estimate:await learningEstimate()};
+  const limits=await remoteReadLimits(),sources=await q<RadarSource>('SELECT * FROM radar_sources ORDER BY created_at DESC');
+  return {sources:sources.map(s=>({...s,retry_after:limits.find(l=>l.host===remoteReadHost(s.url))?.retry_at??null})),items:await q<RadarItem>('SELECT i.*,s.name AS source_name FROM radar_items i JOIN radar_sources s ON s.id=i.source_id ORDER BY i.created_at DESC LIMIT 150'),settings:await q1<{auto_learning:boolean;weekly_limit:number}>('SELECT * FROM radar_settings WHERE id=1'),budget:await budget(),estimate:await learningEstimate()};
 }
 export async function saveRadarSettings(input:{auto_learning?:unknown;weekly_limit?:unknown;confirm?:unknown}){
   const cur=(await q1<{auto_learning:boolean;weekly_limit:number}>('SELECT * FROM radar_settings WHERE id=1'))!;
@@ -45,13 +47,16 @@ export async function saveRadarSource(input:Record<string,unknown>){
   return radarState();
 }
 export async function queueRadarSource(id:string){
+  const source=await q1<RadarSource>('SELECT * FROM radar_sources WHERE id=$1',[id]);
+  if(!source)throw new Error('계정을 찾을 수 없어요.');
+  await assertRemoteReadAllowed(source.url);
   const rows=await q('UPDATE radar_sources SET queued_until=NOW()+INTERVAL \'10 minutes\' WHERE id=$1 AND enabled=TRUE AND (queued_until IS NULL OR queued_until<NOW()) RETURNING id',[id]);
   if(!rows.length)throw new Error('계정이 꺼져 있거나 이미 확인 중이에요.');
   try{const {enqueue}=await import('./jobs');await enqueue('radar_collect',{payload:{sourceId:id},maxAttempts:1});}catch(e){await q('UPDATE radar_sources SET queued_until=NULL WHERE id=$1',[id]);throw e;}
 }
 export async function radarTick(){
   await q("UPDATE radar_items SET state='error',message='서버 중단으로 결과를 확인하지 못했어요. 예약 비용을 유지하고 자동 재학습하지 않아요.' WHERE state='processing' AND processing_at<NOW()-INTERVAL '10 minutes'");
-  const due=await q<{id:string}>('SELECT id FROM radar_sources WHERE enabled=TRUE AND next_run_at<=NOW() AND (queued_until IS NULL OR queued_until<NOW()) LIMIT 5');
+  const due=await q<{id:string}>('SELECT id FROM radar_sources WHERE enabled=TRUE AND next_run_at<=NOW() AND (queued_until IS NULL OR queued_until<NOW()) ORDER BY next_run_at LIMIT 100');
   for(const s of due)try{await queueRadarSource(s.id);}catch{}
   const config=await q1<{auto_learning:boolean}>('SELECT auto_learning FROM radar_settings WHERE id=1');if(!config?.auto_learning)return;
   const b=await budget();if(Number(b.spent)+Number(b.reserved)>=Number(b.limit_usd))return;
@@ -64,7 +69,7 @@ async function queueRadarItem(id:string){
 }
 export async function runRadarSource(id:string){
   const s=await q1<RadarSource>('SELECT * FROM radar_sources WHERE id=$1',[id]);if(!s||!s.enabled)return;
-  let error='';
+  let error='',retryAt:string|null=null;
   try{
     const posts=await collectRadarSource(s.platform,s.url);
     for(const post of posts){
@@ -73,8 +78,8 @@ export async function runRadarSource(id:string){
       const note=!post.date?'게시 날짜를 확인하지 못했어요. 본문을 보충하고 직접 학습을 예약해 주세요.':recent?'새 게시물 수집':'최근 7일 이전 글 · 자동 학습 제외';
       await q('INSERT INTO radar_items(id,source_id,url,title,source_text,published_at,coverage,state,message) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING',[newId('raditem_'),id,post.url,post.title,post.text,post.date,post.coverage,state,note]);
     }
-  }catch(e){error=(e as Error).message.slice(0,1000);}
-  await q('UPDATE radar_sources SET queued_until=NULL,last_checked=NOW(),last_error=$2,next_run_at=$3 WHERE id=$1',[id,error,nextRadarRun(s.weekday,s.time).toISOString()]);
+  }catch(e){error=(e as Error).message.slice(0,1000);if(e instanceof RemoteReadLimited)retryAt=e.retryAt;}
+  await q('UPDATE radar_sources SET queued_until=NULL,last_checked=NOW(),last_error=$2,next_run_at=$3 WHERE id=$1',[id,error,new Date(Math.max(nextRadarRun(s.weekday,s.time).getTime(),retryAt?Date.parse(retryAt):0)).toISOString()]);
   if(!error)await radarTick();
 }
 export async function runRadarItem(id:string){

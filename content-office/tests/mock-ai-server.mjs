@@ -48,6 +48,10 @@ http
     if(/:countTokens$/.test(url.pathname))return send(res,200,{totalTokens:1200});
     if(url.pathname==='/youtube/v3/channels')return send(res,200,{items:[{contentDetails:{relatedPlaylists:{uploads:'UU-radar'}}}]});
     if(url.pathname==='/youtube/v3/playlistItems')return send(res,200,{items:[{snippet:{title:'새 영상의 공개 설명',description:'영상 전체를 읽지 않고 공개 설명만 확인합니다. '+ 'Fincept Terminal은 AI 금융 도구이며 LLM 데이터 비용 별도이고 수익은 보장되지 않습니다. '.repeat(3),publishedAt:new Date().toISOString(),resourceId:{videoId:'radarvideo'}}}]});
+    if(url.pathname==='/limited_account/'||url.pathname==='/radar-date-limited'||url.pathname==='/radar-no-retry-after'){
+      res.writeHead(429,{'content-type':'text/plain',...(url.pathname==='/radar-no-retry-after'?{}:{'retry-after':url.pathname==='/limited_account/'?'3600':new Date(Date.now()+2*3600000).toUTCString()})});
+      return res.end('Too Many Requests');
+    }
     // 네이버 데이터랩 (NAVER API HUB 방식)
     if (url.pathname === "/search-trend/v1/search") {
       if (req.headers["x-ncp-apigw-api-key-id"] !== "test-dl-id" || req.headers["x-ncp-apigw-api-key"] !== "test-dl-key")
