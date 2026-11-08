@@ -8,11 +8,11 @@ export const MENU_GROUPS: MenuGroup[] = [
   { id: "workspace", label: "워크스페이스", items: [
     { href: "/todos", label: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림" },
     { href: "/routines", label: "루틴 관리", sub: "반복 업무 · 매일 알림 · 실행 기록" },
+    { href: "/calendar", label: "캘린더", sub: "시즌·행사별 일정" },
     { href: "/learn", label: "AI 학습지", sub: "후킹·이미지 생성·디자인·블로그·기타" },
     { href: "/learn/radar", label: "트렌드 레이더", sub: "관심 계정 새 글 · 주간 본문 학습" },
     { href: "/learn/tasks", label: "과제물", sub: "학습에서 나온 실천 과제 · 할 일·아이디어로" },
     { href: "/ideas", label: "아이디어 노트", sub: "메모·할 일·글 기획" },
-    { href: "/calendar", label: "캘린더", sub: "시즌·행사별 일정" },
     { href: "/convert", label: "문서 → 마크다운", sub: "PDF·워드·PPT·엑셀을 글로 (맥, 무료)" },
     { href: "/telegram", label: "텔레그램", sub: "연결·알림 설정 · 받은/보낸 메시지함" },
   ] },
