@@ -447,15 +447,29 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const plan = project.plan as unknown as PostPlan | null;
     const extras = (project.package as unknown as PostExtras | null) ?? { hashtags: [], images: [] };
     const doc = await getDocument(project.id);
-    const html = doc?.content_html ?? "";
+    let html = doc?.content_html ?? "";
     if (!html.trim()) throw new Error("검수할 글이 없습니다.");
     const startRevision = doc?.revision ?? 0;
+    // 예전에 직접 올린 사진(base64)이 남아 있으면 따로 저장하고 주소로 (버전 번호는 그대로 → 편집 중인 창과 충돌 없음)
+    const { bodyImageIds, externalizeImages } = await import("./inline-images");
+    const ext = await externalizeImages(html, project.id);
+    if (ext.count) {
+      await q("UPDATE documents SET content_html=$2 WHERE project_id=$1 AND revision=$3", [project.id, ext.html, startRevision]);
+      html = ext.html;
+    }
     const images = extras.images ?? [];
+    // 본문에 직접 넣은 사진도 검수 AI 가 보게 (⑤ 이미지 목록에 없는 것, 최대 4장, 이 앱 DB 에서 바로 읽음)
+    const known = new Set(images.map((i) => /img_[0-9a-f]{24}/.exec(i.url ?? "")?.[0]).filter(Boolean));
+    const bodyImgs: string[] = [];
+    for (const imgId of bodyImageIds(html).filter((x) => !known.has(x)).slice(0, 4)) {
+      const g = await q1<{ mime: string; data: Buffer | Uint8Array }>("SELECT mime, data FROM generated_images WHERE id=$1", [imgId]);
+      if (g && g.data.length < 5 * 1024 * 1024) bodyImgs.push(`data:${g.mime};base64,${Buffer.from(g.data).toString("base64")}`);
+    }
     // 직접 올린 사진(base64)은 짧은 표시로 (640만 토큰 → 한도 초과 방지)
     const { system, prompt } = postReviewPrompt(blog, { title: doc?.title || plan?.selectedTitle || project.title, keyword: plan?.keyword ?? project.topic, html: htmlForAi(html), hashtags: extras.hashtags ?? [], images });
     const res = await runStep({
       step: "review", role: "reviewer", purpose: "review", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
-      images: images.map((i) => i.url).filter((u): u is string => !!u && !u.startsWith("data:")),
+      images: [...images.map((i) => i.url).filter((u): u is string => !!u && !u.startsWith("data:")), ...bodyImgs],
       template: () => JSON.stringify(reviewTemplate(blog, html)),
     });
     const raw = extractJson<Partial<ReviewResult> & { imageChecks?: { index: number; ok: boolean; note: string }[] }>(res.text);

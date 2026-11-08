@@ -2109,20 +2109,31 @@ test('📊 크리에이터 자료는 블로그별 저장·조회·추천 맥락 
   }
 });
 
-test("🖼 편집기에 직접 올린 사진(base64)은 AI에 짧은 표시로만 보냄 (검수 토큰 한도 초과 방지) · 사진은 본문에 그대로", async () => {
+test("🖼 편집기에 직접 올린 사진(base64)은 따로 저장하고 본문엔 주소만 · 검수 AI는 사진으로 봄 (토큰 한도 초과 방지)", async () => {
   const posts = (await call("/api/posts")).data.filter((p) => p.stage === "ready" && p.blog_id === "blog_algokitchen");
   const id = posts[0].id;
   const d0 = (await call(`/api/projects/${id}/document`)).data;
   const big = `data:image/png;base64,${"A".repeat(300000)}`;
   const html = `<p>사진 위 문단</p><p><img src="${big}" alt="직접 올린 사진"></p><p>사진 아래 문단</p>`;
-  assert.equal((await call(`/api/projects/${id}/document`, "PUT", { html, title: d0.title, revision: d0.revision })).status, 200);
+  const sv = await call(`/api/projects/${id}/document`, "PUT", { html, title: d0.title, revision: d0.revision });
+  assert.equal(sv.status, 200);
+  let doc = (await call(`/api/projects/${id}/document`)).data;
+  assert.ok(!doc.content_html.includes("data:image"), "본문엔 사진 데이터가 없음");
+  const m = /https:\/\/app\.example\.test\/api\/img\/(img_[0-9a-f]{24})\.jpg/.exec(doc.content_html);
+  assert.ok(m, "앱 공개 주소로 바뀜");
+  assert.ok(doc.content_html.length < 500);
+  assert.equal((await fetch(`${BASE}/api/img/${m[1]}.jpg`)).status, 200, "사진 주소로 열림");
+  // 같은 사진으로 다시 저장해도 같은 주소 (중복 저장 안 함)
+  await call(`/api/projects/${id}/document`, "PUT", { html, title: d0.title, revision: doc.revision });
+  doc = (await call(`/api/projects/${id}/document`)).data;
+  assert.ok(doc.content_html.includes(m[1]));
+  // 검수: 글은 가볍게, 본문 사진은 사진으로 함께
   await call("/__reset", "POST", undefined, MOCK);
   await call(`/api/posts/${id}`, "POST", { action: "rerun", step: "review" });
   const b = await waitPost(id, (x) => x.project.stage === "ready" && idle(x), "검수");
   assert.notEqual(b.project.status, "error", b.project.status_message);
-  const reqs = (await mockLog()).filter((l) => JSON.stringify(l.body).includes("사진 위 문단"));
-  assert.ok(reqs.length >= 1, "검수 요청");
-  for (const r of reqs) assert.ok(JSON.stringify(r.body).length < 100000, `AI 요청이 너무 큼: ${JSON.stringify(r.body).length}`);
-  assert.ok(reqs.some((r) => JSON.stringify(r.body).includes("ai-image:1")), "사진 자리는 짧은 표시");
-  assert.ok((await call(`/api/projects/${id}/document`)).data.content_html.includes(big.slice(0, 40)), "본문 사진은 그대로");
+  const req = (await mockLog()).find((l) => JSON.stringify(l.body).includes("사진 위 문단"));
+  assert.ok(req, "검수 요청");
+  const body = JSON.stringify(req.body);
+  assert.ok(/inline_data|image_url|"type":"image"/.test(body), "본문 사진을 AI 에 사진으로 보냄");
 });
