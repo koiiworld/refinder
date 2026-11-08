@@ -9,6 +9,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     { href: "/todos", label: "할 일", sub: "오늘·예정·완료 · 텔레그램 알림" },
     { href: "/routines", label: "루틴 관리", sub: "반복 업무 · 매일 알림 · 실행 기록" },
     { href: "/learn", label: "AI 학습지", sub: "후킹·이미지 생성·디자인·블로그·기타" },
+    { href: "/learn/radar", label: "트렌드 레이더", sub: "관심 계정 새 글 · 주간 본문 학습" },
     { href: "/learn/tasks", label: "과제물", sub: "학습에서 나온 실천 과제 · 할 일·아이디어로" },
     { href: "/ideas", label: "아이디어 노트", sub: "메모·할 일·글 기획" },
     { href: "/calendar", label: "캘린더", sub: "시즌·행사별 일정" },

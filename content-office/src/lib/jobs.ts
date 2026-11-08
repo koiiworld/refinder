@@ -61,6 +61,9 @@ export function ensureWorker() {
   const rt = () => void import("./routines").then((m) => m.routineTick()).catch(() => {});
   setTimeout(rt, 15_000).unref?.();
   setInterval(rt, 60_000).unref?.();
+  const radar = () => void import("./radar").then(m=>m.radarTick()).catch(()=>{});
+  setTimeout(radar,45000).unref?.();
+  setInterval(radar,60000).unref?.();
   // 🗑 휴지통 30일 지난 것 자동 완전 삭제 (1시간마다)
   const tp = () => void import("./trash").then((m) => m.purgeExpired()).catch(() => {});
   setTimeout(tp, 90_000).unref?.();
@@ -201,6 +204,8 @@ const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, 
 const arr = (v: unknown) => (Array.isArray(v) ? v : []);
 
 const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
+  async radar_collect(job){await (await import("./radar")).runRadarSource(String(job.payload.sourceId));},
+  async radar_learn(job){await (await import("./radar")).runRadarItem(String(job.payload.itemId));},
   // 🔔 할 일 텔레그램 알림 (예약 시각에 실행, 중복 발송 방지)
   async todo_notify(job) {
     const { sendTodoNotification } = await import("./todos");

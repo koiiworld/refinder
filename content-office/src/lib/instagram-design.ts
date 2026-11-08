@@ -45,57 +45,63 @@ async function fetchInstagram(raw: string, media = false) {
   throw new Error(FAILURE);
 }
 
-/** 현재 게시물 JSON의 sidecar/carousel만 순서대로. 프로필·추천 게시물 이미지 제외. */
-function postImages(html: string, code: string): string[] {
-  const urls: string[] = [];
-  const add = (s: unknown) => { if (typeof s !== "string") return; try { allowed(s, true); if (!urls.includes(s)) urls.push(s); } catch {} };
-  const imageOf = (v: Record<string, unknown>) => {
-    if (v.is_video || v.media_type === 2) return;
-    if (typeof v.display_url === "string") add(v.display_url);
-    else {
-      const versions = v.image_versions2 as { candidates?: { url: string; width: number }[] } | undefined;
-      add(versions?.candidates?.slice().sort((a,b) => b.width-a.width)[0]?.url);
-    }
+/** 게시물 본문·캐러셀을 함께 읽음. 대표 이미지 메타데이터는 부분 수집으로 표시. */
+export function parseInstagramPost(html: string, code: string) {
+  const urls: string[] = [], captions: string[] = [];
+  let expected: number | null = null, matched = false;
+  const add = (value: unknown) => { if(typeof value!=="string")return;try { allowed(value,true);if(!urls.includes(value))urls.push(value); }catch{} };
+  const imageOf = (v: Record<string,unknown>) => {
+    if(v.is_video || v.media_type===2)return;
+    if(typeof v.display_url === "string")add(v.display_url);
+    else { const c=(v.image_versions2 as {candidates?:{url:string;width:number}[]}|undefined)?.candidates;add(c?.slice().sort((a,b)=>b.width-a.width)[0]?.url); }
   };
-  const visit = (v: unknown, depth = 0) => {
-    if (!v || typeof v !== "object" || depth > 25) return;
-    const o = v as Record<string, unknown>;
-    if (o.shortcode === code || o.code === code) {
-      const sidecar = o.edge_sidecar_to_children as { edges?: { node: Record<string, unknown> }[] } | undefined;
-      const children = sidecar?.edges?.map(x=>x.node) ?? o.carousel_media;
-      if (Array.isArray(children)) children.forEach(x=>imageOf(x)); else imageOf(o);
+  const visit=(v:unknown,depth=0):void=>{
+    if(depth>30 || !v)return;
+    if(typeof v==="string" && /^[{[]/.test(v) && v.length<4000000){try{visit(JSON.parse(v),depth+1);}catch{}return;}
+    if(typeof v!=="object")return;
+    const o=v as Record<string,unknown>;
+    if(o.shortcode===code || o.code===code){
+      matched=true;
+      const edges=(o.edge_media_to_caption as {edges?:{node?:{text?:string}}[]}|undefined)?.edges;
+      for(const e of edges??[])if(e.node?.text)captions.push(e.node.text);
+      const caption=typeof o.caption==="string"?o.caption:(o.caption as {text?:string}|undefined)?.text;
+      if(caption)captions.push(caption);
+      const children=(o.edge_sidecar_to_children as {edges?:{node:Record<string,unknown>}[]}|undefined)?.edges?.map(e=>e.node)??o.carousel_media;
+      if(Array.isArray(children)){expected=children.length;children.forEach(imageOf);}else {expected=1;imageOf(o);}
       return;
     }
     Object.values(o).forEach(x=>visit(x,depth+1));
   };
-  for (const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
-    const raw = m[1].trim().replace(/^window\._sharedData\s*=\s*/, "").replace(/;$/, "");
-    try { visit(JSON.parse(raw)); } catch { /* 다른 스크립트 */ }
+  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)){
+    const raw=m[1].trim().replace(/^window\._sharedData\s*=\s*/,"").replace(/;$/,"");try{visit(JSON.parse(raw));}catch{}
   }
-  if (!urls.length) {
-    for (const tag of html.matchAll(/<meta\b[^>]*>/gi)) {
-      if (!/\bproperty=["']og:image["']/i.test(tag[0])) continue;
-      add(/\bcontent=["']([^"']+)/i.exec(tag[0])?.[1]?.replace(/&amp;/g, "&"));
-    }
+  const meta:Record<string,string>={};
+  for(const m of html.matchAll(/<meta\b[^>]*>/gi)){
+    const attrs:Record<string,string>={};for(const a of m[0].matchAll(/([\w:-]+)=["']([^"']*)["']/g))attrs[a[1]]=a[2].replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+    if(attrs.property||attrs.name)meta[attrs.property||attrs.name]=attrs.content??"";
   }
-  return urls.slice(0, 6);
+  if(!urls.length)add(meta['og:image']);
+  // og:description에는 로그인 안내·좋아요 수·잘린 캡션이 섞일 수 있으므로 완전한 본문으로 취급하지 않음.
+  const caption=[...new Set(captions)].join('\n').slice(0,16000);
+  return {urls:urls.slice(0,6),sourceText:caption || meta['og:description'] || meta.description || '',caption:!!caption,expected,matched};
 }
 export async function importInstagramImages(raw: string) {
   const url = referenceUrl(raw);
   const code = url.split("/").filter(Boolean).at(-1)!;
   const base = testOrigin();
   const target = base ? `${base}${new URL(url).pathname}` : url;
-  let images: string[] = []; let sourceText = "";
+  let parsed: ReturnType<typeof parseInstagramPost> | null = null;
   for (const suffix of url.includes("instagram.com") ? ["", "embed/captioned/"] : [""]) {
     try {
-      const html = (await fetchInstagram(target + suffix)).data.toString("utf8");
-      images = postImages(html, code);
-      sourceText = [...html.matchAll(/<meta\b[^>]*>/gi)].filter(m=>/\b(?:name|property)=["'](?:og:title|og:description|description)["']/i.test(m[0])).map(m=>/\bcontent=["']([^"']+)/i.exec(m[0])?.[1] ?? "").join("\n").replace(/&amp;/g,"&").replace(/&quot;/g,'"').slice(0,6000);
-    } catch { /* 공개 embed도 시도 */ }
-    if (images.length) break;
+      const result=parseInstagramPost((await fetchInstagram(target+suffix)).data.toString("utf8"),code);
+      if(!parsed || Number(result.caption)>Number(parsed.caption) || result.urls.length>parsed.urls.length)parsed=result;
+      if(result.caption && result.expected!==null && result.urls.length===result.expected)break;
+    }catch{ /* 다른 공개 형식도 시도 */ }
   }
-  if (!images.length) throw new Error(FAILURE);
-  const downloaded = [];
-  for (const img of images) downloaded.push(await fetchInstagram(img, true));
-  return { url, downloaded, sourceText };
+  if(!parsed || (!parsed.urls.length&&!parsed.sourceText))throw new Error(FAILURE);
+  const downloaded=[];
+  for(const img of parsed.urls)downloaded.push(await fetchInstagram(img,true));
+  const instagram=url.includes('instagram.com');
+  const complete=instagram ? parsed.caption && parsed.sourceText.length>=80 : parsed.caption;
+  return {url,downloaded,sourceText:parsed.sourceText,coverage:{caption:parsed.caption,imageCount:downloaded.length,expectedImages:parsed.expected,complete,method:instagram?'인스타 게시물 설명문·확보한 이미지':'공개 게시물',note:complete?`설명문 본문을 읽었어요. 이미지 ${downloaded.length}장${parsed.expected!==null?' / 전체 '+parsed.expected+'장':''}을 확보했으며 나머지는 읽었다고 하지 않아요.`:"본문이나 전체 장을 확인하지 못했어요. 텍스트·마크다운 또는 캡처를 보충해 주세요."}};
 }

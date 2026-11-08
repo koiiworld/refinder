@@ -630,3 +630,25 @@ CREATE TABLE IF NOT EXISTS ai_learning_tasks (
   idea_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 실제로 읽은 본문과 읽기 범위. 이전 대표 이미지만 저장한 자료는 자동 학습하지 않음.
+ALTER TABLE ai_learning_refs ADD COLUMN IF NOT EXISTS coverage JSONB;
+ALTER TABLE ai_learning_refs ADD COLUMN IF NOT EXISTS previous_analysis JSONB;
+
+-- 트렌드 레이더: 일정·수집 항목·주간 예산을 DB에 보존 (맥/Render 중복 실행 방지)
+CREATE TABLE IF NOT EXISTS radar_settings (id INTEGER PRIMARY KEY CHECK(id=1), auto_learning BOOLEAN NOT NULL DEFAULT TRUE, weekly_limit NUMERIC NOT NULL DEFAULT 1);
+INSERT INTO radar_settings(id) VALUES (1) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS radar_sources (
+ id TEXT PRIMARY KEY, platform TEXT NOT NULL, url TEXT NOT NULL UNIQUE, name TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT TRUE,
+ weekday INTEGER NOT NULL DEFAULT 1, time TEXT NOT NULL DEFAULT '09:00', next_run_at TIMESTAMPTZ NOT NULL, queued_until TIMESTAMPTZ,
+ last_checked TIMESTAMPTZ, last_error TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS radar_items (
+ id TEXT PRIMARY KEY, source_id TEXT NOT NULL REFERENCES radar_sources(id), url TEXT NOT NULL, title TEXT NOT NULL, source_text TEXT NOT NULL DEFAULT '',
+ published_at TIMESTAMPTZ, coverage TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT 'new', message TEXT NOT NULL DEFAULT '', learn_id TEXT REFERENCES ai_learning_refs(id),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(source_id,url)
+);
+CREATE TABLE IF NOT EXISTS radar_weeks (week TEXT PRIMARY KEY, limit_usd NUMERIC NOT NULL, spent NUMERIC NOT NULL DEFAULT 0, reserved NUMERIC NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS radar_attempts (id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES radar_items(id), week TEXT NOT NULL, reserved NUMERIC NOT NULL, actual NUMERIC, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+ALTER TABLE radar_items ADD COLUMN IF NOT EXISTS processing_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS radar_items_url_unique ON radar_items(url);

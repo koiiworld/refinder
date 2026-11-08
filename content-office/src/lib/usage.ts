@@ -52,7 +52,7 @@ export async function todayUsage() {
     const p = pricing[key];
     const cost = Number(r.cost_usd) > 0 ? Number(r.cost_usd) : p ? (Number(r.input_tokens) * p.input + Number(r.output_tokens) * p.output) / 1_000_000 : 0;
     add(byModel, key, r, cost);
-    const [step, label] = STEP_OF[r.purpose] ?? ["9", "기타 (이전 기능)"];
+    const [step, label] = (r.purpose.startsWith("radar-learning:") ? ["radar", "📡 트렌드 레이더 학습"] : STEP_OF[r.purpose]) ?? ["9", "기타 (이전 기능)"];
     const s = bySteps.get(step) ?? { label, models: new Map() };
     add(s.models, key, r, cost);
     bySteps.set(step, s);

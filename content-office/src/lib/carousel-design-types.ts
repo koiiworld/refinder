@@ -26,16 +26,20 @@ export function cleanRecipe(value: unknown): DesignRecipe {
 }
 
 export const LEARN_CATEGORIES = [
-  { id: "hook", label: "후킹 문구", description: "구체적인 도움을 약속하는 표지와 제목 · 과장 금지" },
-  { id: "image", label: "이미지 생성", description: "구도·빛·색·질감과 이미지 프롬프트" },
-  { id: "design", label: "디자인", description: "캐러셀의 여백·글자 크기·배치·색" },
-  { id: "blog", label: "블로그", description: "도입·구성·설명 방식과 근거 제시" },
+  { id: "hook", label: "후킹 문구", description: "배운 지식으로 구체적인 표지·제목 만들기 · 과장 금지" },
+  { id: "image", label: "이미지 생성", description: "이미지 제작 도구·방법·조건을 배우고 시각 자료도 참고" },
+  { id: "design", label: "디자인", description: "디자인 정보·작업 방법·사례를 배우고 배치와 색에 적용" },
+  { id: "blog", label: "블로그", description: "본문의 지식·도구·작업 방법을 공부하고 글에 활용" },
   { id: "other", label: "기타", description: "어디에 쓸지 애매한 자료 · AI가 필요한 분야에 배정" },
 ] as const;
 export type LearnCategory = typeof LEARN_CATEGORIES[number]["id"];
 export type LearningAnalysis = DesignAnalysis & {
+  knowledge?: LearningKnowledge[];
   categories: Exclude<LearnCategory, "other">[]; reason: string;
   lessons: Partial<Record<Exclude<LearnCategory, "other">, string[]>>;
   hooks: { quote: string; why: string; pattern: string }[];
 };
-export type LearningRef = Omit<DesignReference, "analysis"> & { category: LearnCategory; analysis: LearningAnalysis | null };
+export type LearningRef = Omit<DesignReference, "analysis"> & { category: LearnCategory; analysis: LearningAnalysis | null; source_text?: string; coverage?: LearningCoverage; needs_material?: boolean };
+
+export type LearningCoverage = { caption: boolean; imageCount: number; expectedImages: number | null; complete: boolean; method: string; note: string };
+export type LearningKnowledge = { topic: string; detail: string; evidence: string; conditions: string; application: string };

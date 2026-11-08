@@ -15,6 +15,7 @@ export interface AiRequest {
   prompt: string;
   model: string;
   maxTokens?: number;
+  strictTokens?: boolean;
   json?: boolean;
   temperature?: number;
   images?: string[]; // https 이미지 URL 또는 data:image/...;base64 (비전 지원 모델에 함께 전달)
@@ -211,7 +212,7 @@ async function inlineImages(urls: string[] = []) {
 
 async function callGoogle(key: string, r: AiRequest): Promise<AiResponse> {
   // 최신 Gemini 는 답하기 전 '생각'에도 출력 한도를 쓰므로 넉넉히 잡음 (부족하면 답이 잘림)
-  const generationConfig: Record<string, unknown> = { maxOutputTokens: Math.max(16384, (r.maxTokens ?? 8000) * 2) };
+  const generationConfig: Record<string, unknown> = { maxOutputTokens: r.strictTokens ? r.maxTokens ?? 3000 : Math.max(16384, (r.maxTokens ?? 8000) * 2) };
   if (r.json) generationConfig.responseMimeType = "application/json";
   const data = (await postJson(
     `${base("google")}/v1beta/models/${encodeURIComponent(r.model)}:generateContent`,
@@ -223,7 +224,7 @@ async function callGoogle(key: string, r: AiRequest): Promise<AiResponse> {
     },
   )) as {
     candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
-    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number };
   };
   if (data.candidates?.[0]?.finishReason === "MAX_TOKENS" && r.json) {
     throw new AiError("Gemini 답이 출력 한도에 걸려 잘렸습니다. 다시 시도합니다.", true);
@@ -231,7 +232,7 @@ async function callGoogle(key: string, r: AiRequest): Promise<AiResponse> {
   return {
     text: (data.candidates?.[0]?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? "").join(""),
     inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
-    outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+    outputTokens: Math.max((data.usageMetadata?.candidatesTokenCount ?? 0)+(data.usageMetadata?.thoughtsTokenCount ?? 0),(data.usageMetadata?.totalTokenCount ?? 0)-(data.usageMetadata?.promptTokenCount ?? 0)),
   };
 }
 
@@ -272,4 +273,12 @@ export async function listModels(provider: Exclude<ProviderId, "template">): Pro
   const data = (await res.json()) as { data?: { id: string }[]; models?: { name: string }[] };
   if (provider === "google") return (data.models ?? []).map((m) => m.name.replace(/^models\//, ""));
   return (data.data ?? []).map((m) => m.id);
+}
+
+/** 자동 학습의 예산 예약 전, 동일 본문·이미지의 입력 토큰 수를 공식 API로 확인. 실패하면 생성하지 않음. */
+export async function countGoogleInput(r:AiRequest):Promise<number>{
+  const key=providerKey('google');if(!key)throw new AiError('무료 Gemini 텍스트 키가 연결되지 않았어요.',false);
+  const response=await postJson(`${base('google')}/v1beta/models/${encodeURIComponent(r.model)}:countTokens`,{'x-goog-api-key':key},{generateContentRequest:{model:`models/${r.model}`,systemInstruction:{parts:[{text:r.system}]},contents:[{role:'user',parts:[...(await inlineImages(r.images)),{text:r.prompt}]}]}});
+  const count=Number(response.totalTokens);if(!Number.isSafeInteger(count)||count<=0||count>1000000)throw new AiError('입력 토큰 수를 확인하지 못해 자동 학습을 보류해요.',false);
+  return count;
 }

@@ -37,13 +37,13 @@
 | `image-models.ts` | refs: 레퍼런스 이미지를 몇 장까지 받는지 (0 = 못 받음, 스타일 문구만 반영) · soul: Higgsfield Soul ID(내 캐릭터) 사용 가능 | ImageModel, IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel |
 | `image-prompt.ts` | 🖼 이미지 프롬프트 도우미 (무료 Gemini, 이미지는 만들지 않음) | hasHangul, toEnglishPrompt, editPrompt, recommendModels |
 | `image-refs.ts` | 🎨 이미지 레퍼런스 | ImageKit, Soul, MAX_REFS, saveRefImage, refFromUrl, loadRefs, publicBase, refUrl … |
-| `instagram-design.ts` | 현재 게시물 JSON의 sidecar/carousel만 순서대로. 프로필·추천 게시물 이미지 제외. | instagramPostUrl, referenceUrl, importInstagramImages |
+| `instagram-design.ts` | 게시물 본문·캐러셀을 함께 읽음. 대표 이미지 메타데이터는 부분 수집으로 표시. | instagramPostUrl, referenceUrl, parseInstagramPost, importInstagramImages |
 | `jobs.ts` | 서버 측 작업 큐 | enqueue, ensureWorker, VIDEO_JOBS, MAC_ONLY_JOBS, jobLabel |
 | `keystore.ts` | 설정 화면에서 직접 넣는 API 키 | KEY_FIELDS, KeyEnv, applyStoredKeys, startKeySync, keyStatus, canSaveKeys, saveKey, removeKey |
 | `keywords.ts` | 60일 안에 준비하거나 진행 중인 시즌 | KeywordPick, recommendKeywords, addUserKeyword, listPicks |
 | `learning-context.ts` | 최근·선호 자료를 우선 참고. 원문의 사실을 새 글의 근거로 쓰지 않음. | learningContext |
 | `learning-tasks.ts` |  | LearningTask, TASK_KINDS, listLearningTasks, learningTaskAction |
-| `learning.ts` |  | categoryOf, listLearning, getLearning, addLearning, learningEstimate, analyzeLearning, updateLearning |
+| `learning.ts` |  | categoryOf, listLearning, getLearning, LearningInput, addLearning, learningEstimate, analyzeLearning, updateLearning … |
 | `media.ts` | 모델별 요청 본문 (공식 문서 스키마 기준: docs.higgsfield.ai 모델별 generate 페이지) | MediaJob, buildBody, pathFor, estimateMedia, createMediaJob, getMediaJob, listMediaJobs, refreshMediaJob … |
 | `menu.ts` | 끈 기능 목록: 그룹은 'g:insta', 페이지는 '/hot' 처럼 | MenuItem, MenuGroup, MENU_TOP, MENU_GROUPS, MENU_BOTTOM, FeatureOff, isOffPath, itemOff |
 | `model-catalog.ts` | 이미지 모델 단가 (USD / 100만 토큰, 각 사 가격표 2026-11 확인) — 이미지 출력 토큰이 비용 대부분 | CatalogModel, MODEL_CATALOG, IMAGE_PRICING, catalogPricing |
@@ -51,6 +51,8 @@
 | `post-bundle.ts` | 글 상세 화면 데이터. 생성 중인 이미지는 Higgsfield 에 상태를 물어 갱신 | postBundle, PostBundle |
 | `posts-types.ts` | 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) | PostPlan, PostOutline, PostBrief, PostImage, PostExtras |
 | `pricing-refresh.ts` | AI 단가 새로고침: 공개 가격표(LiteLLM model_prices_and_context_window.json)에서 각 모델 단가를 찾아 | NEW_DAYS, PriceUpdate, pricingUpdates, refreshPricing |
+| `radar-sources.ts` |  | RadarPost, sourceAddress, radarFetch, collectRadarSource |
+| `radar.ts` |  | RadarSource, RadarItem, radarWeek, nextRadarRun, radarState, saveRadarSettings, saveRadarSource, queueRadarSource … |
 | `readiness.ts` | 발행 준비 판정 (서버·화면 공용) — 항상 '지금 원고' 기준 | ReadyState, READY_LABEL, Readiness, placeholderNumbers, readiness |
 | `reel-study.ts` | 🔍 릴스 분석기 (맥 전용 처리, AI는 무료 Gemini) | StudyReel, StudyAnalysis, STUDY_CATEGORIES, listStudies, getStudy, addStudies, deleteStudy, setCategory … |
 | `reels.ts` | ✂️ 릴스 편집기 (맥 전용 처리) | ReelProject, FONT_FILE, listReels, getReel, createReel, deleteReel, saveDoc, run … |
@@ -140,6 +142,7 @@
 | `api/projects/[id]/export/route.ts` | ⑦ 발행용 내려받기: format=html / md / json | GET |
 | `api/projects/[id]/versions/[vid]/route.ts` | 이 버전으로 되돌리기 | GET, POST |
 | `api/projects/[id]/versions/route.ts` | 원고 버전 목록 (내용 미리보기는 앞부분만) | GET, POST |
+| `api/radar/route.ts` |  | GET, POST |
 | `api/reels/[id]/render/route.ts` | 내보내기 (맥에서 Remotion으로 만들어 영상공장에 저장) | POST |
 | `api/reels/[id]/route.ts` | { doc, title? } 편집 저장 | GET, PUT, DELETE |
 | `api/reels/font/route.ts` | 미리보기용 글꼴 (내보내기와 같은 Noto Sans KR) | GET |
@@ -205,6 +208,8 @@
 | `learn/LearningBoard.tsx` |  |  |
 | `learn/[category]/page.tsx` |  | dynamic |
 | `learn/page.tsx` |  | dynamic |
+| `learn/radar/RadarBoard.tsx` |  |  |
+| `learn/radar/page.tsx` |  | dynamic |
 | `learn/tasks/TasksBoard.tsx` |  |  |
 | `learn/tasks/page.tsx` |  | dynamic |
 | `login/page.tsx` |  |  |

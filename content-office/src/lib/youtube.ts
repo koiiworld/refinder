@@ -161,3 +161,14 @@ export async function searchVideos(keyword: string, days = 90) {
   await q("INSERT INTO research_snapshots (id, blog_id, source, query, data) VALUES ($1,NULL,'youtube_search',$2,$3)", [newId("snap_"), j({ keyword, days }), j({ count: videos.length, top: videos.slice(0, 5).map((v) => ({ title: v.title, views: v.views })) })]);
   return { videos, terms: frequentTerms(videos, 20), collected_at: new Date().toISOString() };
 }
+
+/** 등록한 채널의 최신 업로드. 공개 제목·설명만 읽으며 영상 전체/자막을 읽었다고 하지 않음. */
+export async function channelPosts(url:string) {
+  const u=new URL(url), parts=u.pathname.split('/').filter(Boolean);
+  const selector:Record<string,string>=parts[0]==='channel'?{id:parts[1]}:parts[0]==='user'?{forUsername:parts[1]}:{forHandle:parts[0].replace(/^@/,'')};
+  const channel=await get('channels',{part:'contentDetails',...selector});
+  const list=(channel.items as {contentDetails?:{relatedPlaylists?:{uploads?:string}}}[])?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  if(!list)throw new Error('유튜브 채널을 확인하지 못했어요. 채널 주소와 API 연결을 확인해 주세요.');
+  const uploads=await get('playlistItems',{part:'snippet',playlistId:list,maxResults:'5'});
+  return ((uploads.items??[]) as {snippet:{title:string;description:string;publishedAt:string;resourceId:{videoId:string}}}[]).map(x=>({title:x.snippet.title,url:`https://www.youtube.com/watch?v=${x.snippet.resourceId.videoId}`,date:x.snippet.publishedAt,text:x.snippet.title+'\n'+x.snippet.description,coverage:'유튜브 공개 제목·설명 (영상 전체·자막은 미확인)'}));
+}

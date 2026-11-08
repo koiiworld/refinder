@@ -5,6 +5,11 @@
 set -e
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 DST=/tmp/co-test
+# 기존 서버를 재사용해 잘못 통과하지 않도록 격리 포트를 먼저 확인.
+node <<'PORTS'
+const net=require('node:net');
+(async()=>{for(const port of [3101,3102,4110])await new Promise((resolve,reject)=>{const s=net.createServer();s.once('error',()=>reject(new Error(`격리 테스트 포트 ${port}가 이미 사용 중이에요. 기존 테스트 실행을 종료한 뒤 다시 실행해 주세요.`)));s.listen(port,'127.0.0.1',()=>s.close(resolve));});})().catch(e=>{console.error(e.message);process.exit(1);});
+PORTS
 mkdir -p "$DST"
 # macOS와 Linux 모두 Node의 복사 API 사용. 실제 설정·DB·키는 제외.
 node - "$SRC" "$DST" <<'NODE'
@@ -49,7 +54,7 @@ env -i PATH="$PATH" HOME="$TEST_HOME" PGLITE_DIR=./data/ai \
   OPENAI_BASE_URL=http://localhost:4110 ANTHROPIC_BASE_URL=http://localhost:4110 GOOGLE_AI_BASE_URL=http://localhost:4110 HIGGSFIELD_BASE_URL=http://localhost:4110 \
   NAVER_AD_API_KEY=test-ad-key NAVER_AD_SECRET_KEY=test-ad-secret NAVER_AD_CUSTOMER_ID=12345 NAVER_AD_BASE_URL=http://localhost:4110 \
   NAVER_CLIENT_ID=test-dl-id NAVER_CLIENT_SECRET=test-dl-key NAVER_DATALAB_URL=http://localhost:4110/search-trend/v1/search \
-  YOUTUBE_API_KEY=test-yt-key YOUTUBE_BASE_URL=http://localhost:4110 NAVER_BLOG_BASE_URL=http://localhost:4110 NAVER_RSS_BASE_URL=http://localhost:4110 NAVER_MBLOG_BASE_URL=http://localhost:4110 OFFICIAL_IMAGES_ALLOW_LOCAL=1 VIDEO_ALLOW_LOCAL=1 PUBLIC_BASE_URL=https://app.example.test TELEGRAM_BOT_TOKEN=test-tg-token TELEGRAM_CHAT_ID=987654 TELEGRAM_API_BASE=http://localhost:4110 YTDLP_NO_UPDATE=1 INSTAGRAM_TEST_ORIGIN=http://localhost:4110 KR_HOLIDAY_ICS_URL=http://localhost:4110/kr-holidays.ics \
+  YOUTUBE_API_KEY=test-yt-key YOUTUBE_BASE_URL=http://localhost:4110 NAVER_BLOG_BASE_URL=http://localhost:4110 NAVER_RSS_BASE_URL=http://localhost:4110 NAVER_MBLOG_BASE_URL=http://localhost:4110 OFFICIAL_IMAGES_ALLOW_LOCAL=1 VIDEO_ALLOW_LOCAL=1 PUBLIC_BASE_URL=https://app.example.test TELEGRAM_BOT_TOKEN=test-tg-token TELEGRAM_CHAT_ID=987654 TELEGRAM_API_BASE=http://localhost:4110 YTDLP_NO_UPDATE=1 INSTAGRAM_TEST_ORIGIN=http://localhost:4110 RADAR_TEST_ORIGIN=http://localhost:4110 KR_HOLIDAY_ICS_URL=http://localhost:4110/kr-holidays.ics \
   COUPANG_ACCESS_KEY=test-coupang-access COUPANG_SECRET_KEY=test-coupang-secret COUPANG_API_BASE_URL=http://localhost:4110 NAVER_SEARCH_URL=http://localhost:4110/v1/search/blog.json NAVER_SECTION_BASE_URL=http://localhost:4110 GOOGLE_TRENDS_RSS_URL=http://localhost:4110/trending/rss PRICING_SOURCE_URL=http://localhost:4110/model-prices.json KEYS_SECRET=test-keys-secret WHISPER_PYTHON="$TEST_PYTHON" WHISPER_SCRIPT=tests/fake-transcribe.py EDGE_TTS_BIN=tests/fake-edge-tts.py \
   REMOTION_RUNTIME="$TEST_RUNTIME" REMOTION_BROWSER="$TEST_BROWSER" MARKITDOWN_BIN="$TEST_MARKITDOWN" AI_TOOLS_PYTHON="$TEST_AI_PY" ESRGAN_BIN="$TEST_ESRGAN" RIFE_BIN="$TEST_RIFE" \
   ./node_modules/.bin/next start -p 3102 > ai.log 2>&1 &

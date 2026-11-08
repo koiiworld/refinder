@@ -15,6 +15,8 @@ export interface RunOptions {
   prompt: string;
   json?: boolean;
   maxTokens?: number;
+  strictTokens?: boolean;
+  noFallback?: boolean;
   template?: () => string;
   override?: RoleAssignment | null; // 다른 AI로 재실행/재검수
   retries?: number; // 동기 호출 시 즉시 재시도 횟수
@@ -62,6 +64,7 @@ async function costOf(provider: string, model: string, inTok: number, outTok: nu
 }
 
 export async function runAI(o: RunOptions): Promise<RunResult> {
+  if(o.noFallback && o.override && !isConnected(o.override.provider))throw new AiError("선택한 AI가 연결되지 않았어요. 자동 대체하지 않습니다.",false);
   const { assignment, fallback } = await resolveAssignment(o.blog, o.role, o.override);
   const maxAttempts = 1 + (o.retries ?? 0);
   let lastErr: unknown;
@@ -70,7 +73,7 @@ export async function runAI(o: RunOptions): Promise<RunResult> {
     try {
       const res = await callProvider(
         assignment.provider,
-        { system: o.system, prompt: o.prompt, model: assignment.model, json: o.json, maxTokens: o.maxTokens, images: o.images },
+        { system: o.system, prompt: o.prompt, model: assignment.model, json: o.json, maxTokens: o.maxTokens, strictTokens:o.strictTokens, images: o.images },
         o.template,
       );
       if (!res.text.trim()) throw new AiError("AI 응답이 비어 있습니다.", true);

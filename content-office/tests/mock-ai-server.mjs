@@ -33,9 +33,21 @@ http
     if (/^\/p\/(learn|multi)\//.test(url.pathname) || url.pathname === "/pin/123456789/") {
       const origin = `http://localhost:${PORT}`;
       res.writeHead(200, {"content-type":"text/html; charset=utf-8"});
-      return res.end(url.pathname.includes("multi") ? `<script type="application/json">${JSON.stringify({data:{shortcode:"multi",edge_sidecar_to_children:{edges:[{node:{display_url:origin+"/img/a.jpg"}},{node:{display_url:origin+"/img/b.jpg"}}]}}})}</script>` : `<meta property="og:image" content="${origin}/img/learning.jpg"><meta property="og:description" content="김밥 밥을 식히는 이유, 단계별 설명과 여백">`);
+      return res.end(url.pathname.includes("multi") ? `<script type="application/json">${JSON.stringify({data:{shortcode:"multi",edge_media_to_caption:{edges:[{node:{text:"무료 GitHub 오픈소스 6가지. Fincept Terminal은 AI 금융 도구이고 LLM과 데이터 비용은 별도입니다. Open-Gen-AI는 이미지·영상 모델을 모아 쓰며 클라우드 키 또는 로컬 GPU가 필요합니다. 수익은 보장되지 않아요. 필요한 기능·조건을 확인한 뒤 사용하세요."}}]},edge_sidecar_to_children:{edges:[{node:{display_url:origin+"/img/a.jpg"}},{node:{display_url:origin+"/img/b.jpg"}}]}}})}</script>` : `<meta property="og:image" content="${origin}/img/learning.jpg"><meta property="og:description" content="김밥 밥을 식히는 이유, 단계별 설명과 여백">`);
     }
     if (url.pathname === "/p/blocked/") { res.writeHead(403); return res.end("login required"); }
+    if(url.pathname==='/radar-feed'){
+      res.writeHead(200,{'content-type':'application/rss+xml'});
+      return res.end(`<rss><channel>${['새 도구 소개','작업 방법 정리'].map((title,i)=>`<item><title>${title}</title><link>https://example.org/posts/radar-${i}</link><pubDate>${new Date().toUTCString()}</pubDate><description><![CDATA[<p>${'Fincept Terminal의 LLM 데이터 비용은 별도입니다. Open-Gen-AI는 클라우드 키 또는 로컬 GPU가 필요합니다. 수익은 보장되지 않아요. '.repeat(3)}</p>]]></description></item>`).join('')}</channel></rss>`);
+    }
+    if(url.pathname==='/radar-short'){res.writeHead(200,{'content-type':'application/atom+xml'});return res.end(`<feed><entry><title>짧은 자료</title><link href="https://example.org/posts/short"/><updated>${new Date().toISOString()}</updated><summary>짧아요</summary></entry></feed>`);}
+    if(url.pathname==='/jisick.chanel/'){
+      res.writeHead(200,{'content-type':'text/html'});
+      return res.end(`<script type="application/json">${JSON.stringify({user:{username:'jisick.chanel',posts:[{shortcode:'multi',owner:{username:'jisick.chanel'},taken_at_timestamp:Math.floor(Date.now()/1000),edge_media_to_caption:{edges:[{node:{text:'무료 GitHub 오픈소스 6가지 · 조건과 비용 확인'}}]}}]}})}</script>`);
+    }
+    if(/:countTokens$/.test(url.pathname))return send(res,200,{totalTokens:1200});
+    if(url.pathname==='/youtube/v3/channels')return send(res,200,{items:[{contentDetails:{relatedPlaylists:{uploads:'UU-radar'}}}]});
+    if(url.pathname==='/youtube/v3/playlistItems')return send(res,200,{items:[{snippet:{title:'새 영상의 공개 설명',description:'영상 전체를 읽지 않고 공개 설명만 확인합니다. '+ 'Fincept Terminal은 AI 금융 도구이며 LLM 데이터 비용 별도이고 수익은 보장되지 않습니다. '.repeat(3),publishedAt:new Date().toISOString(),resourceId:{videoId:'radarvideo'}}}]});
     // 네이버 데이터랩 (NAVER API HUB 방식)
     if (url.pathname === "/search-trend/v1/search") {
       if (req.headers["x-ncp-apigw-api-key-id"] !== "test-dl-id" || req.headers["x-ncp-apigw-api-key"] !== "test-dl-key")
@@ -278,6 +290,7 @@ http
       if (system.includes("교정")) return "AI가 다듬은 문장입니다.";
       if (system.includes("콘텐츠 전략가")) return JSON.stringify({ posts: [{ title: "양배추 두부전", titlePattern: "메뉴명 + 만들기 + 효익", hook: "인사 후 공감 질문", structure: "재료→순서→팁", whyPopular: "검색 의도에 바로 답함", keywords: ["양배추두부전"] }], common: ["재료를 목록으로"], apply: { titleIdeas: [{ title: "굴보쌈 집에서 만들기｜실패 없는 황금 비율", keyword: "굴보쌈", reason: "제철" }], keywords: [{ keyword: "굴보쌈", reason: "제철" }, { keyword: "깍두기", reason: "김장철" }], tips: ["사진 8장 이상"] } });
       if (system.includes("AI 학습지의")) return JSON.stringify({
+        knowledge:[{topic:"Fincept Terminal",detail:"AI 금융 도구를 소개한 게시물의 정보",evidence:"LLM과 데이터 비용은 별도",conditions:"LLM·데이터 비용 별도. 수익 보장 없음. 원문 주장으로 실제 기능 별도 확인",application:"우리 작업과 관련 있는지 먼저 확인"},{topic:"Open-Gen-AI",detail:"이미지·영상 모델을 모아 사용하는 도구",evidence:"클라우드 키 또는 로컬 GPU",conditions:"클라우드 키 또는 로컬 GPU가 필요",application:"이미지 제작 도구 후보로 조사"}],
         categories:["hook","image","design","blog"],reason:"표지·구도·배치·설명 순서를 함께 참고할 수 있어요",summary:"제목은 구체적으로, 본문은 여백을 두고 단계별로 정리해요",
         principles:["학습원칙마커: 구체적인 대상과 행동을 먼저"],avoid:["근거 없는 효과 보장"],
         lessons:{hook:["후킹학습마커: 밥을 식히는 이유처럼 구체적으로"],image:["Use soft side light. ImageLearningMarker."],design:["디자인학습마커: 넓은 여백과 큰 제목"],blog:["블로그학습마커: 문제 다음에 근거와 순서를 설명"]},
@@ -325,6 +338,7 @@ http
       return send(res, 200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: PIXEL } }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1290 } });
     }
 
+    if(body.generationConfig?.maxOutputTokens===6000)await new Promise(r=>setTimeout(r,250));
     // OpenAI Chat Completions
     if (url.pathname === "/v1/chat/completions") {
       if (req.headers.authorization !== "Bearer test-openai") return send(res, 401, { error: { message: "bad key" } });
