@@ -57,6 +57,10 @@ export interface PostImage {
   refIds?: string[];
   /** 블로그 컨셉 키트 같이 쓰기 (기본 켬) */
   useKit?: boolean;
+  /** 2번째 이미지부터: 먼저 만든 1번 이미지를 레퍼런스로 같이 보내 같은 컨셉 유지 (기본 켬) */
+  matchFirst?: boolean;
+  /** 이 이미지에 반드시 보여야 할 것 (컨셉 단계에서 정함) */
+  shows?: string[];
   /** Higgsfield Soul ID ('' = 안 씀, 없으면 키트 기본) */
   soulId?: string | null;
   /** 마지막으로 고른 Higgsfield 모델 */
@@ -75,4 +79,19 @@ export interface PostExtras {
   /** 마지막 '수정 요청사항' 반영 결과 */
   lastEdit?: { at: string; note: string; changes: string[] };
   publishedAt?: string | null;
+  /** 🎨 이미지 전체 컨셉 (이미지 만들기 전에 글 전체를 읽고 정함 — 모든 이미지가 같은 컨셉·같은 재료) */
+  imageConcept?: ImageConcept | null;
+}
+
+export interface ImageConcept {
+  /** 한국어 요약 (화면 표시) */
+  summary: string;
+  /** 모든 이미지 프롬프트에 똑같이 붙는 영어 컨셉 문단 */
+  prompt: string;
+  /** 레시피면 재료(분량 포함)·순서, 아니면 등장 제품·소품 */
+  ingredients: string[];
+  steps: string[];
+  provider?: string;
+  model?: string;
+  at?: string;
 }

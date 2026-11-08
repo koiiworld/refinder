@@ -17,10 +17,10 @@ export const IMAGE_MODELS: ImageModel[] = [
   { id: "openai:gpt-image-2", provider: "openai", label: "GPT Image 2", note: "글자·배치 정확", refs: 5, soul: false },
   { id: "openai:gpt-image-1.5", provider: "openai", label: "GPT Image 1.5", note: "이전 세대", refs: 5, soul: false },
   { id: "openai:gpt-image-1-mini", provider: "openai", label: "GPT Image 1 mini", note: "가장 저렴", refs: 5, soul: false },
-  { id: "google:gemini-3-pro-image", provider: "google", label: "Gemini 3 Pro Image", note: "고품질 · 구글 결제 필요", refs: 5, soul: false },
-  { id: "google:gemini-3.1-flash-image", provider: "google", label: "Gemini 3.1 Flash Image", note: "빠름 · 구글 결제 필요", refs: 5, soul: false },
+  { id: "google:gemini-3-pro-image", provider: "google", label: "나노바나나 Pro (Gemini 3 Pro Image)", note: "고품질 · 레시피·글자 정확 · 구글 결제 필요", refs: 5, soul: false },
+  { id: "google:gemini-3.1-flash-image", provider: "google", label: "나노바나나 2 (Gemini 3.1 Flash Image)", note: "빠름 · 구글 결제 필요", refs: 5, soul: false },
   { id: "google:gemini-3.1-flash-lite-image", provider: "google", label: "Gemini 3.1 Flash-Lite Image", note: "저렴 · 구글 결제 필요", refs: 5, soul: false },
-  { id: "google:gemini-2.5-flash-image", provider: "google", label: "Gemini 2.5 Flash Image (Nano Banana)", note: "구글 결제 필요", refs: 5, soul: false },
+  { id: "google:gemini-2.5-flash-image", provider: "google", label: "나노바나나 (Gemini 2.5 Flash Image)", note: "원조 나노바나나 · 구글 결제 필요", refs: 5, soul: false },
 ];
 
 export const IMAGE_PROVIDER_NAMES: Record<ImageModel["provider"], string> = { higgsfield: "Higgsfield", openai: "ChatGPT (OpenAI)", google: "Gemini (Google)" };

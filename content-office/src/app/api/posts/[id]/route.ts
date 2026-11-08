@@ -29,7 +29,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; refIds?: string[]; useKit?: boolean; soulId?: string | null; request?: string; indexes?: number[]; sectionIndexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; date?: string; outline?: Partial<import("@/lib/posts-types").PostOutline> }>(req);
+    const b = await body<{ action: string; step?: "titles" | "write" | "review"; feedback?: string; index?: number; title?: string; hashtags?: string[]; url?: string; prompt?: string; aspect?: string; pageUrl?: string; credit?: string; model?: string; refIds?: string[]; useKit?: boolean; soulId?: string | null; request?: string; indexes?: number[]; sectionIndexes?: number[]; note?: string; notes?: Record<string, string>; general?: string; manual?: boolean; on?: boolean; date?: string; outline?: Partial<import("@/lib/posts-types").PostOutline> }>(req);
     switch (b.action) {
       case "rerun":
         if (!b.step) throw new WorkflowError("다시 실행할 단계를 고르세요.");
@@ -128,6 +128,20 @@ export async function POST(req: Request, { params }: Ctx) {
           return fail((e as Error).message, 400);
         }
       }
+      case "replan_images": {
+        // 🎨 컨셉 다시 잡기: 글 전체 → 컨셉 → 레시피 재료·순서 → 이미지마다 프롬프트 (이미지는 만들지 않음)
+        try {
+          const { replanImages } = await import("@/lib/image-plan");
+          const c = await replanImages(id);
+          return ok({ ...(await postBundle(id)), notice: `이미지 컨셉을 다시 잡았어요${c.ingredients.length ? ` · 재료 ${c.ingredients.length}가지 확인` : ""}` });
+        } catch (e) {
+          return fail((e as Error).message, 400);
+        }
+      }
+      case "image_match_first": {
+        await setImage(id, Number(b.index), { matchFirst: !!b.on });
+        break;
+      }
       case "recommend_model": {
         // 🤖 모델 추천 (무료 Gemini, 이미지는 만들지 않음)
         const p = await getProject(id);
@@ -149,7 +163,17 @@ export async function POST(req: Request, { params }: Ctx) {
         if (!im) throw new WorkflowError("이미지 프롬프트를 찾을 수 없습니다.");
         const chosen = String(b.model ?? im.model ?? "soul-standard");
         // 한국어 → 영어, 컨셉 키트·레퍼런스·Soul ID·스타일 문구
-        const prep = await prepareImage({ modelId: chosen, prompt: im.prompt, blogId: p?.blog_id, refIds: im.refIds, useKit: im.useKit, soulId: im.soulId, projectId: id });
+        // 🔗 2번째 이미지부터: 먼저 만든 1번 이미지를 레퍼런스로 (같은 그릇·같은 요리·같은 분위기)
+        const idx = Number(b.index);
+        const first = (p?.package as unknown as PostExtras | null)?.images?.[0];
+        let firstRef: string[] = [];
+        if (idx > 0 && im.matchFirst !== false && first?.url) {
+          // 앱에서 만든 이미지는 그대로, Higgsfield 등 바깥 주소는 레퍼런스로 받아 둠
+          const { refFromUrl } = await import("@/lib/image-refs");
+          const r = /^https?:\/\//.test(first.url) ? await refFromUrl(first.url).catch(() => null) : null;
+          if (r) firstRef = [r];
+        }
+        const prep = await prepareImage({ modelId: chosen, prompt: im.prompt, blogId: p?.blog_id, refIds: [...firstRef, ...(im.refIds ?? [])], useKit: im.useKit, soulId: im.soulId, projectId: id });
         if (prep.translated) await setImage(id, Number(b.index), { prompt: prep.basePrompt });
         // ChatGPT·Gemini: 바로 만들어 DB에 저장하고 이 사이트 주소로 보여 줌
         if (imageModel(chosen) && imageModel(chosen)!.provider !== "higgsfield") {

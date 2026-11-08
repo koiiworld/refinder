@@ -417,6 +417,20 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
       publishedUrl: prevExtras?.publishedUrl ?? null,
       publishedAt: prevExtras?.publishedAt ?? null,
     };
+    // 🎨 이미지 기획: 글 전체 컨셉 → 레시피 재료·순서 → 같은 컨셉으로 이미지마다 프롬프트 (실패하면 작가가 쓴 프롬프트 그대로)
+    if (!official && extras.images.length) {
+      try {
+        await updateProject(project.id, { status_message: "이미지 컨셉·재료 정리 중" });
+        const { planImages } = await import("./image-plan");
+        const plan = await planImages(project.id, { html, images: extras.images });
+        if (plan) {
+          extras.images = plan.images;
+          extras.imageConcept = plan.concept;
+        }
+      } catch {
+        /* 이미지 기획 실패해도 글은 그대로 */
+      }
+    }
     const { applied } = await writeAiDraft(project.id, html, { provider: res.provider, model: res.model, label: feedback ? "수정 요청 반영" : "④ AI 원고" });
     // 검수는 자동으로 하지 않음: 사용자가 글·이미지를 읽고 고친 뒤 직접 '검수 시작'을 누름
     await updateProject(project.id, { package: extras, stage: "reviewing", status: "waiting", status_message: "글과 이미지를 확인·수정한 뒤 '검수 시작'을 눌러 주세요." });

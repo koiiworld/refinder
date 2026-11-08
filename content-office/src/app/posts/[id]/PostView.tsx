@@ -69,6 +69,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
     return () => clearInterval(t);
   }, [running, generating, refresh]);
 
+  const [replanning, setReplanning] = useState(false);
   async function act(payload: Record<string, unknown>, msg?: string) {
     try {
       const r = await api<PostBundle & { notice?: string }>(`/api/posts/${p.id}`, "POST", payload);
@@ -185,8 +186,40 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                 {!Object.values(imageProviders).some(Boolean) && " · 지금은 이미지 AI가 연결되지 않아 프롬프트를 복사해서 각 사이트에서 만들 수 있습니다."}
               </p>
               )}
+              {!extras.images.every((im) => im.kind === "official") && (
+                <div className="card card-pad stack" style={{ gap: 6, padding: 12, background: "var(--panel-2)" }}>
+                  <div className="row between" style={{ gap: 6 }}>
+                    <b className="small">🎨 이 글의 이미지 컨셉 (모든 이미지 공통)</b>
+                    <button className="btn btn-sm" disabled={running || replanning} onClick={async () => { if (!confirm("글 전체를 다시 읽고 이미지 컨셉·재료·프롬프트를 새로 잡을까요?\n이미 만든 이미지는 그대로 두고 프롬프트만 바뀌어요. (글 AI 사용)")) return; setReplanning(true); await act({ action: "replan_images" }, ""); setReplanning(false); }}>
+                      {replanning ? <><span className="spinner" /> 글 읽고 컨셉 잡는 중…</> : extras.imageConcept ? "🔄 컨셉 다시 잡기" : "🎨 컨셉 잡기"}
+                    </button>
+                  </div>
+                  {extras.imageConcept ? (
+                    <>
+                      <div className="small">{extras.imageConcept.summary}</div>
+                      {!!extras.imageConcept.ingredients.length && <div className="tiny"><b>재료·등장</b> {extras.imageConcept.ingredients.join(" · ")}</div>}
+                      {!!extras.imageConcept.steps.length && (
+                        <details>
+                          <summary className="tiny" style={{ cursor: "pointer" }}>순서 {extras.imageConcept.steps.length}단계 보기</summary>
+                          <ol className="tiny" style={{ margin: "4px 0 0", paddingLeft: 18 }}>{extras.imageConcept.steps.map((s, k) => <li key={k}>{s}</li>)}</ol>
+                        </details>
+                      )}
+                      <div className="tiny muted">글 전체를 읽고 컨셉 → 재료(분량까지) → 이미지마다 프롬프트 순서로 만들었어요. 모든 프롬프트에 같은 컨셉이 들어가고, 2번째 이미지부터는 1번 이미지를 레퍼런스로 같이 보내요. ({extras.imageConcept.provider}/{extras.imageConcept.model})</div>
+                    </>
+                  ) : (
+                    <div className="tiny muted">아직 컨셉을 잡지 않은 글이에요. &quot;컨셉 잡기&quot;를 누르면 글 전체를 읽고 같은 컨셉·같은 재료로 이미지 프롬프트를 다시 만들어요.</div>
+                  )}
+                </div>
+              )}
               {extras.images.map((im, i) => (
                 <div key={i} className="stack" style={{ gap: 4 }}>
+                  {i > 0 && im.kind !== "official" && !im.manual && (
+                    <label className="tiny row" style={{ gap: 6, justifyContent: "flex-end" }} title="먼저 만든 1번 이미지를 레퍼런스로 같이 보내 같은 그릇·요리·분위기로 만들어요">
+                      <input type="checkbox" checked={im.matchFirst !== false} disabled={running} onChange={(e) => void act({ action: "image_match_first", index: i, on: e.target.checked }, "")} />
+                      🔗 1번 이미지와 컨셉 맞추기{!extras.images[0]?.url ? " (1번을 먼저 만들면 적용돼요)" : ""}
+                    </label>
+                  )}
+                  {!!im.shows?.length && im.kind !== "official" && !im.manual && <div className="tiny muted" style={{ textAlign: "right" }}>꼭 보일 것: {im.shows.join(" · ")}</div>}
                   <label className="tiny row" style={{ gap: 6, justifyContent: "flex-end" }} title="체크하면 이 자리는 앱에서 넣지 않고, 블로그 편집기에서 직접 사진을 넣어요 (발행 준비 판정에서 빠져요)">
                     <input type="checkbox" checked={!!im.manual} disabled={running} onChange={(e) => void act({ action: "image_manual", index: i, manual: e.target.checked }, e.target.checked ? `이미지 ${i + 1}은 블로그 편집기에서 직접 넣는 걸로 표시했어요.` : `이미지 ${i + 1}은 앱에서 넣는 걸로 바꿨어요.`)} />
                     📷 이미지 {i + 1}: 블로그 편집기에서 직접 넣을게요

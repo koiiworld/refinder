@@ -265,6 +265,31 @@ test("⑤ ChatGPT·Gemini 이미지: 바로 만들어 저장 → 이 사이트 �
   const lite = await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 0, model: "google:gemini-3.1-flash-lite-image" });
   assert.equal(lite.status, 502);
   assert.match(lite.data.error, /무료 등급에서 쓸 수 없습니다/);
+  // 🎨 이미지 기획: 글 쓴 뒤 컨셉 → 재료 → 같은 컨셉으로 프롬프트 (모든 프롬프트에 같은 컨셉 문단)
+  const pk = b.project.package;
+  assert.match(pk.imageConcept.summary, /흰 무광 접시/);
+  assert.deepEqual(pk.imageConcept.ingredients, ["배추 1포기", "고춧가루 3큰술", "굴 200g"]);
+  assert.ok(Array.isArray(pk.images[1].shows), "이미지마다 꼭 보일 것");
+  // 🔗 2번 이미지: 1번 이미지를 레퍼런스로 함께 보냄
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 1, model: "google:gemini-3.1-flash-image" });
+  const g2 = (await mockLog()).find((l) => l.path.includes("gemini-3.1-flash-image:generateContent"));
+  assert.ok(JSON.stringify(g2.body).includes("inlineData") || JSON.stringify(g2.body).includes("inline_data"), "1번 이미지 레퍼런스 첨부");
+  // 끄면 안 보냄
+  await call(`/api/posts/${id}`, "POST", { action: "image_match_first", index: 1, on: false });
+  await call("/__reset", "POST", undefined, MOCK);
+  await call(`/api/posts/${id}`, "POST", { action: "generate_image", index: 1, model: "google:gemini-3.1-flash-image" });
+  const g3 = (await mockLog()).find((l) => l.path.includes("gemini-3.1-flash-image:generateContent"));
+  assert.ok(!JSON.stringify(g3.body).includes("inlineData") && !JSON.stringify(g3.body).includes("inline_data"), "끄면 레퍼런스 없음 (컨셉 키트도 없을 때)");
+  // 컨셉 다시 잡기 (이미지는 그대로)
+  const rp = await call(`/api/posts/${id}`, "POST", { action: "replan_images" });
+  assert.equal(rp.status, 200, JSON.stringify(rp.data));
+  assert.match(rp.data.notice, /재료 3가지/);
+  assert.ok(rp.data.project.package.images[0].url, "만든 이미지는 그대로");
+  assert.match(rp.data.project.package.images[1].prompt, /^Seasoning paste in a bowl[\s\S]*Shared concept for every photo in this post \(keep identical\): Matte white ceramic plate[\s\S]*Must clearly show exactly: 고춧가루 3큰술, 굴 200g/);
+  assert.deepEqual(rp.data.project.package.images[1].shows, ["고춧가루 3큰술", "굴 200g"]);
+  assert.match(await stepPrompt("블로그 사진 아트디렉터"), /1\) concept[\s\S]*2\) ingredients[\s\S]*3\) images/);
+  b = rp.data;
   // 본문에 넣기
   b = (await call(`/api/posts/${id}`, "POST", { action: "insert_image", index: 0 })).data;
   assert.ok(b.document.content_html.includes("/api/img/img_"));
