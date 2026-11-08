@@ -127,7 +127,7 @@ export function hashtagsPrompt(blog: Blog, input: { title: string; keyword: stri
   return { system, prompt };
 }
 
-export function postReviewPrompt(blog: Blog, input: { title: string; keyword: string; html: string; hashtags: string[]; images: { alt: string; prompt: string; url?: string | null; kind?: string; product?: string; credit?: string }[] }) {
+export function postReviewPrompt(blog: Blog, input: { title: string; keyword: string; html: string; hashtags: string[]; images: { alt: string; prompt: string; url?: string | null; kind?: string; product?: string; credit?: string }[]; bodyImages?: { n: number; near: string }[] }) {
   const system = `당신은 까다로운 블로그 편집장이자 팩트체커입니다. 다른 AI가 쓴 글과 이미지를 검수합니다. 반드시 JSON 객체 하나만 출력합니다.
 - 인터넷 검색은 하지 않습니다. 확실하지 않은 사실은 "확인 필요"로 둡니다.
 - 이미지가 첨부되어 있으면 직접 보고, 글 내용과 맞는지·어색한 부분(손가락, 글자 깨짐, 왜곡)이 있는지 확인하세요.
@@ -139,6 +139,7 @@ ${styleSamplesText(blog)}
 [해시태그] ${input.hashtags.map((h) => "#" + h).join(" ")}
 [이미지]
 ${input.images.map((im, i) => (im.kind === "official" ? `${i + 1}. ${im.alt} [공식 이미지: ${im.product || "제품"} · ${im.credit || "출처 미표기"}] ${im.url ? "(선택됨, 첨부 - 제품과 맞는지 확인)" : "(아직 선택 안 됨)"}` : `${i + 1}. ${im.alt} ${im.url ? "(생성됨, 첨부)" : "(아직 생성 안 됨 - 프롬프트만 검토)"}\n   프롬프트: ${im.prompt}`)).join("\n") || "(없음)"}
+${input.bodyImages?.length ? `\n[본문에 직접 넣은 사진 ${input.bodyImages.length}장 - 위 이미지들 다음 순서로 첨부. ChatGPT·제미나이 등에서 붙여넣었거나 직접 올린 사진]\n${input.bodyImages.map((b) => `사진 ${b.n}: 바로 앞 문장 "${b.near}"`).join("\n")}\n→ 각 사진이 바로 앞 문장·레시피 단계와 맞는지(재료·조리 상태·빠진 재료), 다른 사진과 컨셉(그릇·조명·분위기)이 이어지는지 확인하고, 문제가 있으면 type "image" 로 "본문 사진 N" 이라고 적어 지적하세요.\n` : ""}
 
 [본문 HTML]
 ${input.html}

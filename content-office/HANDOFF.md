@@ -45,7 +45,9 @@
 - **사용자 규칙(11-08): 글을 처음 쓴 뒤 검수를 자동으로 하지 않는다.** ④ 글 작성이 끝나면 `stage=reviewing, status=waiting`("확인·수정 후 검수 시작 대기")로 멈추고, 사용자가 ⑥의 "🔍 검수 시작"(= `rerun review`)을 눌러야 검수. (`jobs.ts` write 핸들러) 테스트의 `waitPost` 는 이 상태를 보면 검수 시작을 대신 눌러 줌.
 - 글 이미지는 눌러서 크게 보기(`PostView.tsx` `ZoomImg`).
 - **이미지 연결성(11-08)**: 글 작성 직후 `src/lib/image-plan.ts` `planImages` 가 ① 글 전체 컨셉 ② 레시피 재료(분량)·순서 ③ 이미지마다 장면+같은 컨셉 문단+꼭 보일 것/넣지 말 것 으로 프롬프트를 다시 만듦(`extras.imageConcept`, `images[].shows`). ⑤ 화면 "🎨 컨셉 다시 잡기"(`replan_images`). 2번째 이미지부터 1번 이미지를 레퍼런스로 자동 첨부(`matchFirst`, `image_match_first`). Gemini 이미지 모델 이름에 나노바나나 표기(Pro=3 Pro Image, 2=3.1 Flash Image, 원조=2.5 Flash Image).
-- 사용자 요청(코덱스에서 진행 예정): **앱 안에 ChatGPT·Gemini 대화창을 통째로 넣기** (MCP 연결이 아니라 앱 화면 안에서 바로), chat 모드/work 모드 구분.
+- **ChatGPT·제미나이 (11-08 결정)**: 사용자는 *내 계정 로그인·대화 기록 그대로*를 원함. chatgpt.com·gemini.google.com 은 iframe 금지(구글은 로그인도 막음)라 앱 안에 못 넣음 → **옆 창 열기 + 복사·붙여넣기** 방식으로 확정(`AiSideOpen.tsx`: 열 때 글/컨셉·재료를 클립보드에 복사). API 키로 만든 앱 안 대화창은 사용자가 원하지 않아 되돌림(배포 안 함). 크롬 확장·맥 데스크톱 앱 방식은 보류.
+- **붙여넣기 기록**: 편집기 붙여넣기마다 `POST /api/projects/:id/paste` → 붙이기 전 원고 버전("📋 붙여넣기 전", 1분 안 연속은 한 번) + 작업 기록 이벤트. ④ 아래 "📜 작업 기록"에서 확인. 사진 파일 붙여넣기도 커서 자리에 들어가고 저장 때 앱 이미지로 보관(`inline-images.ts`).
+- **검수**: 본문에 직접 넣은 사진(앱 이미지·외부 https)을 최대 8장 사진으로 첨부하고, 프롬프트에 "본문 사진 N: 바로 앞 문장"을 알려 줘서 레시피 단계·컨셉 일치를 확인.
 - **커밋 안 된 작업 없음.** 모든 작업이 커밋·배포됨 (마지막: 블로그 진단 개선 — 테스트 10 + 60 통과, 브라우저 확인 완료).
   - 블로그 진단(`diagnose.ts`, `DiagnoseView.tsx`): AI 진단 JSON 에 `problems[].steps/example`, `fixes[]`(점검표 줄별 고치는 법·실제 제목 기존→개선 예시), `growth[]`(조회수·유입 늘리기, 대시보드 조회수 캡처 `topPosts` 근거). 점검표 줄마다 "💡 고치는 법"·"🔄 다시 진단하기"(AI 없이 수치만). 이번 주 할 일 문구 수정(`POST /api/diagnose {blogId, next}`) + 체크 → 할 일로 보내기 팝업(`/api/todos`)
 - 다음 요청 예정(사용자가 코덱스에 직접 요청): **앱 안 ChatGPT (chat 모드 / work 모드)** — OpenAI 키 사용이라 대화마다 비용 발생, 사용자와 범위 확인 후 시작.

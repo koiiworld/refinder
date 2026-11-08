@@ -11,6 +11,7 @@ import { placeholderNumbers, readiness, READY_LABEL, type Readiness } from "@/li
 import { api, Modal, useToast } from "@/components/client-utils";
 import { BlogTag, fmtDate, fmtUsd, Steps } from "@/components/ui";
 import DocEditor from "@/components/DocEditor";
+import AiSideOpen from "./AiSideOpen";
 import BackButton from "@/components/BackButton";
 import { IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel } from "@/lib/image-models";
 import RefPicker from "@/components/RefPicker";
@@ -150,6 +151,13 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
         <Section n={4} title="글 (해시태그 포함)" ai={extras.writer}>
           {doc?.content_html || (plan && !choosing) ? (
             <div className="stack">
+              <AiSideOpen
+                kind="chatgpt"
+                getText={() => {
+                  const body = (doc?.content_html ?? "").replace(/<\/(p|h2|h3|li|tr)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/[ \t]+/g, " ").replace(/\n\s+/g, "\n").trim();
+                  return `아래 블로그 글을 같이 다듬어 줘. (블로그: ${b.blog?.name ?? ""})\n\n제목: ${title}\n\n본문:\n${body}`;
+                }}
+              />
               <DocEditor
                 key={p.id}
                 projectId={p.id}
@@ -161,6 +169,17 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                 onWholeRequest={(note) => act({ action: "edit_request", note }, "말로 요청한 수정사항을 AI가 글 전체에서 찾아 반영하고 있습니다.")}
               />
               <VersionHistory projectId={p.id} revision={doc?.revision ?? 0} disabled={running} onRestored={() => void refresh()} />
+              <details className="card card-pad" style={{ padding: 10 }}>
+                <summary className="small" style={{ cursor: "pointer" }}><b>📜 작업 기록</b> <span className="tiny muted">붙여넣기·AI 작성·수정·검수·버전 (최근 50개)</span></summary>
+                <div className="stack" style={{ gap: 3, marginTop: 8, maxHeight: 280, overflowY: "auto" }}>
+                  {((b as unknown as { events?: { id: string; type: string; message: string; created_at: string }[] }).events ?? []).map((ev) => (
+                    <div key={ev.id} className="tiny row" style={{ gap: 8, flexWrap: "nowrap", alignItems: "flex-start" }}>
+                      <span className="mono muted" style={{ flexShrink: 0, width: 92 }}>{new Date(ev.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                      <span style={{ wordBreak: "break-word" }}>{ev.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
               <Hashtags tags={extras.hashtags} disabled={running} onSave={(hashtags) => act({ action: "hashtags", hashtags }, "해시태그를 저장했습니다.")} />
               {doc?.content_html && <EditRequest busy={running} lastEdit={extras.lastEdit ?? null} onRun={(note) => act({ action: "edit_request", note }, "수정 요청사항을 AI가 반영하고 있습니다.")} />}
               {doc?.content_html && !running && <Rewrite onRun={(feedback) => act({ action: "rerun", step: "write", feedback }, "글을 다시 씁니다.")} />}
@@ -176,6 +195,21 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
             <p className="small muted">글이 완성되면 AI가 이미지 프롬프트를 만들어 둡니다.</p>
           ) : (
             <div className="stack">
+              {!extras.images.every((im) => im.kind === "official") && (
+                <AiSideOpen
+                  kind="gemini"
+                  getText={() => {
+                    const c = extras.imageConcept;
+                    return [
+                      `블로그 글 "${title}"에 넣을 사진을 같은 컨셉으로 만들어 줘. 레시피 재료가 빠지거나 없는 재료가 들어가면 안 돼.`,
+                      c ? `\n[공통 컨셉]\n${c.summary}\n${c.prompt}` : "",
+                      c?.ingredients.length ? `\n[재료]\n${c.ingredients.join(", ")}` : "",
+                      c?.steps.length ? `\n[순서]\n${c.steps.map((x, k) => `${k + 1}. ${x}`).join("\n")}` : "",
+                      `\n[만들 사진]\n${extras.images.map((im, k) => `${k + 1}. ${im.alt}${im.shows?.length ? ` (꼭 보일 것: ${im.shows.join(", ")})` : ""}`).join("\n")}`,
+                    ].filter(Boolean).join("\n");
+                  }}
+                />
+              )}
               {extras.images.some((im) => im.kind === "official") ? (
                 <p className="small muted">
                   이 블로그는 <b>제조사 공식 홈페이지 이미지</b>를 씁니다. AI가 적어 둔 공식 페이지 주소를 확인(필요하면 수정)하고 &quot;공식 이미지 찾기&quot;를 누른 뒤, 맞는 사진을 골라 &quot;본문에 넣기&quot;를 누르세요. 출처 표기는 사진 아래에 함께 들어갑니다.

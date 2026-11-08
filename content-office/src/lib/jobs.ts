@@ -459,14 +459,29 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     }
     const images = extras.images ?? [];
     // 본문에 직접 넣은 사진도 검수 AI 가 보게 (⑤ 이미지 목록에 없는 것, 최대 4장, 이 앱 DB 에서 바로 읽음)
-    const known = new Set(images.map((i) => /img_[0-9a-f]{24}/.exec(i.url ?? "")?.[0]).filter(Boolean));
+    // ChatGPT·제미나이 등에서 복사해 붙인 사진, 업로드한 사진 모두 (⑤ 목록에 없는 것, 최대 8장) + 그 사진 바로 앞 문장
+    void bodyImageIds;
+    const known = new Set(images.map((i) => i.url).filter(Boolean).map((u) => /img_[0-9a-f]{24}/.exec(u!)?.[0] ?? u));
     const bodyImgs: string[] = [];
-    for (const imgId of bodyImageIds(html).filter((x) => !known.has(x)).slice(0, 4)) {
-      const g = await q1<{ mime: string; data: Buffer | Uint8Array }>("SELECT mime, data FROM generated_images WHERE id=$1", [imgId]);
-      if (g && g.data.length < 5 * 1024 * 1024) bodyImgs.push(`data:${g.mime};base64,${Buffer.from(g.data).toString("base64")}`);
+    const bodyInfo: { n: number; near: string }[] = [];
+    const plain = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    for (const m of html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/gi)) {
+      if (bodyImgs.length >= 8) break;
+      const src = m[1];
+      const own = /img_[0-9a-f]{24}/.exec(src)?.[0];
+      if (known.has(own ?? src)) continue;
+      known.add(own ?? src);
+      let url: string | null = null;
+      if (own) {
+        const g = await q1<{ mime: string; data: Buffer | Uint8Array }>("SELECT mime, data FROM generated_images WHERE id=$1", [own]);
+        if (g && g.data.length < 5 * 1024 * 1024) url = `data:${g.mime};base64,${Buffer.from(g.data).toString("base64")}`;
+      } else if (/^https:\/\//.test(src)) url = src;
+      if (!url) continue;
+      bodyImgs.push(url);
+      bodyInfo.push({ n: bodyImgs.length, near: plain(html.slice(Math.max(0, (m.index ?? 0) - 400), m.index ?? 0)).slice(-80) });
     }
     // 직접 올린 사진(base64)은 짧은 표시로 (640만 토큰 → 한도 초과 방지)
-    const { system, prompt } = postReviewPrompt(blog, { title: doc?.title || plan?.selectedTitle || project.title, keyword: plan?.keyword ?? project.topic, html: htmlForAi(html), hashtags: extras.hashtags ?? [], images });
+    const { system, prompt } = postReviewPrompt(blog, { title: doc?.title || plan?.selectedTitle || project.title, keyword: plan?.keyword ?? project.topic, html: htmlForAi(html), hashtags: extras.hashtags ?? [], images, bodyImages: bodyInfo });
     const res = await runStep({
       step: "review", role: "reviewer", purpose: "review", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
       images: [...images.map((i) => i.url).filter((u): u is string => !!u && !u.startsWith("data:")), ...bodyImgs],

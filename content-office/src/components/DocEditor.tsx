@@ -85,7 +85,34 @@ export default function DocEditor({
       Placeholder.configure({ placeholder: "여기에 본문을 작성하세요. 텍스트를 선택하면 AI 부분 수정을 쓸 수 있습니다." }),
     ],
     content: serverDoc?.content_html ?? "",
-    editorProps: { attributes: { class: "prose", "aria-label": "원고 본문" } },
+    editorProps: {
+      attributes: { class: "prose", "aria-label": "원고 본문" },
+      // 📋 붙여넣기 기록 (ChatGPT·제미나이에서 복사해 온 글·사진): 붙이기 전 원고 보관 + 진행 기록
+      handlePaste: (_view, event) => {
+        const dt = event.clipboardData;
+        if (!dt) return false;
+        const txt = dt.getData("text/plain") || "";
+        const html = dt.getData("text/html") || "";
+        const imgs = Array.from(dt.files ?? []).filter((f) => f.type.startsWith("image/")).length + (html.match(/<img\b/gi)?.length ?? 0);
+        if (txt.trim().length >= 20 || imgs) {
+          void fetch(`/api/projects/${projectId}/paste`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ preview: txt.slice(0, 200), chars: txt.length, images: imgs }) }).catch(() => {});
+        }
+        // 사진 파일을 복사해 온 경우(제미나이에서 '이미지 복사' 등): 커서 자리에 사진으로 넣음 (저장할 때 앱 이미지로 따로 보관)
+        const files = Array.from(dt.files ?? []).filter((f) => f.type.startsWith("image/") && f.size <= 15 * 1024 * 1024);
+        if (files.length && !html.trim()) {
+          for (const f of files) {
+            const r = new FileReader();
+            r.onload = () => {
+              const node = _view.state.schema.nodes.image?.create({ src: String(r.result), alt: "붙여넣은 사진" });
+              if (node) _view.dispatch(_view.state.tr.replaceSelectionWith(node));
+            };
+            r.readAsDataURL(f);
+          }
+          return true;
+        }
+        return false; // 글 붙여넣기는 그대로 진행
+      },
+    },
     // 사용자가 실제로 편집했을 때만 저장 (불러올 때의 자동 정리·변환은 무시)
     onUpdate: ({ editor: e, transaction }) => {
       if (!transaction.docChanged || !e.isFocused) return;

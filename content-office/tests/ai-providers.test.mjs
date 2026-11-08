@@ -2136,4 +2136,14 @@ test("🖼 편집기에 직접 올린 사진(base64)은 따로 저장하고 본�
   assert.ok(req, "검수 요청");
   const body = JSON.stringify(req.body);
   assert.ok(/inline_data|image_url|"type":"image"/.test(body), "본문 사진을 AI 에 사진으로 보냄");
+  assert.match(await stepPrompt("편집장이자 팩트체커"), /\[본문에 직접 넣은 사진 1장[\s\S]*사진 1: 바로 앞 문장 "사진 위 문단"/, "어느 자리 사진인지 알려 줌");
+  // 📋 붙여넣기 기록: 붙이기 전 원고 보관 + 작업 기록 (1분 안 연속은 버전 한 번)
+  const pz = await call(`/api/projects/${id}/paste`, "POST", { preview: "ChatGPT 가 고쳐 준 도입부 문장입니다", chars: 320, images: 1 });
+  assert.equal(pz.status, 200);
+  assert.ok(pz.data.version > 0, "붙이기 전 버전");
+  const pz2 = await call(`/api/projects/${id}/paste`, "POST", { preview: "두 번째", chars: 30, images: 0 });
+  assert.equal(pz2.data.version, null, "연달아 붙이면 버전은 한 번");
+  const evs = (await call(`/api/posts/${id}`)).data.events.map((e) => e.message);
+  assert.ok(evs.some((m) => /📋 붙여넣기 글 320자 · 사진 1장: "ChatGPT 가 고쳐 준 도입부/.test(m)), JSON.stringify(evs.slice(0, 3)));
+  assert.ok((await call(`/api/projects/${id}/versions`)).data.some((v) => v.label === "📋 붙여넣기 전"));
 });
