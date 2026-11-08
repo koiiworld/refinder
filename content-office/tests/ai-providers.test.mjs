@@ -2047,3 +2047,20 @@ test('✍️ 블로그별 제목 규칙 저장·후보 금지 표현 확인·최
   await call(`/api/posts/${id}`,'POST',{action:'write',title:'제목규칙테스트 | 직접 입력'});b=await waitPost(id,x=>idle(x)&&x.project.stage==='ready','제목 규칙 검수');assert(b.project.review.issues.some(x=>x.type==='rule'&&x.quote==='|'));assert(b.project.review.ruleChecks.some(x=>x.rule==='제목 금지: |'&&x.passed===false));assert((await stepPrompt('편집장이자 팩트체커')).includes(rules[0]));
   await call(`/api/blogs/${blogId}`,'PUT',{title_forbidden:[],title_rules:[]});blog=(await call(`/api/blogs/${blogId}`)).data;assert.deepEqual(blog.title_forbidden,[]);assert.deepEqual(blog.title_rules,[]);
 });
+
+
+test('📊 크리에이터 자료는 블로그별 저장·조회·추천 맥락 분리, 블로그 미지정 저장 거절',async()=>{
+  const a='blog_algokitchen',b='blog_tistory',first='요리전용검증 수육 삶는법',second='테크전용검증 노트북 비교';
+  for(const [blogId,text] of [[a,first],[b,second]]){
+    const saved=await call('/api/research/creator','POST',{blogId,text:'1 '+text});assert.equal(saved.status,201,JSON.stringify(saved.data));
+  }
+  const readA=(await call(`/api/research/creator?blogId=${a}`)).data,readB=(await call(`/api/research/creator?blogId=${b}`)).data;
+  assert(readA.every(x=>x.blog_id===a));assert(readB.every(x=>x.blog_id===b));assert(JSON.stringify(readA).includes(first));assert(!JSON.stringify(readA).includes(second));assert(JSON.stringify(readB).includes(second));assert(!JSON.stringify(readB).includes(first));
+  assert.equal((await call('/api/research/creator')).status,400);
+  assert.equal((await call('/api/research/creator','POST',{text:'1 공용자료는 생성하지 않음'})).status,400);
+  assert.equal((await call('/api/research/creator','POST',{blogId:'missing-blog',text:'1 잘못된 블로그'})).status,400);
+  for(const [blogId,own,other] of [[a,first,second],[b,second,first]]){
+    await call('/__reset','POST',undefined,MOCK);
+    const recommended=await call('/api/keywords','POST',{action:'recommend',blogId});assert.equal(recommended.status,200,JSON.stringify(recommended.data));const prompt=await stepPrompt('SEO 키워드 전문가');assert(prompt.includes(own));assert(!prompt.includes(other),'다른 블로그 자료는 AI에 전달하지 않음');
+  }
+});

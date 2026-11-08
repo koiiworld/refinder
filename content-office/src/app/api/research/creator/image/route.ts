@@ -16,6 +16,7 @@ export async function POST(req: Request) {
     if (!images.length) return fail("PNG·JPG·WEBP 캡처 이미지를 올려 주세요.");
     if (images.some((s) => (s.length * 3) / 4 > MAX_BYTES)) return fail("이미지가 너무 큽니다 (한 장에 6MB 이하).");
     const blog = b.blogId ? await getBlogForAi(b.blogId) : null;
+    if(!blog)return fail("캡처를 넣을 블로그를 먼저 선택해 주세요.");
     const system = `당신은 네이버 크리에이터 어드바이저 화면을 읽어 옮겨 적는 도우미입니다. 화면에 실제로 보이는 글자만 옮기고, 보이지 않는 내용은 절대 지어내지 않습니다.`;
     const prompt = `첨부한 캡처는 네이버 크리에이터 어드바이저의 '유입 검색어' 또는 '트렌드' 화면입니다.
 화면에 보이는 검색어 목록을 순위대로 한 줄에 하나씩 옮겨 적으세요.

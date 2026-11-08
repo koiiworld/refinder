@@ -1,9 +1,9 @@
 import { q } from "@/lib/db";
 import { listCreatorTrends, saveCreatorTrend } from "@/lib/creator";
-import { body, handle, ok } from "@/lib/api";
+import { body, fail,handle, ok } from "@/lib/api";
 
 export async function GET(req: Request) {
-  return handle(async () => ok(await listCreatorTrends(new URL(req.url).searchParams.get("blogId"))));
+  return handle(async () => {const blogId=new URL(req.url).searchParams.get("blogId");return blogId?ok(await listCreatorTrends(blogId)):fail("자료를 확인할 블로그를 선택해 주세요.");});
 }
 
 /** 크리에이터 어드바이저 유입 트렌드 붙여넣기 저장 */

@@ -1,5 +1,5 @@
 import "server-only";
-import { q, newId, j } from "./db";
+import { q,q1, newId, j } from "./db";
 import { WorkflowError } from "./workflow";
 
 /**
@@ -44,6 +44,7 @@ export function parseTrendText(text: string): { rank: number; keyword: string }[
 }
 
 export async function saveCreatorTrend(input: { blogId?: string | null; category?: string; date?: string; text: string }) {
+  if(!input.blogId||!await q1("SELECT id FROM blogs WHERE id=$1",[input.blogId]))throw new WorkflowError("자료를 저장할 블로그를 먼저 선택해 주세요.");
   const items = parseTrendText(input.text ?? "");
   if (!items.length) throw new WorkflowError("붙여 넣은 내용에서 키워드를 찾지 못했습니다. 한 줄에 키워드 하나씩 붙여 넣어 주세요.");
   const date = /^\d{4}-\d{2}-\d{2}$/.test(input.date ?? "") ? input.date! : new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -59,10 +60,10 @@ export async function saveCreatorTrend(input: { blogId?: string | null; category
 
 type Row = { id: string; blog_id: string | null; query: { category: string; date: string }; data: { items: { rank: number; keyword: string }[] }; collected_at: string };
 
-export async function listCreatorTrends(blogId?: string | null, limit = 20): Promise<CreatorTrend[]> {
+export async function listCreatorTrends(blogId: string, limit = 20): Promise<CreatorTrend[]> {
+  if(!blogId)throw new WorkflowError("자료를 확인할 블로그를 먼저 선택해 주세요.");
   const rows = await q<Row>(
-    `SELECT * FROM research_snapshots WHERE source='creator_advisor' ${blogId ? "AND (blog_id=$1 OR blog_id IS NULL)" : ""} ORDER BY collected_at DESC LIMIT ${Number(limit)}`,
-    blogId ? [blogId] : [],
+    `SELECT * FROM research_snapshots WHERE source='creator_advisor' AND blog_id=$1 ORDER BY collected_at DESC LIMIT $2`,[blogId,limit],
   );
   return rows.map((r) => ({ id: r.id, blog_id: r.blog_id, category: r.query.category, date: r.query.date, items: r.data.items, collected_at: r.collected_at }));
 }

@@ -3,6 +3,7 @@
 import TitleRulesEditor from "@/components/TitleRulesEditor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {CreatorTrend} from "@/lib/creator";
 import type { KeywordPick } from "@/lib/keywords";
 import { api, useToast } from "@/components/client-utils";
 import { Steps } from "@/components/ui";
@@ -34,15 +35,17 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
   const [err, setErr] = useState("");
   const [toast, setToast] = useToast();
   const [showTrend, setShowTrend] = useState(false);
+  const [creatorOpened,setCreatorOpened]=useState(false);
+  const activeBlog=useRef(blogId);activeBlog.current=blogId;
   const [showBench, setShowBench] = useState(false);
   const blog = blogs.find((b) => b.id === blogId);
 
   const load = useCallback(async () => {
-    if (blogId) setPicks(await api<KeywordPick[]>(`/api/keywords?blogId=${blogId}`));
+    if(blogId){const rows=await api<KeywordPick[]>(`/api/keywords?blogId=${blogId}`);if(activeBlog.current===blogId)setPicks(rows);}
   }, [blogId]);
   useEffect(() => {
-    setSel([]);
-    void load();
+    setSel([]);setPicks([]);setErr("");
+    void load().catch(e=>{if(activeBlog.current===blogId)setErr(e.message);});
   }, [load]);
 
   const fresh = useMemo(() => picks.filter((p) => p.status === "new").sort((a, b) => vol(b) - vol(a)), [picks]);
@@ -81,7 +84,7 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
 
       <div className="row">
         {blogs.map((b) => (
-          <button key={b.id} className={`btn ${blogId === b.id ? "btn-primary" : ""}`} onClick={() => setBlogId(b.id)}>
+          <button key={b.id} className={`btn ${blogId === b.id ? "btn-primary" : ""}`} disabled={!!busy} onClick={() => setBlogId(b.id)}>
             <span className="blog-dot" style={{ background: b.color }} /> {b.name}
           </button>
         ))}
@@ -106,10 +109,10 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
           </button>
         </div>
         {!sources.ai && <div className="notice notice-warn small">AI가 연결되지 않아 추천할 수 없습니다. 설정에서 AI 키를 넣거나 아래에 키워드를 직접 입력하세요.</div>}
-        <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setShowTrend(!showTrend)}>
+        <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => {setCreatorOpened(true);setShowTrend(!showTrend);}}>
           {showTrend ? "▾" : "▸"} 네이버 크리에이터 어드바이저 유입 트렌드 붙여넣기 (선택)
         </button>
-        {showTrend && <CreatorPaste blogId={blogId} onDone={(m) => setToast(m)} />}
+        {creatorOpened&&blogs.map(b=><div key={b.id} hidden={!showTrend||blogId!==b.id}><CreatorPaste blogId={b.id} blogName={b.name} onDone={m=>setToast(m)}/></div>)}
         <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setShowBench(!showBench)}>
           {showBench ? "▾" : "▸"} 🔍 인기 글 분석해서 내 블로그에 적용 (크리에이터 어드바이저 인기 콘텐츠 등)
         </button>
@@ -216,12 +219,14 @@ export default function KeywordStep({ blogs, sources }: { blogs: BlogLite[]; sou
   );
 }
 
-function CreatorPaste({ blogId, onDone }: { blogId: string; onDone: (m: string) => void }) {
+function CreatorPaste({ blogId,blogName, onDone }: { blogId: string;blogName:string; onDone: (m: string) => void }) {
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
   const [reading, setReading] = useState(false);
   const [note, setNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [saved,setSaved]=useState<CreatorTrend[]>([]),[saving,setSaving]=useState(false);
+  useEffect(()=>{let active=true;api<CreatorTrend[]>(`/api/research/creator?blogId=${encodeURIComponent(blogId)}`).then(rows=>{if(active)setSaved(rows);}).catch(e=>{if(active)setErr(e.message);});return()=>{active=false;};},[blogId]);
 
   async function readImages(files: File[]) {
     const imgs = files.filter((f) => f.type.startsWith("image/")).slice(0, 4);
@@ -246,6 +251,8 @@ function CreatorPaste({ blogId, onDone }: { blogId: string; onDone: (m: string) 
 
   return (
     <div className="card card-pad stack" style={{ background: "var(--panel-2)", gap: 8 }}>
+      <b className="small">{blogName} 전용 유입 트렌드</b>
+      <p className="tiny muted">이곳에 넣은 자료는 이 블로그의 키워드 추천에만 반영해요. 블로그를 바꿔도 입력 중인 내용은 각각 유지해요.</p>
       <p className="tiny muted">
         <a href="https://creator-advisor.naver.com" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>크리에이터 어드바이저 ↗</a> 트렌드·유입 검색어 화면을 <b>캡처해서 올리거나</b>(여기에 붙여넣기 ⌘V도 됨), 목록을 복사해 붙여 넣으세요. 다음 키워드 추천부터 14일간 반영합니다.
       </p>
@@ -264,7 +271,8 @@ function CreatorPaste({ blogId, onDone }: { blogId: string; onDone: (m: string) 
       </div>
       <textarea
         className="textarea"
-        placeholder={"1 김장 양념 비율\n2 절임배추 ▲3\n3 굴보쌈 NEW"}
+        aria-label={`${blogName} 유입 트렌드 입력`}
+        placeholder={"1 이 블로그의 검색어\n2 두 번째 검색어 ▲3\n3 세 번째 검색어 NEW"}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onPaste={(e) => {
@@ -280,21 +288,23 @@ function CreatorPaste({ blogId, onDone }: { blogId: string; onDone: (m: string) 
       <button
         className="btn btn-sm"
         style={{ alignSelf: "flex-start" }}
-        disabled={!text.trim() || reading}
+        disabled={!text.trim() || reading ||saving}
         onClick={async () => {
-          setErr("");
+          setErr("");setSaving(true);
           try {
             const r = await api<{ count: number }>("/api/research/creator", "POST", { blogId, text });
             setText("");
             setNote("");
-            onDone(`유입 트렌드 ${r.count}개를 저장했습니다. 다음 추천에 반영됩니다.`);
+            setSaved(await api<CreatorTrend[]>(`/api/research/creator?blogId=${encodeURIComponent(blogId)}`));
+            onDone(`${blogName}에 유입 트렌드 ${r.count}개를 저장했습니다. 이 블로그의 다음 추천에만 반영됩니다.`);
           } catch (e) {
             setErr((e as Error).message);
-          }
+          }finally{setSaving(false);}
         }}
       >
-        저장
+        {saving?'저장 중…':'저장'}
       </button>
+      <details><summary className="small">{blogName}에 저장한 트렌드 ({saved.length}건)</summary>{saved.length?saved.slice(0,5).map(row=><div key={row.id} className="small" style={{marginTop:8}}><b>기준일 {row.date}</b><p>{row.items.map(item=>item.keyword).join(', ')}</p></div>):<p className="small muted">이 블로그에 저장한 자료가 아직 없어요.</p>}</details>
     </div>
   );
 }
