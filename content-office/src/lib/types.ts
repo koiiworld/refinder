@@ -1,3 +1,4 @@
+import type {CommonBlogRule} from "./blog-rule-types";
 // 공용 타입 정의
 
 export type ProviderId = "openai" | "anthropic" | "google" | "template";
@@ -20,6 +21,7 @@ export interface Blog {
   description: string;
   style_guide: string;
   review_rules: string[];
+  common_rules?: CommonBlogRule[];
   title_rules?: string[];
   title_forbidden?: string[];
   image_style: string;

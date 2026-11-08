@@ -2219,3 +2219,38 @@ test("🧩 크롬 확장 프로그램: 글 목록 → ChatGPT 답변(HTML 정리
   const st = (await (await fetch(`${BASE}/settings`)).text()).replace(/<!-- -->/g, "");
   assert.ok(st.includes("크롬 확장 프로그램") && st.includes("연결 코드"), "설정 화면 안내");
 });
+
+
+test('📚 공통 규칙: 블로그·플랫폼·분야 필터, 새 블로그 상속, 개별 설정 보존, AI 맥락/금지 표현 적용',async()=>{
+ const a=(await call('/api/blogs','POST',{name:'공통규칙 네이버',platform:'naver',title_rules:['개별 제목 규칙 보존'],title_forbidden:['개별금지']})).data.id;
+ const b=(await call('/api/blogs','POST',{name:'공통규칙 티스토리',platform:'tistory'})).data.id;
+ async function add(payload){const result=await call('/api/blog-rules','POST',payload);assert.equal(result.status,200,JSON.stringify(result.data));return result.data.at(-1);}
+ const global=await add({rules:['공통제목검증'],forbidden:['공통금지'],scopes:['title'],target:{mode:'all',values:[]}});
+ const body=await add({rules:['본문선택검증'],forbidden:[],scopes:['body'],target:{mode:'blogs',values:[a]}});
+ const image=await add({rules:['IMAGE_RULE_MARKER'],forbidden:['IMAGE_FORBIDDEN_MARKER'],scopes:['image'],target:{mode:'blogs',values:[a]}});
+ const review=await add({rules:['플랫폼검수검증'],forbidden:[],scopes:['review'],target:{mode:'platform',values:['tistory']}});
+ const keyword=await add({rules:['키워드전용검증'],forbidden:[],scopes:['keywords'],target:{mode:'blogs',values:[a]}});
+ let aa=(await call('/api/blogs/'+a)).data,bb=(await call('/api/blogs/'+b)).data;assert(aa.common_rules.some(x=>x.id===global.id));assert(aa.common_rules.some(x=>x.id===body.id));assert(!bb.common_rules.some(x=>x.id===body.id));assert(!aa.common_rules.some(x=>x.id===review.id));assert(bb.common_rules.some(x=>x.id===review.id));assert.deepEqual(aa.title_rules,['개별 제목 규칙 보존']);assert.deepEqual(aa.title_forbidden,['개별금지']);
+ const c=(await call('/api/blogs','POST',{name:'공통규칙 새 블로그'})).data.id;assert((await call('/api/blogs/'+c)).data.common_rules.some(x=>x.id===global.id));
+ assert.equal((await call('/api/blog-rules','POST',{rules:['x'],scopes:[],target:{mode:'all',values:[]}})).status,400);
+ assert.equal((await call('/api/blog-rules','POST',{rules:['x'],scopes:['title'],target:{mode:'blogs',values:['missing']}})).status,400);
+ await call('/__reset','POST',undefined,MOCK);await call('/api/keywords','POST',{action:'recommend',blogId:a});let prompt=await stepPrompt('SEO 키워드 전문가');assert(prompt.includes('키워드전용검증'));assert(!prompt.includes('본문선택검증'));assert(!prompt.includes('공통제목검증'));
+ const pick=(await call('/api/keywords','POST',{action:'add',blogId:a,keyword:'공통규칙 제목 확인'})).data.id;
+ const id=(await call('/api/posts','POST',{blogId:a,pickIds:[pick]})).data.ids[0];await waitPost(id,x=>idle(x)&&x.project.stage==='titles','공통 제목 규칙');prompt=await stepPrompt('SEO 제목 전문가');assert(prompt.includes('공통제목검증'));assert(prompt.includes('공통금지'));assert(!prompt.includes('본문선택검증'));assert(!prompt.includes('키워드전용검증'));
+ await call('/api/posts/'+id,'POST',{action:'write'});await waitPost(id,x=>idle(x)&&x.project.stage==='ready','공통 본문 규칙');prompt=await stepPrompt('전속 작가');assert(prompt.includes('본문선택검증'));assert(prompt.includes('IMAGE_RULE_MARKER'));assert(!prompt.includes('공통제목검증'));assert(!prompt.includes('플랫폼검수검증'));
+ prompt=await stepPrompt('편집장이자 팩트체커');assert(prompt.includes('공통제목검증'));assert(prompt.includes('본문선택검증'));
+ await call('/__reset','POST',undefined,MOCK);const generated=await call('/api/posts/'+id,'POST',{action:'generate_image',index:0,model:'openai:gpt-image-2'});assert.equal(generated.status,200,JSON.stringify(generated.data));const sent=(await mockLog()).find(x=>x.path.includes('/images/generations'));assert(sent&&sent.body.prompt.includes('IMAGE_RULE_MARKER'));assert(sent.body.prompt.includes('IMAGE_FORBIDDEN_MARKER'));assert(!sent.body.prompt.includes('본문선택검증'));
+ await call('/api/blog-rules','POST',{id:global.id,enabled:false});aa=(await call('/api/blogs/'+a)).data;assert(!aa.common_rules.some(x=>x.id===global.id));assert.deepEqual(aa.title_rules,['개별 제목 규칙 보존']);assert.deepEqual(aa.title_forbidden,['개별금지']);
+ for(const row of [body,image,review,keyword])await call('/api/blog-rules','POST',{id:row.id,enabled:false});
+});
+
+
+test('🎬 영상 아이디어 문구·구성 다시 생성: 비용 확인 필수, 미리보기만 반환, 원본 프로젝트·미디어 유지',async()=>{
+ const before=(await call('/api/studio')).data.length;
+ const est=await call('/api/studio/rewrite');assert.equal(est.status,200);assert(est.data.steps[0].model);
+ assert.equal((await call('/api/studio/rewrite','POST',{prompt:'닭한마리 조리 영상'})).status,400);
+ await call('/__reset','POST',undefined,MOCK);
+ const result=await call('/api/studio/rewrite','POST',{confirm:true,prompt:'닭한마리 조리 영상, 장면 1 완성 냄비',feedback:'조리 과정 먼저, 뻔한 문구 줄이기',seconds:20,style:'realistic'});assert.equal(result.status,200,JSON.stringify(result.data));assert(result.data.prompt.includes('조리 순서 먼저'));assert(result.data.changes.length>0);
+ const sent=await stepPrompt('영상 아이디어 재구성 편집자');assert(sent.includes('조리 과정 먼저, 뻔한 문구 줄이기'));assert(sent.includes('완성 냄비'));
+ assert.equal((await call('/api/studio')).data.length,before,'아이디어 재작성만으로 프로젝트 생성 없음');assert(!(await mockLog()).some(x=>x.path.includes('/images/')||x.path.includes('/video/')),'이미지·영상 생성 없음');
+});

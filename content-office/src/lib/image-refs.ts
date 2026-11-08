@@ -1,3 +1,4 @@
+import {commonRulesText} from "./blog-rule-types";
 import "server-only";
 import crypto from "node:crypto";
 import { q, q1, j } from "./db";
@@ -168,5 +169,8 @@ export async function prepareImage(input: { modelId: string; prompt: string; blo
   const style = r.style ? (await toEnglishPrompt(r.style, input.projectId)).prompt : "";
   const { learningContext } = await import("./learning-context");
   const learned = await learningContext("image");
-  return { basePrompt: en.prompt, translated: en.translated, prompt: withStyle(en.prompt, style, sent) + learned, refIds, refUrls, soulId, note };
+  const {getBlog}=await import("./repo");
+  const blog=input.blogId?await getBlog(input.blogId):null;
+  const common=blog?commonRulesText(blog,"image"):"";
+  return { basePrompt: en.prompt, translated: en.translated, prompt: (common?common+"\n":"")+withStyle(en.prompt, style, sent) + learned, refIds, refUrls, soulId, note };
 }

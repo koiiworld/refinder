@@ -1,3 +1,5 @@
+import CommonBlogRules from "@/components/CommonBlogRules";
+import {listCommonBlogRules} from "@/lib/blog-common-rules";
 import Link from "next/link";
 import { listBlogs } from "@/lib/repo";
 import { q } from "@/lib/db";
@@ -21,6 +23,7 @@ export default async function Blogs() {
         </div>
         <Link href="/blogs/new" className="btn btn-primary">+ 블로그 추가</Link>
       </div>
+      <CommonBlogRules blogs={blogs.map(({id,name,platform})=>({id,name,platform}))} initial={await listCommonBlogRules()}/>
       <div className="grid grid-3">
         {blogs.map((b) => (
           <Link key={b.id} href={`/blogs/${b.id}`} className="card card-pad stack" style={{ gap: 8, opacity: b.archived ? 0.55 : 1 }}>

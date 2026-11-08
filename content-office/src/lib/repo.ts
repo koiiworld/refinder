@@ -1,3 +1,4 @@
+import {commonRulesForBlog} from "./blog-common-rules";
 import "server-only";
 import { q, q1, newId, j } from "./db";
 import type { Blog, DocumentRow, Idea, Job, Project, Version } from "./types";
@@ -9,7 +10,8 @@ export async function listBlogs(includeArchived = false) {
 }
 
 export async function getBlog(id: string) {
-  return q1<Blog>("SELECT * FROM blogs WHERE id=$1", [id]);
+  const blog=await q1<Blog>("SELECT * FROM blogs WHERE id=$1", [id]);
+  return blog?{...blog,common_rules:await commonRulesForBlog(blog)}:null;
 }
 
 /** 말투 예시 파일(사용 중인 것)을 붙인 블로그 — AI 작업 전용 */

@@ -1,6 +1,7 @@
 "use client";
 
 import TitleRulesEditor from "@/components/TitleRulesEditor";
+import {commonRulesText} from "@/lib/blog-rule-types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -158,7 +159,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                 kind="chatgpt"
                 getText={() => {
                   const body = (doc?.content_html ?? "").replace(/<\/(p|h2|h3|li|tr)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/[ \t]+/g, " ").replace(/\n\s+/g, "\n").trim();
-                  return `아래 블로그 글을 같이 다듬어 줘. (블로그: ${b.blog?.name ?? ""})\n\n제목: ${title}\n\n본문:\n${body}`;
+                  return `${commonRulesText(b.blog??{},["title","body"])}\n아래 블로그 글을 같이 다듬어 줘. (블로그: ${b.blog?.name ?? ""})\n\n제목: ${title}\n\n본문:\n${body}`;
                 }}
               />
               <InboxPanel projectId={p.id} kind="text" />
@@ -206,6 +207,7 @@ export default function PostView({ initial, higgsfield, kit, souls = [] }: { ini
                   getText={() => {
                     const c = extras.imageConcept;
                     return [
+                      commonRulesText(b.blog??{},"image"),
                       `블로그 글 "${title}"에 넣을 사진을 같은 컨셉으로 만들어 줘. 레시피 재료가 빠지거나 없는 재료가 들어가면 안 돼.`,
                       c ? `\n[공통 컨셉]\n${c.summary}\n${c.prompt}` : "",
                       c?.ingredients.length ? `\n[재료]\n${c.ingredients.join(", ")}` : "",

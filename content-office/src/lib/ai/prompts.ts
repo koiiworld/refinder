@@ -1,3 +1,4 @@
+import {commonRulesText,type BlogRuleScope} from "../blog-rule-types";
 import {titleRulesText} from "../title-rules";
 import type { Blog, Plan, Project, ReviewResult, Source } from "../types";
 
@@ -7,7 +8,7 @@ const BASE_RULES = `
 - 출처 URL을 지어내지 마세요. 사용자가 제공한 출처만 인용할 수 있습니다.
 - 한국어로 작성하세요.`;
 
-export function blogContext(blog: Blog) {
+export function blogContext(blog: Blog,scopes:BlogRuleScope|BlogRuleScope[]="body") {
   return `[블로그 정보]
 이름: ${blog.name} (${blog.platform})
 주제 분야: ${blog.category}
@@ -16,7 +17,8 @@ export function blogContext(blog: Blog) {
 이미지 스타일: ${blog.image_style}
 검수 규칙:
 ${blog.review_rules.map((r, i) => `${i + 1}. ${r}`).join("\n")}
-${titleRulesText(blog)}`;
+${titleRulesText({...blog,common_rules:[]})}
+${commonRulesText(blog,scopes)}`;
 }
 
 function sourcesText(sources: Source[]) {
@@ -55,7 +57,7 @@ ${body}
 
 export function planPrompt(blog: Blog, project: Project, feedback?: string, previous?: Plan | null) {
   const system = `당신은 한국어 블로그 SEO 콘텐츠 기획자입니다. 반드시 JSON 객체 하나만 출력합니다.${BASE_RULES}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["title","body","image"])}
 
 [주제]
 ${project.topic || project.title}
@@ -116,7 +118,7 @@ const HTML_RULES = `출력 형식: HTML 조각만 출력합니다 (<html>, <body
 
 export function draftPrompt(blog: Blog, project: Project, plan: Plan) {
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 블로그 문체를 정확히 따릅니다.${BASE_RULES}\n${HTML_RULES}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["body","image"])}
 
 ${styleSamplesText(blog)}
 [승인된 기획안]
@@ -135,7 +137,7 @@ ${project.brief || "(없음)"}
 
 export function revisePrompt(blog: Blog, plan: Plan | null, currentHtml: string, feedback: string, review?: ReviewResult | null) {
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다.${BASE_RULES}\n${HTML_RULES}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,"body")}
 
 ${styleSamplesText(blog)}
 ${plan ? `[기획안]\n${JSON.stringify(plan, null, 2)}\n` : ""}
@@ -173,7 +175,7 @@ export function reviewPrompt(blog: Blog, project: Project, plan: Plan | null, ht
   const system = `당신은 까다로운 블로그 편집장이자 팩트체커입니다. 다른 AI가 쓴 원고를 교차 검수합니다. 반드시 JSON 객체 하나만 출력합니다.
 - 당신은 인터넷 검색을 하지 않습니다. 사실관계는 '제공된 출처와 일치', '확인 필요', '오류 가능성 높음' 중 하나로만 판정하고, 확실하지 않으면 '확인 필요'로 둡니다.
 - 한국어로 작성하세요.`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["review","title","body","image"])}
 
 ${plan ? `[기획안]\n${JSON.stringify(plan, null, 2)}\n` : ""}
 [출처 자료]
@@ -216,7 +218,7 @@ export function reviewTemplate(blog: Blog, html: string): Omit<ReviewResult, "pr
 
 export function editPrompt(blog: Blog, selected: string, instruction: string, context: string, hasImage = false) {
   const system = `당신은 블로그 문장 교정 전문가입니다. 선택된 부분만 수정해 결과 텍스트만 출력합니다 (설명·따옴표·마크다운 없이).${BASE_RULES}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,"body")}
 
 ${styleSamplesText(blog)}
 [주변 문맥]
@@ -238,7 +240,7 @@ export function ideasPrompt(blog: Blog, existingTitles: string[], hint: string, 
   const system = `당신은 블로그 콘텐츠 전략가입니다. JSON 객체 하나만 출력합니다.
 - 검색량, 경쟁도, 트렌드 수치 등 실제로 조회하지 않은 지표는 절대 쓰지 마세요.
 - 추천 이유는 블로그 주제 적합성과 독자 관점으로만 설명하세요.`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["keywords","title"])}
 
 ${trendContext}
 [이미 등록된 글감 - 중복 금지]
@@ -266,7 +268,7 @@ export function editHtmlPrompt(blog: Blog, html: string, instruction: string, co
 - 쓸 수 있는 태그: p, h2, h3, strong, em, u, s, ul, ol, li, blockquote, table, thead, tbody, tr, th, td, a, br
 - 지시가 없으면 원래 구조를 그대로 두세요: 표는 표로(행·열 구조 유지), 목록은 목록으로, 소제목은 소제목으로. 표에 행·열을 더하거나 칸 안 글만 바꾸는 식으로 고치세요.
 - 지시와 관계없는 칸·문장은 글자 하나도 바꾸지 마세요. 확인할 수 없는 숫자·사실을 지어내지 마세요.${BASE_RULES}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,"body")}
 
 ${styleSamplesText(blog)}
 [주변 문맥 - 참고만]

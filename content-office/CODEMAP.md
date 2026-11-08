@@ -10,8 +10,10 @@
 | `api.ts` |  | Ctx, ok, fail, handle, body |
 | `balances.ts` | AI별 잔액 (충전액 − 앱에서 쓴 금액) | BALANCE_PROVIDERS, BalanceProvider, balances, addTopUp, setActualUsed, removeTopUp |
 | `benchmark.ts` | 인기 글 분석 → 내 블로그에 적용 | PostStats, statsOf, analyzePopular, lastBenchmark, startBenchmarkPost |
+| `blog-common-rules.ts` |  | listCommonBlogRules, commonRulesForBlog, saveCommonBlogRules |
 | `blog-hot.ts` | 📰 블로그 핫이슈: 네이버 블로그 홈 '주제별 보기'에 지금 올라오는 글 중 반응(공감·댓글) 많은 글 | HOT_TABS, HotPost, HotTabData, topWords, hotTab |
 | `blog-posts.ts` | 내 블로그의 실제 최근 글 목록 (블로그 RSS) | BlogPostLink, rssUrlOf, parseRss, recentPosts, writtenTitles, PostStat, naverPostStats |
+| `blog-rule-types.ts` |  | BLOG_RULE_SCOPES, BlogRuleScope, BlogRuleTarget, CommonBlogRule, rulesForScope, commonRulesText |
 | `brand.ts` | 왼쪽 위 로고 (아이콘 글자·이름·색) — settings 'brand' | Brand, DEFAULT_BRAND, getBrand, saveBrand |
 | `calendar.ts` | 📅 마케팅 달력 | CalCat, CalEvent, CAT_LABEL, krHolidays, monthEvents, addCalendarEvent, deleteCalendarEvent |
 | `carousel-design-types.ts` | 캐러셀 디자인 참고함과 실제 캔버스에 적용하는 값 (브라우저·서버 공용) | DesignRecipe, DesignAnalysis, DesignReference, BASE_RECIPE, cleanRecipe, LEARN_CATEGORIES, LearnCategory, LearningAnalysis … |
@@ -35,8 +37,11 @@
 | `ideas.ts` | 💡 아이디어 노트: 한 줄 메모 + 블로그 + 참고 링크 | Idea, listIdeasNotes, getIdea, createIdea, updateIdea, deleteIdea |
 | `image-gen.ts` | ChatGPT(OpenAI Images API)·Gemini(이미지 출력) 로 바로 생성 → DB에 저장 → /api/img/<아이디> 로 공개 | ImageGenError, generateDirect, getGeneratedImage |
 | `image-models.ts` | refs: 레퍼런스 이미지를 몇 장까지 받는지 (0 = 못 받음, 스타일 문구만 반영) · soul: Higgsfield Soul ID(내 캐릭터) 사용 가능 | ImageModel, IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel |
+| `image-plan.ts` | 🎨 이미지 기획 (글을 다 쓴 뒤, 이미지 만들기 전에 한 번) | planImages, replanImages |
 | `image-prompt.ts` | 🖼 이미지 프롬프트 도우미 (무료 Gemini, 이미지는 만들지 않음) | hasHangul, toEnglishPrompt, editPrompt, recommendModels |
 | `image-refs.ts` | 🎨 이미지 레퍼런스 | ImageKit, Soul, MAX_REFS, saveRefImage, refFromUrl, loadRefs, publicBase, refUrl … |
+| `inbox.ts` | 📥 크롬 확장 프로그램으로 받은 내용 (ChatGPT·제미나이에서 '콘텐츠 오피스로 보내기') | InboxItem, cleanChatHtml, addInbox, listInbox, getInboxItem, markUsed, deleteInbox, recentPostsForExt |
+| `inline-images.ts` | 편집기에서 직접 올린·붙여넣은 사진(data:image/...;base64,…)을 따로 저장하고 본문에는 주소만 남김 | externalizeImages, bodyImageIds |
 | `instagram-design.ts` | 게시물 본문·캐러셀을 함께 읽음. 대표 이미지 메타데이터는 부분 수집으로 표시. | instagramPostUrl, referenceUrl, parseInstagramPost, importInstagramImages |
 | `jobs.ts` | 서버 측 작업 큐 | enqueue, ensureWorker, VIDEO_JOBS, MAC_ONLY_JOBS, jobLabel |
 | `keystore.ts` | 설정 화면에서 직접 넣는 API 키 | KEY_FIELDS, KeyEnv, applyStoredKeys, startKeySync, keyStatus, canSaveKeys, saveKey, removeKey |
@@ -49,7 +54,7 @@
 | `model-catalog.ts` | 이미지 모델 단가 (USD / 100만 토큰, 각 사 가격표 2026-11 확인) — 이미지 출력 토큰이 비용 대부분 | CatalogModel, MODEL_CATALOG, IMAGE_PRICING, catalogPricing |
 | `official-images.ts` | 제조사 공식 페이지에서 제품 이미지 후보 찾기 | extractImages, findOfficialImages, checkImageUrl |
 | `post-bundle.ts` | 글 상세 화면 데이터. 생성 중인 이미지는 Higgsfield 에 상태를 물어 갱신 | postBundle, PostBundle |
-| `posts-types.ts` | 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) | PostPlan, PostOutline, PostBrief, PostImage, PostExtras |
+| `posts-types.ts` | 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) | PostPlan, PostOutline, PostBrief, PostImage, PostExtras, ImageConcept |
 | `pricing-refresh.ts` | AI 단가 새로고침: 공개 가격표(LiteLLM model_prices_and_context_window.json)에서 각 모델 단가를 찾아 | NEW_DAYS, PriceUpdate, pricingUpdates, refreshPricing |
 | `radar-sources.ts` |  | RadarPost, sourceAddress, radarFetch, collectRadarSource |
 | `radar.ts` | 관심 계정 바로가기. 외부 사이트 수집·AI 호출 없이 기존 계정도 그대로 표시. | RadarSource, radarState, saveRadarSource |
@@ -90,6 +95,7 @@
 
 | 파일 | 설명 | 내보내는 것 |
 |---|---|---|
+| `html-for-ai.ts` | 본문 HTML 을 AI 에 보낼 때: 편집기에 직접 올린 사진(data:image/...;base64,…)은 글자 수가 수백만 개라 | shrinkHtml, htmlForAi |
 | `prompts.ts` | 블로그 말투 예시 파일 → 프롬프트 블록 (토큰 비용을 위해 총 글자 수 제한) | blogContext, MAX_SAMPLE_CHARS, styleSamplesText, planPrompt, planTemplate, draftPrompt, revisePrompt, draftTemplate … |
 | `providers.ts` | 공식 HTTP API 직접 호출 (SDK 미사용, 서버에서만 실행) | AiRequest, AiResponse, AiError, PROVIDER_LABELS, providerKey, isConnected, connectionStatus, callProvider … |
 | `run.ts` |  | RunOptions, RunResult, resolveAssignment, runAI, extractJson, sanitizeHtml, StepRunResult, runStep |
@@ -102,6 +108,7 @@
 | `DashboardParts.tsx` | 입력칸 숫자에 천 단위 쉼표 | TrendChart, CostDays, RevenueCard, BlogTopButton, AiBalances, TopKeywordsCard, HealthFeature, HealthButton … |
 | `api/ai/edit/route.ts` | 선택한 문단만 AI 수정 — 결과는 제안으로만 반환하고, 적용은 사용자가 결정 | POST |
 | `api/ai/models/route.ts` | 연결 상태 및 공식 API 기준 사용 가능한 모델 목록 | GET |
+| `api/blog-rules/route.ts` |  | GET, POST |
 | `api/blogs/[id]/kit/route.ts` | 🎨 블로그 이미지 컨셉 키트 (레퍼런스·스타일 문구·Soul ID·켜기) | GET, PUT |
 | `api/blogs/[id]/route.ts` |  | GET, PUT |
 | `api/blogs/[id]/samples/[sid]/route.ts` | 사용 여부 전환 | PATCH, DELETE |
@@ -125,6 +132,8 @@
 | `api/edit/[id]/route.ts` | { doc, title } 저장 | GET, PUT, POST, DELETE |
 | `api/edit/route.ts` | { videoIds, title } 새 편집 | GET, POST |
 | `api/export/route.ts` | 전체 백업 내보내기 (API 키는 DB에 저장하지 않으므로 포함되지 않음) | GET |
+| `api/ext/inbox/route.ts` | 🧩 확장 프로그램: ChatGPT·제미나이에서 보낸 글·사진 받기 {projectId, kind, html?, text?, image?(data URL), source} | POST |
+| `api/ext/posts/route.ts` | 🧩 확장 프로그램: 보낼 글 고르기 (최근 글 40개) — 연결 코드 확인은 proxy.ts | GET |
 | `api/health/route.ts` |  | GET |
 | `api/hot/route.ts` | action: report(새 리포트) · approve(승인 → 글 만들기 시작) · skip(넘기기) | GET, POST |
 | `api/ideas/[id]/route.ts` |  | GET, PUT, DELETE |
@@ -138,10 +147,12 @@
 | `api/login/route.ts` |  | POST |
 | `api/media/[id]/route.ts` | 상태 조회 (진행 중이면 Higgsfield 에 물어 갱신) | GET, POST |
 | `api/media/route.ts` | Higgsfield 생성 요청 (크레딧 차감) | GET, POST |
+| `api/posts/[id]/inbox/route.ts` | 📥 이 글로 받은 내용 | GET, POST |
 | `api/posts/[id]/route.ts` |  | GET, POST, DELETE |
 | `api/posts/route.ts` | ② 선택한 키워드로 글 만들기 → ③④⑥ 자동 진행 | GET, POST |
 | `api/projects/[id]/document/route.ts` | 에디터 자동 저장 (revision 으로 동시 수정 충돌 감지) | GET, PUT |
 | `api/projects/[id]/export/route.ts` | ⑦ 발행용 내려받기: format=html / md / json | GET |
+| `api/projects/[id]/paste/route.ts` | 📋 붙여넣기 기록: ChatGPT·제미나이 등에서 복사해 온 글·사진을 본문에 붙여넣을 때마다 | POST |
 | `api/projects/[id]/versions/[vid]/route.ts` | 이 버전으로 되돌리기 | GET, POST |
 | `api/projects/[id]/versions/route.ts` | 원고 버전 목록 (내용 미리보기는 앞부분만) | GET, POST |
 | `api/radar/route.ts` |  | GET, POST |
@@ -170,6 +181,7 @@
 | `api/settings/route.ts` |  | GET, PUT |
 | `api/souls/route.ts` | Higgsfield Soul ID(내 캐릭터) 목록 — 학습 중이면 상태를 새로 물어봄 | GET, POST |
 | `api/studio/[id]/route.ts` | 상태 (진행 중인 장면 영상은 Higgsfield에 확인해 갱신) | GET, PUT, POST, DELETE |
+| `api/studio/rewrite/route.ts` |  | GET, POST |
 | `api/studio/route.ts` | ① 프롬프트로 기획 시작 | GET, POST |
 | `api/study/[id]/route.ts` |  | GET, PUT, DELETE |
 | `api/study/route.ts` | { urls: [...], mine } 릴스 링크 넣기 (맥에서 받아쓰기·장면 사진 → 무료 Gemini 분석) | GET, POST |
@@ -222,6 +234,8 @@
 | `page.tsx` |  | dynamic |
 | `posts/AutoRefresh.tsx` | AI 작업 중일 때 목록을 주기적으로 새로고침 |  |
 | `posts/PostGroups.tsx` | 진행 현황 목록: 체크박스로 골라 휴지통으로 보내기 | PostRow |
+| `posts/[id]/AiSideOpen.tsx` | 🤖 진짜 ChatGPT·제미나이를 앱 오른쪽에 나란히 열기 (내 아이디·대화 기록·구독 그대로) |  |
+| `posts/[id]/InboxPanel.tsx` | 📥 받은 내용 (크롬 확장 프로그램으로 ChatGPT·제미나이에서 보낸 글·사진) |  |
 | `posts/[id]/PostView.tsx` |  |  |
 | `posts/[id]/page.tsx` |  | dynamic |
 | `posts/page.tsx` |  | dynamic |
@@ -237,6 +251,8 @@
 | `routines/run/[id]/RunView.tsx` |  |  |
 | `routines/run/[id]/page.tsx` |  | dynamic |
 | `settings/BrandCard.tsx` | 왼쪽 위 로고 아이콘·이름 바꾸기 |  |
+| `settings/CopyText.tsx` | 값 + 복사 버튼 |  |
+| `settings/ExtensionCard.tsx` | 🧩 크롬 확장 프로그램 연결: 앱 주소 + 연결 코드 + 설치 방법 (로그인한 사람만 보는 설정 화면) |  |
 | `settings/FeaturesCard.tsx` | 기능 켜기·끄기: 그룹 전체(예: 인스타 전체) 또는 페이지 하나(예: 블로그 진단) — 끄면 메뉴·현황에서 숨김, 데이터는 그대로 |  |
 | `settings/KeysCard.tsx` | 🔑 API 키 직접 연결: 붙여 넣고 저장 → 암호화해서 저장, 맥·Render 둘 다 1분 안에 적용 |  |
 | `settings/SettingsClient.tsx` | 세부 모델 선택: 추천 목록(가격 표시) + 불러온 모델 + 직접 입력 |  |
@@ -274,6 +290,7 @@
 |---|---|---|
 | `BackButton.tsx` | 상세 화면 왼쪽 위 '뒤로' 버튼 — 항상 해당 목록 화면으로 돌아감 |  |
 | `BlogForm.tsx` |  |  |
+| `CommonBlogRules.tsx` |  | InheritedBlogRules |
 | `DocEditor.tsx` | 문서의 from~to 를 HTML 로 (표·목록·굵게 그대로) | EditorDoc |
 | `FeatureGate.tsx` | 설정에서 끈 기능의 페이지로 들어오면 내용 대신 안내 (데이터는 그대로 남아 있음) |  |
 | `FileToMarkdown.tsx` | 파일 올리기 → 맥에서 마크다운으로 바꿔질 때까지 기다림 | CONVERT_ACCEPT, convertFiles |

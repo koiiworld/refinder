@@ -9,7 +9,7 @@ const NO_FAKE = `- 검색량·순위·통계 수치를 지어내지 마세요. �
 // ───────── ① 키워드 추천 ─────────
 export function keywordsPrompt(blog: Blog, ctx: { seasons: string; creator: string; youtube: string; existing: string[]; hint: string; written?: string[] }) {
   const system = `당신은 한국 블로그 SEO 키워드 전문가입니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,"keywords")}
 
 [지금 다가오는 시즌·기념일]
 ${ctx.seasons || "(없음)"}
@@ -38,7 +38,7 @@ const briefText = (b?: import("../posts-types").PostBrief) =>
 
 export function titlesPrompt(blog: Blog, keywords: string[], related: { keyword: string; total: number }[], written: string[] = [], brief?: import("../posts-types").PostBrief) {
   const system = `당신은 네이버·구글 SEO 제목 전문가입니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}\n${HOOK_RULES}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,"title")}
 ${styleSamplesText(blog)}
 [사용자가 고른 키워드 - 첫 번째가 메인]
 ${keywords.join(", ")}
@@ -62,7 +62,7 @@ best 는 candidates 의 번호(0부터)입니다.`;
 // ───────── ③-2 기획안 (목차·핵심 주장·근거·이미지 계획) ─────────
 export function outlinePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; brief?: import("../posts-types").PostBrief }) {
   const system = `당신은 "${blog.name}" 블로그의 편집 기획자입니다. 글을 쓰기 전에 목차와 근거를 설계합니다. 확인할 수 없는 사실을 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["body","image"])}
 [제목] ${input.title}
 [메인 키워드] ${input.keyword}
 [함께 넣을 키워드] ${input.subKeywords.join(", ") || "(없음)"}
@@ -79,7 +79,7 @@ ${briefText(input.brief)}
 export function writePrompt(blog: Blog, input: { title: string; keyword: string; subKeywords: string[]; feedback?: string; previousHtml?: string; myPosts?: { title: string; url: string }[]; titleByUser?: boolean; brief?: import("../posts-types").PostBrief; outline?: import("../posts-types").PostOutline }) {
   const posts = (input.myPosts ?? []).filter((p) => p.title.trim() !== input.title.trim());
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 블로그 문체를 정확히 따릅니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["body","image"])}
 ${styleSamplesText(blog)}
 [제목] ${input.title}${input.titleByUser ? "\n(사용자가 직접 고친 제목입니다. 제목에 나온 제품·모델·주제·각도를 기준으로 본문을 쓰세요. 메인 키워드와 다르면 제목을 따르세요.)" : ""}
 [메인 키워드] ${input.keyword}
@@ -132,7 +132,7 @@ export function postReviewPrompt(blog: Blog, input: { title: string; keyword: st
 - 인터넷 검색은 하지 않습니다. 확실하지 않은 사실은 "확인 필요"로 둡니다.
 - 이미지가 첨부되어 있으면 직접 보고, 글 내용과 맞는지·어색한 부분(손가락, 글자 깨짐, 왜곡)이 있는지 확인하세요.
 - 한국어로 작성하세요.`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["review","title","body","image"])}
 ${styleSamplesText(blog)}
 [제목] ${input.title}
 [메인 키워드] ${input.keyword}
@@ -162,7 +162,7 @@ ${input.html}
 export function fixPrompt(blog: Blog, input: { title: string; html: string; issues: { type: string; severity: string; quote: string; comment: string; suggestion: string; userNote?: string }[]; general?: string }) {
   const general = input.general?.trim();
   const system = `당신은 "${blog.name}" 블로그의 전속 작가입니다. 편집자의 검수 지적을 반영해 원고를 고칩니다. 반드시 JSON 객체 하나만 출력합니다.\n${NO_FAKE}`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["body","title"])}
 ${styleSamplesText(blog)}
 [제목] ${input.title}
 

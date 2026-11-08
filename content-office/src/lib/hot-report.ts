@@ -113,7 +113,7 @@ export async function createReport(blogId: string): Promise<HotReport> {
   const written = await writtenTitles(blog);
   const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   const system = `당신은 블로그 글감 기획자입니다. 수집된 이슈 목록만 근거로, 이 블로그가 지금 쓰면 검색·홈피드 유입이 기대되는 글감을 고릅니다. 목록에 없는 사건·수치를 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다. 한국어로 씁니다.`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["keywords","title"])}
 [지금 시각] ${today} (한국)
 
 [이 블로그에 이미 쓴 글 제목 - 겹치지 않게]

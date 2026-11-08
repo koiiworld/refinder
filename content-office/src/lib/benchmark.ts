@@ -65,7 +65,7 @@ export async function analyzePopular(blogId: string, urls: string[]) {
 
   const written = await writtenTitles(blog);
   const system = `당신은 네이버·티스토리 블로그 콘텐츠 전략가입니다. 인기 글이 왜 잘 되는지 분석하고, 다른 블로그에 '방식'만 적용하는 방법을 제안합니다. 원문 문장을 베끼거나 그대로 옮기지 않습니다. 반드시 JSON 객체 하나만 출력합니다. 한국어로 작성합니다.`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["keywords","title","body","image"])}
 
 [이 블로그에 이미 쓴 글 제목 - 겹치지 않게]
 ${written.slice(0, 40).map((t) => `- ${t}`).join("\n") || "(없음)"}

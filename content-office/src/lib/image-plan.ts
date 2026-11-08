@@ -1,3 +1,4 @@
+import {commonRulesText} from "./blog-rule-types";
 import "server-only";
 import { extractJson, runStep } from "./ai/run";
 import { getBlogForAi, getProject, updateProject } from "./repo";
@@ -38,6 +39,7 @@ export async function planImages(projectId: string, opts: { html?: string; image
   const system = `당신은 블로그 사진 아트디렉터이자 푸드 스타일리스트입니다. 이미지를 만들기 전에 글 전체를 꼼꼼히 읽고, 모든 이미지가 한 사람이 한 자리에서 찍은 것처럼 이어지게 계획합니다. 글에 없는 재료·제품을 지어내지 않습니다. 반드시 JSON 객체 하나만 출력합니다.`;
   const prompt = `[블로그] ${blog.name} · 분야: ${blog.category}
 [블로그 이미지 스타일] ${blog.image_style || "(없음)"}
+${commonRulesText(blog,"image")}
 [글 제목] ${title}
 [본문 - [이미지 N] 은 이미지가 들어갈 자리]
 ${text}

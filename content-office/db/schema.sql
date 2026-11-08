@@ -683,3 +683,9 @@ CREATE TABLE IF NOT EXISTS post_inbox (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS post_inbox_project ON post_inbox (project_id, created_at DESC);
+
+-- 공통 규칙은 별도 저장 후 각 블로그에 동적으로 적용. 개별 설정을 덮어쓰지 않음.
+CREATE TABLE IF NOT EXISTS blog_common_rules(
+ id TEXT PRIMARY KEY,rules JSONB NOT NULL DEFAULT '[]',forbidden JSONB NOT NULL DEFAULT '[]',scopes JSONB NOT NULL,
+ target JSONB NOT NULL,enabled BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

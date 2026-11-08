@@ -56,6 +56,17 @@ async function publicBase(fallback?: string) {
   return (r?.value?.url ?? fallback ?? "").replace(/\/$/, "");
 }
 
+/** 원래 입력은 보존하고 새 문구·장면 구성 안만 제안. 프로젝트/이미지/영상 생성 없음. */
+export async function rewriteStudioIdea(input:{prompt:string;feedback?:string;seconds?:number;style?:string}){
+  const original=String(input.prompt??'').trim().slice(0,2000);if(!original)throw new Error('다시 만들 영상 아이디어를 먼저 넣어 주세요.');
+  const system='당신은 영상 아이디어 재구성 편집자입니다. 과장 없이 구체적인 후킹·자막·내레이션과 장면 순서를 새로 제안합니다. 반드시 JSON 객체 하나만 출력합니다.';
+  const prompt=`[기존 문구·구성]\n${original}\n[수정 요청] ${String(input.feedback??'문구와 장면 순서를 새로 구성해 주세요.').slice(0,1000)}\n[길이] ${Number(input.seconds)||20}초\n[그림체] ${String(input.style??'realistic').slice(0,100)}\n주제·사실·재료·제품 정보는 유지하면서 표현과 전개를 바꾸세요. 기존 자막·대사를 조금만 바꾸거나 그대로 반복하지 마세요. 첫 장면 후킹→핵심 정보→마무리의 흐름을 구체적으로 새로 만들고 각 장면에 화면·대사·자막을 적으세요. 과장·근거 없는 효과·추가 사실은 금지. 요청 길이에 맞는 3~6장면을 제안하세요. 한국어로 쓰고 prompt 전체는 1,800자 이내로 간결하게. 형식: {"prompt":"장면별 새 화면·대사·자막","changes":["달라진 점"]}`;
+  const res=await runStep({step:'studio',purpose:'studio-idea-rewrite',blog:null,system,prompt,json:true,maxTokens:2200,retries:0,noFallback:true});
+  const raw=extractJson<{prompt?:string;changes?:string[]}>(res.text);
+  if(typeof raw.prompt!=='string'||!raw.prompt.trim())throw new Error('새 문구·구성을 받지 못했어요. 원래 입력은 유지돼요.');
+  return {prompt:raw.prompt.trim().slice(0,2000),changes:Array.isArray(raw.changes)?raw.changes.map(String).slice(0,6):[],ai:{provider:res.provider,model:res.model}};
+}
+
 /** ① 기획 */
 export async function createStudio(input: { prompt: string; seconds?: number; style?: string; imageModel?: string; clipSeconds?: number; resolution?: string; lockCharacter?: string; seriesId?: string; episode?: number }) {
   const prompt = input.prompt.trim().slice(0, 2000);

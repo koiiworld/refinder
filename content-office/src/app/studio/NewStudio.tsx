@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {fmtUsd} from "@/components/ui";
 import { api } from "@/components/client-utils";
 
 export default function NewStudio({ styles, imageModels, defaultPrompt = "" }: { defaultPrompt?: string; styles: { id: string; label: string }[]; imageModels: { id: string; label: string; note?: string }[] }) {
@@ -12,6 +13,8 @@ export default function NewStudio({ styles, imageModels, defaultPrompt = "" }: {
   const [imageModel, setImageModel] = useState("google:gemini-3.1-flash-image");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [feedback,setFeedback]=useState(""),[preview,setPreview]=useState<{prompt:string;changes:string[]}|null>(null),[previous,setPrevious]=useState<string|null>(null);
+  async function rewrite(){setErr("");setBusy(true);try{const est=await api<{total:number|null;steps:{model:string;provider:string}[]}>("/api/studio/rewrite");if(!confirm(`문구·구성을 다시 생성할까요?\n${est.steps[0]?.provider}/${est.steps[0]?.model}\n예상 비용: ${est.total===null?"단가 미등록으로 계산할 수 없어요":fmtUsd(est.total)} (추정치, 실제 청구는 다를 수 있어요)\n이미지·영상은 생성하지 않으며, 원래 입력은 유지해요.`))return;setBusy(true);setPreview(await api("/api/studio/rewrite","POST",{confirm:true,prompt,feedback,seconds,style}));}catch(e){setErr((e as Error).message);}finally{setBusy(false);}}
 
   async function start() {
     setBusy(true);
@@ -36,6 +39,9 @@ export default function NewStudio({ styles, imageModels, defaultPrompt = "" }: {
         placeholder={"예: 귀여운 감자 캐릭터가 에어프라이어로 감자튀김 만드는 법을 알려주는 20초 릴스. 마지막에 '저장해두세요'로 끝나게."}
         aria-label="영상 아이디어"
       />
+      <label className="label">다시 생성할 방향<textarea className="textarea" aria-label="영상 문구·구성 수정 요청" value={feedback} disabled={busy} onChange={e=>setFeedback(e.target.value)} placeholder="예: 대사는 덜 뻔하게, 조리 과정을 먼저 보여주고 마지막에 완성 장면으로 마무리"/></label>
+      <div className="row"><button className="btn btn-sm" disabled={busy||!prompt.trim()} onClick={rewrite}>문구·구성 다시 생성</button>{previous!==null&&<button className="btn btn-sm" disabled={busy} onClick={()=>{setPrompt(previous);setPrevious(null);setPreview(null);}}>이전 입력으로 되돌리기</button>}</div>
+      {preview&&<section className="card card-pad stack" style={{gap:8}}><b className="small">새 문구·구성 미리보기</b><textarea className="textarea" style={{minHeight:180}} aria-label="새 영상 문구·구성" value={preview.prompt} onChange={e=>setPreview({...preview,prompt:e.target.value})}/>{preview.changes.map((x,i)=><p key={i} className="tiny muted">· {x}</p>)}<div className="row"><button className="btn btn-primary btn-sm" disabled={busy||!preview.prompt.trim()} onClick={()=>{setPrevious(prompt);setPrompt(preview.prompt);setPreview(null);}}>이 안을 영상 아이디어에 적용</button><button className="btn btn-sm" disabled={busy} onClick={()=>setPreview(null)}>새 안 닫기</button></div></section>}
       <div className="row" style={{ gap: 8 }}>
         <span className="small">길이</span>
         {[15, 20, 30, 45].map((s) => (

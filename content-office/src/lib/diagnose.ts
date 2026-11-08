@@ -239,7 +239,7 @@ export async function diagnoseBlog(blogId: string, opts: { skipAi?: boolean; sav
 
   // 6) AI 종합 진단 (단계별 AI의 '키워드' 담당 — 기본 무료 Gemini)
   const system = `당신은 네이버·티스토리 블로그 성장 컨설턴트입니다. 앱이 직접 잰 수치만 근거로 진단합니다. 수치에 없는 사실(방문자 수, 순위 등)을 지어내지 않습니다. '제목 검색 노출' 검사는 네이버 블로그 검색에서 제목 그대로 검색했을 때 상위 30위 안에 드는지만 본 것입니다. 이 결과로 '색인 미등록', '누락', '저품질'을 단정하지 말고 "제목 검색 상위 30위 밖"이라고만 표현하세요. 반드시 JSON 객체 하나만 출력합니다. 한국어로, 쉽고 짧게 씁니다.`;
-  const prompt = `${blogContext(blog)}
+  const prompt = `${blogContext(blog,["review","title","body","image"])}
 
 [최근 글 제목 - 블로그 RSS]
 ${posts.slice(0, 20).map((p) => `- ${p.title}${p.date ? ` (${p.date.slice(0, 10)})` : ""}`).join("\n") || "(없음)"}
