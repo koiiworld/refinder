@@ -595,7 +595,7 @@ function ImageCard({ projectId, blogId, index, im, providers, disabled, act, cop
       {im.url && (
         <div className="stack" style={{ gap: 4 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={im.url} alt={im.alt} style={{ maxWidth: "100%", maxHeight: 360, borderRadius: 8, alignSelf: "flex-start" }} />
+          <ZoomImg src={im.url} alt={im.alt} style={{ maxWidth: "100%", maxHeight: 360, borderRadius: 8, alignSelf: "flex-start" }} />
           <span className="tiny muted">Higgsfield 서버에 약 7일 보관됩니다. 발행 전에 블로그에 올리거나 내려받아 두세요. <a href={im.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>원본 열기</a></span>
         </div>
       )}
@@ -672,7 +672,7 @@ function OfficialImageCard({ index, im, disabled, act }: { index: number; im: Po
       {im.url && (
         <div className="stack" style={{ gap: 6 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={im.url} alt={im.alt} referrerPolicy="no-referrer" style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 8, alignSelf: "flex-start", background: "#fff" }} />
+          <ZoomImg src={im.url} alt={im.alt} referrerPolicy="no-referrer" style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 8, alignSelf: "flex-start", background: "#fff" }} />
           <div className="row">
             <button className="btn btn-sm btn-ok" disabled={disabled} onClick={() => act({ action: "insert_image", index }, "본문에 넣었습니다.")}>{im.inserted ? "다시 넣기" : "본문에 넣기"}</button>
             <a className="btn btn-sm" href={im.url} target="_blank" rel="noreferrer">원본 열기 ↗</a>
@@ -1115,5 +1115,29 @@ function CommentBox({ value, disabled, onSave, onRun }: { value?: string; disabl
       {!v.includes("공식") && <button type="button" className="btn btn-sm btn-ghost" onClick={() => { const t = [v.trim(), "공식 자료(정부·기관·기업 공식 사이트·언론)로 다시 확인해줘"].filter(Boolean).join(" · "); setV(t); onSave(t); }}>🏛 공식 자료로</button>}
       <button type="button" className="btn btn-sm" disabled={disabled || !v.trim()} onClick={() => run()}>💬 코멘트 반영해서 다시 확인</button>
     </div>
+  );
+}
+
+/** 🔍 누르면 크게 보는 이미지 (바깥 누르기·Esc 로 닫기) */
+function ZoomImg({ src, alt, style, referrerPolicy }: { src: string; alt: string; style?: React.CSSProperties; referrerPolicy?: React.HTMLAttributeReferrerPolicy }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [open]);
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} referrerPolicy={referrerPolicy} style={{ ...style, cursor: "zoom-in" }} onClick={() => setOpen(true)} title="눌러서 크게 보기" />
+      {open && (
+        <div role="dialog" aria-modal="true" aria-label="이미지 크게 보기" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.82)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={alt} referrerPolicy={referrerPolicy} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, background: "#fff" }} />
+          <button type="button" onClick={() => setOpen(false)} aria-label="닫기" style={{ position: "fixed", top: 14, right: 16, border: 0, borderRadius: 999, width: 36, height: 36, background: "rgba(255,255,255,.9)", fontSize: 18, cursor: "pointer" }}>✕</button>
+        </div>
+      )}
+    </>
   );
 }
