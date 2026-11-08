@@ -1,4 +1,5 @@
 import {cleanTitleCandidate,forbiddenInTitle} from "./title-rules";
+import { htmlForAi, shrinkHtml } from "./ai/html-for-ai";
 import "server-only";
 import { q, q1, newId, j } from "./db";
 import type { Blog, Job, Project, ReviewResult } from "./types";
@@ -293,10 +294,12 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
       ? [{ type: "user", severity: "high", quote: "", comment: `사용자 수정 요청: ${note}`, suggestion: "" }]
       : (review?.issues ?? []).filter((_, i) => indexes.includes(i));
     if (!doc?.content_html || (!issues.length && !general)) throw new Error("고칠 지적 사항이나 본문이 없습니다.");
-    const { system, prompt } = fixPrompt(blog, { title: doc.title || project.title, html: doc.content_html, issues, general });
+    // 직접 올린 사진(base64)은 짧은 표시로 보내고 돌아온 HTML 에서 되살림 (AI 한도 초과 방지)
+    const shrunk = shrinkHtml(doc.content_html);
+    const { system, prompt } = fixPrompt(blog, { title: doc.title || project.title, html: shrunk.html, issues, general });
     const res = await runStep({ step: "writing", role: "writer", purpose: "fix", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000, template: () => JSON.stringify({ html: doc.content_html, changes: [] }) });
     const raw = extractJson<{ html?: string; changes?: string[] }>(res.text);
-    const html = sanitizeHtml(String(raw.html ?? ""));
+    const html = sanitizeHtml(shrunk.restore(String(raw.html ?? "")));
     if (!html) throw new AiError("AI가 고친 본문을 돌려주지 않았습니다.", true);
     // 사용자가 직접 요청한 수정이므로 바로 적용 (이전 글은 버전 기록에 남음)
     await writeAiDraft(project.id, html, { provider: res.provider, model: res.model, label: note ? "수정 요청사항 반영" : `⑥ ${issues.length ? `지적 ${issues.length}건` : ""}${issues.length && general ? " + " : ""}${general ? "글 전체 수정사항" : ""} AI 수정`, force: true });
@@ -380,7 +383,8 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     const feedback = job.payload.feedback as string | undefined;
     const doc = await getDocument(project.id);
     const myPosts = await recentPosts(blog);
-    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? doc?.content_html : undefined, myPosts, titleByUser: !plan.candidates.some((c) => c.title.trim() === plan.selectedTitle.trim()), brief: plan.brief, outline: plan.outline });
+    const prevShrunk = shrinkHtml(feedback ? doc?.content_html ?? "" : "");
+    const { system, prompt } = writePrompt(blog, { title: plan.selectedTitle, keyword: plan.keyword, subKeywords: plan.subKeywords, feedback, previousHtml: feedback ? prevShrunk.html : undefined, myPosts, titleByUser: !plan.candidates.some((c) => c.title.trim() === plan.selectedTitle.trim()), brief: plan.brief, outline: plan.outline });
     const res = await runStep({
       step: "writing", role: "writer", purpose: "write", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
       template: () => JSON.stringify({ html: `<p><strong>⚠ AI 미연결: 템플릿 원고입니다.</strong></p><h2>${esc(plan.keyword)}</h2><p>[작성 필요]</p><p>[이미지 1]</p><h2>정리</h2><p>[작성 필요]</p>`, hashtags: [plan.keyword.replace(/\s+/g, "")], images: [{ prompt: plan.keyword, alt: plan.keyword, aspect: "4:3" }] }),
@@ -388,7 +392,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     type RawImage = { prompt?: string; alt?: string; aspect?: string; product?: string; pageUrl?: string; credit?: string };
     const raw = extractJson<{ html?: string; hashtags?: string[]; images?: RawImage[] }>(res.text);
     const official = blog.image_source === "official";
-    const html = sanitizeHtml(String(raw.html ?? ""));
+    const html = sanitizeHtml(prevShrunk.restore(String(raw.html ?? "")));
     if (!html) throw new AiError("AI가 본문을 돌려주지 않았습니다.", true);
     const prevExtras = (project.package as unknown as PostExtras | null) ?? null;
     // 해시태그는 글쓰기(유료)와 따로, 가벼운 무료 모델이 뽑음. 실패하면 키워드로 대신
@@ -447,10 +451,11 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     if (!html.trim()) throw new Error("검수할 글이 없습니다.");
     const startRevision = doc?.revision ?? 0;
     const images = extras.images ?? [];
-    const { system, prompt } = postReviewPrompt(blog, { title: doc?.title || plan?.selectedTitle || project.title, keyword: plan?.keyword ?? project.topic, html, hashtags: extras.hashtags ?? [], images });
+    // 직접 올린 사진(base64)은 짧은 표시로 (640만 토큰 → 한도 초과 방지)
+    const { system, prompt } = postReviewPrompt(blog, { title: doc?.title || plan?.selectedTitle || project.title, keyword: plan?.keyword ?? project.topic, html: htmlForAi(html), hashtags: extras.hashtags ?? [], images });
     const res = await runStep({
       step: "review", role: "reviewer", purpose: "review", blog, projectId: project.id, jobId: job.id, system, prompt, json: true, maxTokens: 12000,
-      images: images.map((i) => i.url).filter((u): u is string => !!u),
+      images: images.map((i) => i.url).filter((u): u is string => !!u && !u.startsWith("data:")),
       template: () => JSON.stringify(reviewTemplate(blog, html)),
     });
     const raw = extractJson<Partial<ReviewResult> & { imageChecks?: { index: number; ok: boolean; note: string }[] }>(res.text);

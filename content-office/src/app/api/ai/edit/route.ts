@@ -1,3 +1,4 @@
+import { shrinkHtml } from "@/lib/ai/html-for-ai";
 import { resolveAssignment, runAI } from "@/lib/ai/run";
 import { editHtmlPrompt, editPrompt } from "@/lib/ai/prompts";
 import { addEvent, getBlogForAi, getProject } from "@/lib/repo";
@@ -25,7 +26,8 @@ export async function POST(req: Request) {
     } catch (e) {
       return fail((e as Error).message);
     }
-    const { system, prompt } = asHtml ? editHtmlPrompt(blog, String(b.html), b.instruction, b.context ?? "", !!image) : editPrompt(blog, b.selected, b.instruction, b.context ?? "", !!image);
+    const shrunk = shrinkHtml(String(b.html ?? ""));
+    const { system, prompt } = asHtml ? editHtmlPrompt(blog, shrunk.html, b.instruction, b.context ?? "", !!image) : editPrompt(blog, b.selected, b.instruction, b.context ?? "", !!image);
     try {
       const res = await runAI({
         purpose: "edit",
@@ -41,7 +43,7 @@ export async function POST(req: Request) {
       });
       await addEvent(project.id, "ai", `선택 부분 AI 수정 제안 (${res.provider}/${res.model})`);
       // HTML 은 코드블록 표시(```html)가 붙어 오면 벗김
-      const text = asHtml ? res.text.trim().replace(/^```(?:html)?\s*/i, "").replace(/\s*```$/, "").trim() : res.text.trim();
+      const text = asHtml ? shrunk.restore(res.text.trim().replace(/^```(?:html)?\s*/i, "").replace(/\s*```$/, "").trim()) : res.text.trim();
       return ok({ text, html: asHtml, provider: res.provider, model: res.model });
     } catch (e) {
       return fail((e as Error).message, 502);
