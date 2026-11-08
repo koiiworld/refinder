@@ -417,7 +417,7 @@ test("크리에이터 어드바이저 캡처 → AI가 검색어 목록을 읽�
   await call("/__reset", "POST", undefined, MOCK);
   const r = await call("/api/research/creator/image", "POST", { blogId: "blog_algokitchen", images: [png] });
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.match(r.data.text, /^1 김장 양념 비율\n2 절임배추 ▲3/);
+  assert.equal(r.data.text,"1 김장 양념 비율\n2 절임배추\n3 굴보쌈","AI가 변동 표시를 돌려줘도 검색어만 표시");
   const log = await mockLog();
   const sent = log.find((l) => JSON.stringify(l.body ?? {}).includes("크리에이터 어드바이저 화면"));
   const raw = JSON.stringify(sent.body);
@@ -478,6 +478,17 @@ test("인기 글 분석: 주소로 글 읽기 → 구조 수치 + AI 분석 + �
   assert.match(bp, /방식/);
   const last = (await call("/api/research/benchmark?blogId=blog_algokitchen")).data;
   assert.equal(last.analysis.apply.titleIdeas.length, 1, "마지막 분석 다시 보기");
+  await call('/__reset','POST',undefined,MOCK);
+  const payload={action:'start',blogId:'blog_algokitchen',snapshotId:last.snapshotId,index:0,title:last.analysis.apply.titleIdeas[0].title};
+  const chosen=await call('/api/research/benchmark','POST',payload);assert.equal(chosen.status,201,JSON.stringify(chosen.data));
+  const draft=(await call(`/api/posts/${chosen.data.id}`)).data;
+  assert.equal(draft.project.title,payload.title);assert.equal(draft.project.plan.selectedTitle,payload.title);assert.equal(draft.project.plan.keyword,'굴보쌈');assert.equal(draft.project.stage,'titles');assert.equal(draft.project.status,'waiting');assert.equal(draft.document,null);assert.equal(draft.jobs.length,0);assert(draft.project.plan.userPicked);assert(draft.project.plan.brief.direction.includes('사진 8장'));
+  const repeated=await Promise.all([call('/api/research/benchmark','POST',payload),call('/api/research/benchmark','POST',payload)]);assert(repeated.every(x=>x.status===201&&x.data.id===chosen.data.id),'여러 번 눌러도 같은 글');
+  assert.equal((await call('/api/research/benchmark','POST',{...payload,blogId:'blog_tistory'})).status,400);
+  assert.equal((await call('/api/research/benchmark','POST',{...payload,title:'다른 제목'})).status,400);
+  assert.equal((await call('/api/research/benchmark','POST',{...payload,index:99})).status,400);
+  assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'제목 선택은 추가 AI/외부 요청 없음');
+
   assert.equal((await call("/api/research/benchmark", "POST", { blogId: "blog_algokitchen", urls: [] })).status, 400);
 });
 

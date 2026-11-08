@@ -1,6 +1,8 @@
+import type {PostPlan} from "./posts-types";
+import {cleanTitleCandidate} from "./title-rules";
 import "server-only";
-import { q, newId, j } from "./db";
-import { getBlogForAi } from "./repo";
+import { q,q1, newId, j } from "./db";
+import { getBlogForAi,addEvent } from "./repo";
 import { extractJson, runStep } from "./ai/run";
 import { blogContext } from "./ai/prompts";
 import { importPostFromUrl } from "./sample-html";
@@ -95,7 +97,7 @@ ${f.text.slice(0, 3500)}`,
     posts: arr<Analysis["posts"][number]>(raw.posts).slice(0, ok.length),
     common: arr<string>(raw.common).map(String).slice(0, 8),
     apply: {
-      titleIdeas: arr<Analysis["apply"]["titleIdeas"][number]>(raw.apply?.titleIdeas).filter((t) => t?.title).slice(0, 6),
+      titleIdeas: arr<Analysis["apply"]["titleIdeas"][number]>(raw.apply?.titleIdeas).filter(t=>t?.title).map(t=>({...t,title:cleanTitleCandidate(String(t.title),blog)})).filter(t=>t.title).slice(0,6),
       keywords: arr<Analysis["apply"]["keywords"][number]>(raw.apply?.keywords).filter((k) => k?.keyword).slice(0, 10),
       tips: arr<string>(raw.apply?.tips).map(String).slice(0, 8),
     },
@@ -113,19 +115,37 @@ ${f.text.slice(0, 3500)}`,
     }
   }
 
+  const snapshotId=newId("snap_");
   const result = {
-    blogId,
+    snapshotId,blogId,
     fetched: fetched.map(({ text: _t, ...f }) => f),
     analysis,
     volumes,
     ai: { provider: res.provider, model: res.model, substitutedFor: res.substitutedFor ?? null },
     at: new Date().toISOString(),
   };
-  await q("INSERT INTO research_snapshots (id, blog_id, source, query, data) VALUES ($1,$2,'benchmark',$3,$4)", [newId("snap_"), blogId, j({ urls: list }), j(result)]);
+  await q("INSERT INTO research_snapshots (id, blog_id, source, query, data) VALUES ($1,$2,'benchmark',$3,$4)", [snapshotId, blogId, j({ urls: list }), j(result)]);
   return result;
 }
 
 export async function lastBenchmark(blogId: string) {
-  const r = await q<{ data: Awaited<ReturnType<typeof analyzePopular>> }>("SELECT data FROM research_snapshots WHERE source='benchmark' AND blog_id=$1 ORDER BY collected_at DESC LIMIT 1", [blogId]);
-  return r[0]?.data ?? null;
+  const r = await q<{id:string;data:Awaited<ReturnType<typeof analyzePopular>>}>("SELECT id,data FROM research_snapshots WHERE source='benchmark' AND blog_id=$1 ORDER BY collected_at DESC LIMIT 1",[blogId]);
+  return r[0]?{...r[0].data,snapshotId:r[0].id}:null;
+}
+
+/** 저장된 제목 아이디어로 글 초안 생성. 제목 재생성·본문 작성 AI 호출 없음. */
+export async function startBenchmarkPost(blogId:string,snapshotId:string,index:number,expectedTitle:string){
+  if(!Number.isInteger(index)||index<0||!snapshotId)throw new Error('적용할 제목을 선택해 주세요.');
+  const saved=await q1<{data:Awaited<ReturnType<typeof analyzePopular>>}>("SELECT data FROM research_snapshots WHERE id=$1 AND blog_id=$2 AND source='benchmark'",[snapshotId,blogId]);
+  const idea=saved?.data.analysis.apply.titleIdeas[index];
+  if(!saved||!idea||idea.title!==expectedTitle)throw new Error('이 블로그의 제목 아이디어를 다시 확인해 주세요.');
+  const title=String(idea.title).trim(),keyword=String(idea.keyword??'').trim()||title;
+  if(!title)throw new Error('제목이 비어 있어요.');
+  const id=`prj_benchmark_${snapshotId}_${index}`;
+  const plan:PostPlan={keyword,candidates:[{title,reason:idea.reason??''}],best:0,selectedTitle:title,bestReason:idea.reason??'',subKeywords:[],related:[],ai:{...saved.data.ai,substitutedFor:null},userPicked:true,
+    brief:{issue:title,title,why:idea.reason??'',direction:'인기 글의 구성 방식만 참고하고 원문의 주장·경험·수치를 베끼지 마세요. '+saved.data.analysis.apply.tips.join(' / '),sources:saved.data.fetched.filter(f=>!f.error).map(f=>({title:f.title,url:f.url}))}};
+  const inserted=await q("INSERT INTO projects(id,blog_id,title,topic,stage,status,plan) VALUES($1,$2,$3,$4,'titles','waiting',$5) ON CONFLICT(id) DO NOTHING RETURNING id",[id,blogId,title,keyword,j(plan)]);
+  if(inserted.length)await addEvent(id,'create','인기 글 분석의 제목 아이디어를 선택했어요. 본문 작성 대기 · 추가 AI 호출 없음');
+  else if((await q1<{deleted_at:string|null}>('SELECT deleted_at FROM projects WHERE id=$1',[id]))?.deleted_at)throw new Error('휴지통에 있는 글이에요. 복원한 뒤 이어서 작성해 주세요.');
+  return {id};
 }

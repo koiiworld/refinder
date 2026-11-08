@@ -9,7 +9,7 @@
 |---|---|---|
 | `api.ts` |  | Ctx, ok, fail, handle, body |
 | `balances.ts` | AI별 잔액 (충전액 − 앱에서 쓴 금액) | BALANCE_PROVIDERS, BalanceProvider, balances, addTopUp, setActualUsed, removeTopUp |
-| `benchmark.ts` | 인기 글 분석 → 내 블로그에 적용 | PostStats, statsOf, analyzePopular, lastBenchmark |
+| `benchmark.ts` | 인기 글 분석 → 내 블로그에 적용 | PostStats, statsOf, analyzePopular, lastBenchmark, startBenchmarkPost |
 | `blog-hot.ts` | 📰 블로그 핫이슈: 네이버 블로그 홈 '주제별 보기'에 지금 올라오는 글 중 반응(공감·댓글) 많은 글 | HOT_TABS, HotPost, HotTabData, topWords, hotTab |
 | `blog-posts.ts` | 내 블로그의 실제 최근 글 목록 (블로그 RSS) | BlogPostLink, rssUrlOf, parseRss, recentPosts, writtenTitles, PostStat, naverPostStats |
 | `brand.ts` | 왼쪽 위 로고 (아이콘 글자·이름·색) — settings 'brand' | Brand, DEFAULT_BRAND, getBrand, saveBrand |
@@ -18,7 +18,7 @@
 | `carousel.ts` | 📱 인스타 캐러셀(카드뉴스) | Slide, CarouselImage, TypeVersion, CarouselStyle, Carousel, CONTENT_TYPES, ContentTypeId, FORMATS … |
 | `convert.ts` | 📄 문서 → 마크다운 (마이크로소프트 MarkItDown, 맥에서 무료) | CONVERT_EXT, MAX_CONVERT_BYTES, Conversion, createConversion, listConversions, getConversion, runConversion |
 | `coupang.ts` | 쿠팡파트너스 Open API: 이번 달 수익·클릭·주문 자동 집계 | coupangConnected, coupangAuth, syncCoupang, lastCoupangSync |
-| `creator.ts` | 네이버 크리에이터 어드바이저 '유입 트렌드' — 공식 API가 없어 사용자가 화면에서 복사해 붙여 넣은 목록을 저장 | CreatorTrend, parseTrendText, saveCreatorTrend, listCreatorTrends, creatorTrendContext |
+| `creator.ts` | 네이버 크리에이터 어드바이저 '유입 트렌드' — 공식 API가 없어 사용자가 화면에서 복사해 붙여 넣은 목록을 저장 | CreatorTrend, cleanCreatorKeyword, parseTrendText, saveCreatorTrend, listCreatorTrends, creatorTrendContext |
 | `dashboard.ts` | 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음) | PASS_SCORE, RevenueChannel, RevenueEntry, MonthRevenue, monthKey, getRevenue, saveRevenue, saveDailyRevenue … |
 | `db.ts` | 데이터베이스 어댑터 | getDb, q, q1, dbKind, newId, j |
 | `diagnose.ts` | 🩺 블로그 진단 | naverBlogSearch, naverSearch, postKey, blogKey, Check, diagnoseBlog, Diagnosis, DiagnoseState … |

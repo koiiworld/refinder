@@ -16,6 +16,17 @@ export interface CreatorTrend {
   collected_at: string; // 앱에 붙여 넣은 시각
 }
 
+/** 오른쪽 변동 열만 정리. 검색어 안의 NEW·연도·모델명·분량 숫자는 유지. */
+export function cleanCreatorKeyword(raw:string){
+  let keyword=raw.trim();
+  if(/^(?:new|신규|순위\s*(?:변경|변동)|[-−–—]|[▲▼△▽▴▾↑↓]\ufe0f?\s*\d*|\d+)$/iu.test(keyword))return '';
+  let previous='';
+  while(previous!==keyword){previous=keyword;keyword=keyword
+    .replace(/\s*[▲▼△▽▴▾↑↓]\ufe0f?\s*\d*\s*$/u,'')
+    .replace(/(?:\s+(?:new|신규)|(?<=[가-힣])NEW|\s+[-−–—])\s*$/iu,'').trim();}
+  return keyword.replace(/^[-•·*\s]+/,'').replace(/\s{2,}/g,' ').trim();
+}
+
 /** 붙여 넣은 텍스트 → 순위·키워드 목록 */
 export function parseTrendText(text: string): { rank: number; keyword: string }[] {
   const lines = text
@@ -26,16 +37,11 @@ export function parseTrendText(text: string): { rank: number; keyword: string }[
   const out: { rank: number; keyword: string }[] = [];
   const seen = new Set<string>();
   for (const line of lines) {
-    // "1", "1.", "1위", "01 )" 같은 순위 표시와 끝의 증감 표시(▲3, NEW, -) 제거
-    const m = line.match(/^(\d{1,3})\s*(?:위|\.|\)|:)?\s*(.+)$/);
-    let kw = (m ? m[2] : line)
-      .replace(/\s*(?:▲|▼|↑|↓)\s*\d*\s*$/u, "")
-      .replace(/\s*(?:NEW|new|신규|-)\s*$/u, "")
-      .replace(/^[-•·*\s]+/, "")
-      .trim();
-    if (/^\d+$/.test(kw)) continue; // 순위만 있는 줄
-    if (!kw || kw.length > 60) continue;
-    kw = kw.replace(/\s{2,}/g, " ");
+    // 줄 앞에 별도로 적힌 순위만 제거. '3분', '1인분', '2026년'은 검색어.
+    if(/^\d+$/.test(line))continue;
+    const m=line.match(/^(\d{1,3})(?:\s*(?:위|\.|\)|:)\s*|\s+)(.+)$/);
+    const kw=cleanCreatorKeyword(m?m[2]:line);
+    if(!kw||kw.length>60)continue;
     if (seen.has(kw)) continue;
     seen.add(kw);
     out.push({ rank: m ? Number(m[1]) : out.length + 1, keyword: kw });
@@ -65,7 +71,7 @@ export async function listCreatorTrends(blogId: string, limit = 20): Promise<Cre
   const rows = await q<Row>(
     `SELECT * FROM research_snapshots WHERE source='creator_advisor' AND blog_id=$1 ORDER BY collected_at DESC LIMIT $2`,[blogId,limit],
   );
-  return rows.map((r) => ({ id: r.id, blog_id: r.blog_id, category: r.query.category, date: r.query.date, items: r.data.items, collected_at: r.collected_at }));
+  return rows.map((r) => ({ id: r.id, blog_id: r.blog_id, category: r.query.category, date: r.query.date, items: r.data.items.map(item=>({...item,keyword:cleanCreatorKeyword(item.keyword)})).filter(item=>item.keyword), collected_at: r.collected_at }));
 }
 
 /** AI 프롬프트용: 이 블로그의 최근 14일 유입 트렌드 (최대 30개) */

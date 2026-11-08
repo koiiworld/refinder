@@ -240,7 +240,7 @@ function CreatorPaste({ blogId,blogName, onDone }: { blogId: string;blogName:str
       if (!r.text) setErr("캡처에서 검색어 목록을 찾지 못했습니다. 유입 검색어 목록이 보이게 다시 캡처해 주세요.");
       else {
         setText((t) => (t.trim() ? `${t.trim()}\n${r.text}` : r.text));
-        setNote(`캡처 ${imgs.length}장에서 읽었습니다 (${r.provider}/${r.model}). 틀린 글자가 있으면 고친 뒤 '저장'을 누르세요.`);
+        setNote(`캡처 ${imgs.length}장에서 검색어만 읽었습니다 (${r.provider}/${r.model}). 순위 변동·NEW 표시는 제외해요. 내용을 확인한 뒤 '저장'을 누르세요.`);
       }
     } catch (e) {
       setErr((e as Error).message);
@@ -272,7 +272,7 @@ function CreatorPaste({ blogId,blogName, onDone }: { blogId: string;blogName:str
       <textarea
         className="textarea"
         aria-label={`${blogName} 유입 트렌드 입력`}
-        placeholder={"1 이 블로그의 검색어\n2 두 번째 검색어 ▲3\n3 세 번째 검색어 NEW"}
+        placeholder={"1 이 블로그의 검색어\n2 두 번째 검색어\n3 세 번째 검색어"}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onPaste={(e) => {
@@ -310,6 +310,7 @@ function CreatorPaste({ blogId,blogName, onDone }: { blogId: string;blogName:str
 }
 
 type BenchResult = {
+  snapshotId:string;
   fetched: { url: string; title: string; stats: { chars: number; headings: number; images: number; lists: number; tables: number }; error?: string }[];
   analysis: {
     posts: { title: string; titlePattern: string; hook: string; structure: string; whyPopular: string; keywords: string[] }[];
@@ -322,6 +323,9 @@ type BenchResult = {
 };
 
 function Benchmark({ blogId, onAdded }: { blogId: string; onAdded: (m: string) => Promise<void> }) {
+  const router=useRouter();
+  const [starting,setStarting]=useState<number|null>(null);
+  async function startTitle(index:number){if(!r)return;setStarting(index);setErr("");try{const created=await api<{id:string}>("/api/research/benchmark","POST",{action:"start",blogId,snapshotId:r.snapshotId,index,title:r.analysis.apply.titleIdeas[index].title});router.push(`/posts/${created.id}`);router.refresh();}catch(e){setErr((e as Error).message);setStarting(null);}}
   const [urls, setUrls] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -360,7 +364,7 @@ function Benchmark({ blogId, onAdded }: { blogId: string; onAdded: (m: string) =
       </p>
       <textarea className="textarea" placeholder={"https://blog.naver.com/아이디/글번호\nhttps://blog.naver.com/아이디/글번호"} value={urls} disabled={busy} onChange={(e) => setUrls(e.target.value)} />
       <div className="row">
-        <button className="btn btn-primary btn-sm" disabled={busy || !urls.trim()} onClick={analyze}>{busy ? <><span className="spinner" /> 글을 읽고 분석하는 중… (30초~1분)</> : "분석하기"}</button>
+        <button className="btn btn-primary btn-sm" disabled={busy || starting!==null || !urls.trim()} onClick={analyze}>{busy ? <><span className="spinner" /> 글을 읽고 분석하는 중… (30초~1분)</> : "분석하기"}</button>
         <span className="tiny muted">AI 비용이 조금 듭니다 (키워드 추천 담당 AI)</span>
       </div>
       {err && <div className="notice notice-bad small" style={{ whiteSpace: "pre-wrap" }}>{err}</div>}
@@ -370,12 +374,14 @@ function Benchmark({ blogId, onAdded }: { blogId: string; onAdded: (m: string) =
 
           <div className="card card-pad stack" style={{ gap: 8 }}>
             <b className="small">✨ 이 블로그에 적용할 제목 아이디어</b>
+            <p className="tiny muted">제목을 선택하면 그 제목으로 글을 시작해요. 제목 적용은 AI 호출이 없으며, 본문은 다음 화면에서 비용을 확인한 뒤 작성해요.</p>
             {r.analysis.apply.titleIdeas.map((t, i) => (
-              <div key={i} className="row between" style={{ flexWrap: "nowrap", alignItems: "flex-start", gap: 8, borderTop: i ? "1px solid var(--line)" : undefined, paddingTop: i ? 8 : 0 }}>
+              <div key={i} className="row between" style={{ flexWrap: "wrap", alignItems: "flex-start", gap: 8, borderTop: i ? "1px solid var(--line)" : undefined, paddingTop: i ? 8 : 0 }}>
                 <div style={{ minWidth: 0 }}>
                   <div className="small strong">{t.title}</div>
                   <div className="tiny muted">{t.reason}</div>
                 </div>
+                <button className="btn btn-primary btn-sm" disabled={busy||starting!==null} onClick={()=>startTitle(i)}>{starting===i?'글 여는 중…':'이 제목으로 새 글 시작'}</button>
                 {t.keyword && (
                   <button className="btn btn-sm" style={{ flexShrink: 0 }} disabled={added.includes(t.keyword)} onClick={() => addKeyword(t.keyword)} title="② 키워드 목록에 추가">
                     {added.includes(t.keyword) ? "추가됨" : `+ ${t.keyword}`} {vol(t.keyword) && <span className="tiny muted">{vol(t.keyword)}</span>}

@@ -1,3 +1,4 @@
+import {parseTrendText} from "@/lib/creator";
 import { body, fail, handle, ok } from "@/lib/api";
 import { getBlogForAi } from "@/lib/repo";
 import { runStep } from "@/lib/ai/run";
@@ -20,7 +21,9 @@ export async function POST(req: Request) {
     const system = `당신은 네이버 크리에이터 어드바이저 화면을 읽어 옮겨 적는 도우미입니다. 화면에 실제로 보이는 글자만 옮기고, 보이지 않는 내용은 절대 지어내지 않습니다.`;
     const prompt = `첨부한 캡처는 네이버 크리에이터 어드바이저의 '유입 검색어' 또는 '트렌드' 화면입니다.
 화면에 보이는 검색어 목록을 순위대로 한 줄에 하나씩 옮겨 적으세요.
-- 형식: "순위 검색어 변동" (예: "1 김장 양념 비율", "2 절임배추 ▲3", "3 굴보쌈 NEW"). 변동 표시(▲숫자, ▼숫자, NEW)가 보일 때만 붙이세요.
+- 형식: "순위 검색어" (예: "1 김장 양념 비율", "2 절임배추", "3 굴보쌈").
+- 검색어 열의 글자만 읽으세요. 오른쪽 별도 열의 순위 변동(▲·▼·위아래 화살표와 숫자), new·NEW·신규 배지, 유지 표시(-)는 절대 포함하지 마세요. 이 표시가 단독 줄에 보여도 옮기지 마세요.
+- 검색어 자체의 숫자(2026년, 아이폰 17, 1인분, 3분 요리)와 단어 속 NEW는 지우지 마세요.
 - 순위 숫자가 화면에 없으면 위에서부터 1, 2, 3… 으로 매기세요.
 - 메뉴·날짜·설명 문구·조회수 숫자는 빼고 검색어만.
 - 여러 장이면 이어서 적되 같은 검색어는 한 번만.
@@ -30,8 +33,9 @@ export async function POST(req: Request) {
         step: "keywords", purpose: "creator-image", blog: blog ?? null, system, prompt, images, maxTokens: 2000,
         template: () => "",
       });
-      const text = res.text.replace(/```[a-z]*\n?|```/g, "").trim();
-      return ok({ text: /검색어 없음/.test(text) ? "" : text, provider: res.provider, model: res.model, substitutedFor: res.substitutedFor ?? null });
+      const rawText = res.text.replace(/```[a-z]*\n?|```/g, "").trim();
+      const text=/^\(검색어 없음\)$/.test(rawText)?"":parseTrendText(rawText).map(item=>`${item.rank} ${item.keyword}`).join("\n");
+      return ok({ text, provider: res.provider, model: res.model, substitutedFor: res.substitutedFor ?? null });
     } catch (e) {
       if (e instanceof AiError) return fail(e.message, 502);
       throw e;

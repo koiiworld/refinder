@@ -163,6 +163,10 @@ test("말투 예시 파일: 업로드·검증·삭제", async () => {
 test("유입 트렌드 붙여넣기 정리", async () => {
   const r = await call("/api/research/creator", "POST", { blogId: "blog_algokitchen", text: "1 김장 양념 비율\n2위 절임배추 ▲3\n3. 굴보쌈 NEW\n절임배추" });
   assert.equal(r.data.count, 3);
+  const noisy=await call('/api/research/creator','POST',{blogId:'blog_algokitchen',text:'1 동치미담그는법 -\n2 겨울 간식 추천 new\n3 수육 삶는법 ▾ 1\n4 파김치 담그는법 ▲2 NEW\nNEW\n▼14\n-\n3분 요리\n1인분 레시피\n2026년 김장\n아이폰 17\nNEW YORK 맛집'});
+  const saved=(await call('/api/research/creator?blogId=blog_algokitchen')).data.find(row=>row.id===noisy.data.id);
+  assert.deepEqual(saved.items.map(item=>item.keyword),['동치미담그는법','겨울 간식 추천','수육 삶는법','파김치 담그는법','3분 요리','1인분 레시피','2026년 김장','아이폰 17','NEW YORK 맛집']);
+  await call(`/api/research/creator?id=${noisy.data.id}`, "DELETE");
   await call(`/api/research/creator?id=${r.data.id}`, "DELETE");
 });
 
