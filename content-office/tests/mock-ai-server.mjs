@@ -208,6 +208,7 @@ http
     if (url.pathname === "/v1/search/blog.json") {
       if (req.headers["x-naver-client-id"] !== "test-dl-id") return send(res, 401, { errorMessage: "auth" });
       const qy = url.searchParams.get("query") ?? "";
+      if(qy.startsWith('과거글찾기 '))return send(res,200,{total:201,items:[{title:'RSS에 없는 예전 글',link:'https://blog.naver.com/algo_kitchen/223000000111',bloggerlink:'https://blog.naver.com/algo_kitchen'},{title:'다른 블로그 글',link:'https://blog.naver.com/outsider/223000000222',bloggerlink:'https://blog.naver.com/outsider'},{title:'가짜 도메인',link:'https://blog.naver.com.evil.test/algo_kitchen/223000000333'}]});
       const other = (n) => Array.from({ length: n }, (_, i) => ({ title: `<b>다른 글</b> ${i}`, link: `https://blog.naver.com/other${i}/22300000${i}`, bloggerlink: `blog.naver.com/other${i}`, postdate: "20261101" }));
       const mine = (logNo) => ({ title: "내 글", link: `https://blog.naver.com/algo_kitchen/${logNo}`, bloggerlink: "blog.naver.com/algo_kitchen", postdate: "20261101" });
       if (qy.startsWith("굴보쌈 황금레시피")) return send(res, 200, { total: 3, items: [...other(1), mine("224000000001")] });

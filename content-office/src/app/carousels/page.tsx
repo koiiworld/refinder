@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {capturedPostViews,matchCapturedViews} from "@/lib/captured-post-views";
 import { q } from "@/lib/db";
 import { listBlogs } from "@/lib/repo";
 import { naverPostStats, recentPosts } from "@/lib/blog-posts";
@@ -16,15 +17,17 @@ export default async function Carousels({ searchParams }: { searchParams: Promis
   // 이미 캐러셀을 만든 글은 목록에서 빼고 '만든 캐러셀'로
   const usedUrls = new Set(list.map((c) => (c.style?.sourceUrl ? postKey(c.style.sourceUrl) : "")).filter(Boolean));
   const usedProjects = new Set(list.map((c) => c.project_id).filter(Boolean));
+  const viewPeriods:Record<string,string>={};
   const published = (
     await Promise.all(
       allBlogs.map(async (b) => {
-        const [posts, stats] = await Promise.all([recentPosts(b, 30), naverPostStats(b.url)]);
+        const [posts, stats, captured] = await Promise.all([recentPosts(b, 50), naverPostStats(b.url),capturedPostViews(b.id)]);
+        viewPeriods[b.id]=captured.label;
         return posts
           .filter((p) => !usedUrls.has(postKey(p.url)))
           .map((p) => {
             const st = stats[/\/(\d{6,})/.exec(p.url)?.[1] ?? ""] ?? null;
-            return { title: p.title, url: p.url, blogId: b.id, blog_name: b.name, likes: st?.likes ?? null, comments: st?.comments ?? null, views: st?.views ?? null };
+            return { title: p.title, url: p.url, blogId: b.id, blog_name: b.name, likes: st?.likes ?? null, comments: st?.comments ?? null, views: matchCapturedViews(p.title,posts.map(x=>x.title),captured.items) };
           });
       }),
     )
@@ -46,7 +49,7 @@ export default async function Carousels({ searchParams }: { searchParams: Promis
         </div>
       </div>
       <Link href="/learn/design" className="btn">📚 AI 학습지 · 디자인 참고 자료 넣기</Link>
-      <NewCarousel posts={posts} published={published} blogs={blogs} made={JSON.parse(JSON.stringify(made))} formats={FORMATS.map((f) => ({ id: f.id, label: f.label }))} defaultFrom={sp.from} defaultBlog={sp.blog} />
+      <NewCarousel viewPeriods={viewPeriods} posts={posts} published={published} blogs={blogs} made={JSON.parse(JSON.stringify(made))} formats={FORMATS.map((f) => ({ id: f.id, label: f.label }))} defaultFrom={sp.from} defaultBlog={sp.blog} />
     </div>
   );
 }

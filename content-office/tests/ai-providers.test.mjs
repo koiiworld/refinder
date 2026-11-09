@@ -2335,3 +2335,13 @@ test('서이추 PC 연결: 블로그 분리·확인 필수·작업 단일 수신
  r=await call('/api/seoichoo','POST',{blogId:b.id,kind:'collect',payload:{url:'https://creator-advisor.naver.com/new-windows/trend-stats'}});assert.equal(r.status,201);
  await call('/api/seoichoo','POST',{action:'cancel',id:r.data.id});assert.equal((await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job,null);
 });
+
+
+test('캐러셀 예전 글 검색: RSS 밖 검색·소유 블로그 필터·페이지·잘못된 입력',async()=>{
+ const list=(await call('/api/carousels')).data;const c=list.find(c=>c.blog_id==='blog_algokitchen');assert.ok(c);
+ let r=await call(`/api/carousels/${c.id}/sources?query=${encodeURIComponent('과거글찾기')}`);assert.equal(r.status,200,JSON.stringify(r.data));assert.equal(r.data.items.length,1);assert.equal(r.data.items[0].title,'RSS에 없는 예전 글');assert.equal(r.data.nextStart,101);
+ r=await call(`/api/carousels/${c.id}/sources?query=${encodeURIComponent('과거글찾기')}&start=101`);assert.equal(r.status,200);assert.equal(r.data.nextStart,201);
+ assert.equal((await call(`/api/carousels/${c.id}/sources?query=x&start=1001`)).status,400);
+ assert.equal((await call(`/api/carousels/${c.id}/sources?query=`)).status,400);
+ assert.equal((await call('/api/carousels/missing/sources?query=x')).status,404);
+});

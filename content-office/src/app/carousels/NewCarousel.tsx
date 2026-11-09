@@ -7,11 +7,15 @@ import { api } from "@/components/client-utils";
 import { fmtDate } from "@/components/ui";
 
 type Made = { id: string; title: string; blog_id: string | null; slides: number; updated_at: string; fromPost: boolean };
-const score = (p: { likes: number | null; comments: number | null; views: number | null }) => (p.views ?? 0) * 1000 + (p.likes ?? 0) + (p.comments ?? 0) * 3;
+const comparePosts = (a: {likes:number|null;comments:number|null;views:number|null}, b: {likes:number|null;comments:number|null;views:number|null}) => {
+  if(a.views!=null&&b.views==null)return -1;
+  if(a.views==null&&b.views!=null)return 1;
+  return (b.views??0)-(a.views??0) || ((b.likes??0)+(b.comments??0)*3)-((a.likes??0)+(a.comments??0)*3);
+};
 
 type Idea = { topic: string; format: string; hook: string; why: string };
 
-export default function NewCarousel({ posts, published, blogs, made, formats, defaultFrom, defaultBlog }: { posts: { id: string; title: string; blog_id: string; blog_name: string }[]; published: { title: string; url: string; blogId: string; blog_name: string; likes: number | null; comments: number | null; views: number | null }[]; made: Made[]; blogs: { id: string; name: string; category: string }[]; formats: { id: string; label: string }[]; defaultFrom?: string; defaultBlog?: string }) {
+export default function NewCarousel({ posts, published, blogs, made, formats, defaultFrom, defaultBlog, viewPeriods={} }: { viewPeriods?:Record<string,string>; posts: { id: string; title: string; blog_id: string; blog_name: string }[]; published: { title: string; url: string; blogId: string; blog_name: string; likes: number | null; comments: number | null; views: number | null }[]; made: Made[]; blogs: { id: string; name: string; category: string }[]; formats: { id: string; label: string }[]; defaultFrom?: string; defaultBlog?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"post" | "topic">(defaultFrom === "topic" ? "topic" : "post");
   const [pickBlog, setPickBlog] = useState(blogs.some((b) => b.id === defaultBlog) ? defaultBlog! : blogs[0]?.id ?? "");
@@ -78,15 +82,16 @@ export default function NewCarousel({ posts, published, blogs, made, formats, de
               );
             })}
           </nav>
+          <p className="tiny muted" style={{margin:0}} role="status">조회수 기준: {viewPeriods[pickBlog]??"저장된 조회수 기록 없음"}</p>
           {(() => {
-            const pub = published.filter((p) => p.blogId === pickBlog).sort((a, b) => score(b) - score(a));
+            const pub = published.filter((p) => p.blogId === pickBlog).sort(comparePosts);
             const mine = posts.filter((p) => p.blog_id === pickBlog && !pub.some((x) => x.title.trim() === p.title.trim()));
             const row = (key: string, title: string, payload: Record<string, unknown>, tag: string, st?: { likes: number | null; comments: number | null; views: number | null }) => (
               <div key={key} className="row" style={{ flexWrap: "nowrap", gap: 8, padding: "8px 10px", borderBottom: "1px solid var(--line)" }}>
                 <span className="tiny muted" style={{ flexShrink: 0, width: 54 }}>{tag}</span>
                 <span className="small ellipsis" style={{ flex: 1 }} title={title}>{title}</span>
-                <span className="tiny muted" style={{ flexShrink: 0, width: 128, textAlign: "right" }} title="조회수는 네이버가 공개한 경우에만 보여요">
-                  {st && st.likes != null ? <>{st.views != null && <>👁 {st.views.toLocaleString("ko-KR")} · </>}❤️ {st.likes.toLocaleString("ko-KR")} · 💬 {(st.comments ?? 0).toLocaleString("ko-KR")}</> : ""}
+                <span className="tiny muted" style={{ flexShrink: 0, width: 154, textAlign: "right" }} title={viewPeriods[pickBlog]??"저장된 조회수 기록 기준"}>
+                  {st ? <>{st.views != null ? <>👁 {st.views.toLocaleString("ko-KR")}</> : <span>조회수 기록 없음</span>}{st.likes != null&&<> · ❤️ {st.likes.toLocaleString("ko-KR")} · 💬 {(st.comments ?? 0).toLocaleString("ko-KR")}</>}</> : ""}
                 </span>
                 <button className="btn btn-sm btn-primary" disabled={!!busy} onClick={() => create(payload)}>{busy === "create" && creating === key ? <span className="spinner" /> : "만들기"}</button>
               </div>
@@ -94,7 +99,10 @@ export default function NewCarousel({ posts, published, blogs, made, formats, de
             if (!pub.length && !mine.length) return <p className="small muted" style={{ margin: 0 }}>이 블로그에는 아직 고를 글이 없어요. 아래에 글 주소를 넣거나 &apos;주제로 따로 만들기&apos;를 써 보세요.</p>;
             return (
               <div className="card" style={{ maxHeight: 360, overflowY: "auto" }}>
-                {pub.map((p) => row(`u:${p.url}`, p.title, { url: p.url, blogId: p.blogId }, "📷 발행", p))}
+                {pub.some(p=>p.views!=null)&&<div className="tiny muted" style={{padding:'8px 10px'}}>조회수 높은 순 · 저장된 캡처 기록</div>}
+                {pub.filter(p=>p.views!=null).map((p) => row(`u:${p.url}`, p.title, { url: p.url, blogId: p.blogId }, "📷 발행", p))}
+                {pub.some(p=>p.views==null)&&<div className="tiny muted" style={{padding:'8px 10px'}}>조회수 기록 없음 · 공감·댓글 순</div>}
+                {pub.filter(p=>p.views==null).map((p) => row(`u:${p.url}`, p.title, { url: p.url, blogId: p.blogId }, "📷 발행", p))}
                 {mine.map((p) => row(`p:${p.id}`, p.title, { projectId: p.id }, "✍️ 앱 글"))}
               </div>
             );
@@ -103,7 +111,7 @@ export default function NewCarousel({ posts, published, blogs, made, formats, de
             <input className="input" value={postUrl} onChange={(e) => setPostUrl(e.target.value)} placeholder="또는 블로그 글 주소 붙여넣기 (네이버·티스토리)" aria-label="블로그 글 주소" />
             <button className="btn" disabled={!!busy || !/^https?:\/\//.test(postUrl.trim())} onClick={() => create({ url: postUrl.trim(), blogId: pickBlog || null })}>주소로 만들기</button>
           </div>
-          <p className="tiny muted" style={{ margin: 0 }}>📷 발행 = 블로그에 올린 글 (올린 사진 그대로 사용) · ✍️ 앱 글 = 앱에서 쓰고 아직 안 올린 글 · 반응(조회수·공감·댓글) 많은 순 · 네이버는 글별 조회수를 공개하지 않아 공감·댓글로 정렬해요 · 캐러셀을 만든 글은 아래 &apos;만든 캐러셀&apos;로 옮겨져요</p>
+          <p className="tiny muted" style={{ margin: 0 }}>📷 발행 = 블로그에 올린 글 (올린 사진 그대로 사용) · ✍️ 앱 글 = 앱에서 쓰고 아직 안 올린 글 · 블로그 진단과 같은 최근 7개 일간 캡처 합계로 정렬 · 기록 없는 글은 별도로 공감·댓글 순으로 표시해요 · 캐러셀을 만든 글은 아래 &apos;만든 캐러셀&apos;로 옮겨져요</p>
         </div>
       ) : (
         <div className="stack" style={{ gap: 10 }}>

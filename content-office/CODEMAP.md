@@ -16,6 +16,7 @@
 | `blog-rule-types.ts` |  | BLOG_RULE_SCOPES, BlogRuleScope, BlogRuleTarget, CommonBlogRule, rulesForScope, commonRulesText |
 | `brand.ts` | 왼쪽 위 로고 (아이콘 글자·이름·색) — settings 'brand' | Brand, DEFAULT_BRAND, getBrand, saveBrand |
 | `calendar.ts` | 📅 마케팅 달력 | CalCat, CalEvent, CAT_LABEL, krHolidays, monthEvents, addCalendarEvent, deleteCalendarEvent |
+| `captured-post-views.ts` | 블로그 진단과 캐러셀이 공유: 저장된 최근 7개 일간 기록의 제목별 합계. | capturedPostViews, matchCapturedViews |
 | `carousel-design-types.ts` | 캐러셀 디자인 참고함과 실제 캔버스에 적용하는 값 (브라우저·서버 공용) | DesignRecipe, DesignAnalysis, DesignReference, BASE_RECIPE, cleanRecipe, LEARN_CATEGORIES, LearnCategory, LearningAnalysis … |
 | `carousel-text.ts` |  | CarouselTextInput, rewriteCarouselText |
 | `carousel.ts` | 📱 인스타 캐러셀(카드뉴스) | Slide, CarouselImage, TypeVersion, CarouselStyle, Carousel, CONTENT_TYPES, ContentTypeId, FORMATS … |
@@ -121,6 +122,7 @@
 | `api/carousels/[id]/img/[n]/route.ts` | 캐러셀 사진을 같은 주소로 전달 (브라우저 캔버스에 그려 저장하려면 같은 출처여야 함) | GET |
 | `api/carousels/[id]/rewrite/route.ts` |  | GET, POST |
 | `api/carousels/[id]/route.ts` | 장면·캡션·해시태그·디자인 저장 | GET, PUT, POST, DELETE |
+| `api/carousels/[id]/sources/route.ts` |  | GET |
 | `api/carousels/ideas/route.ts` | 알고리즘 타기 쉬운 캐러셀 주제 추천 | POST |
 | `api/carousels/route.ts` | 새 캐러셀: { projectId } 블로그 글에서 · { topic, niche, format, blogId } 주제로 | GET, POST |
 | `api/carousels/sources/refresh/route.ts` |  | POST |
@@ -208,6 +210,7 @@
 | `blogs/page.tsx` |  | dynamic |
 | `calendar/CalendarView.tsx` | 연간 시즌 행사는 행사마다 확실히 다른 색 (그 달에 보이는 순서대로 하나씩 → 같이 보이는 행사끼리는 안 겹침) |  |
 | `calendar/page.tsx` |  | dynamic |
+| `carousels/BlogPostPicker.tsx` |  |  |
 | `carousels/CardZoom.tsx` |  |  |
 | `carousels/CarouselTextAI.tsx` |  |  |
 | `carousels/DesignPicker.tsx` |  |  |
@@ -332,6 +335,7 @@
 | 파일 | 설명 | 내보내는 것 |
 |---|---|---|
 | `ai-providers.test.mjs` | 담당 AI가 대체되어도(ChatGPT→Gemini 등) 해당 단계 요청의 사용자 프롬프트를 찾음 |  |
+| `carousel-sources.test.mjs` |  |  |
 | `fake-ai-python.sh` |  |  |
 | `fake-esrgan.sh` |  |  |
 | `fake-rife.sh` |  |  |

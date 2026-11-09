@@ -12,7 +12,7 @@ export default async function CarouselPage({ params }: { params: Promise<{ id: s
   const c = await getCarousel((await params).id);
   if (!c) notFound();
   const blogs = (await listBlogs()).filter((b) => !c.blog_id || b.id === c.blog_id);
-  const recent = (await Promise.all(blogs.map(async (b) => (await recentPosts(b, 15)).map((p) => ({ title: p.title, url: p.url, blog: b.name }))))).flat();
+  const recent = (await Promise.all(blogs.map(async (b) => (await recentPosts(b, 50)).map((p) => ({ title: p.title, url: p.url, blog: b.name }))))).flat();
   return (
     <div className="page">
       <div className="page-head">

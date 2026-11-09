@@ -1,4 +1,5 @@
 import "server-only";
+import {capturedPostViews} from "./captured-post-views";
 import { q, q1, newId, j } from "./db";
 import { getBlogForAi } from "./repo";
 import { recentPosts, type BlogPostLink } from "./blog-posts";
@@ -22,7 +23,7 @@ export async function naverBlogSearch(query: string, display = 10): Promise<{ to
 }
 
 /** 네이버 검색 API (블로그·뉴스) — NAVER API HUB 키 우선, 기존 개발자센터 키도 지원 */
-export async function naverSearch(kind: "blog" | "news" | "webkr", query: string, display = 10, sort: "sim" | "date" = "sim"): Promise<{ total: number; items: (SearchItem & { description?: string; originallink?: string; pubDate?: string })[] }> {
+export async function naverSearch(kind: "blog" | "news" | "webkr", query: string, display = 10, sort: "sim" | "date" = "sim", start = 1): Promise<{ total: number; items: (SearchItem & { description?: string; originallink?: string; pubDate?: string })[] }> {
   const id = process.env.NAVER_CLIENT_ID?.trim();
   const secret = process.env.NAVER_CLIENT_SECRET?.trim();
   if (!id || !secret) throw new Error("네이버 검색 API 키(NAVER_CLIENT_ID / NAVER_CLIENT_SECRET)가 없습니다.");
@@ -37,7 +38,7 @@ export async function naverSearch(kind: "blog" | "news" | "webkr", query: string
   let res: Response | null = null;
   let data: { total?: number; items?: SearchItem[]; errorMessage?: string } = {};
   for (const [base, headers] of attempts) {
-    res = await fetch(`${base}?query=${encodeURIComponent(query)}&display=${display}&sort=${sort}`, { headers, signal: AbortSignal.timeout(10_000) });
+    res = await fetch(`${base}?query=${encodeURIComponent(query)}&display=${display}&sort=${sort}&start=${start}`, { headers, signal: AbortSignal.timeout(10_000) });
     data = await res.json().catch(() => ({}));
     if (![401, 403, 404].includes(res.status)) break;
   }
@@ -228,13 +229,7 @@ export async function diagnoseBlog(blogId: string, opts: { skipAi?: boolean; sav
   }
 
   // 대시보드에 넣은 조회수 순위 캡처 (잘 되는 글 = 유입 전략의 근거)
-  const topViews = await q<{ day: string; items: { title: string; views: number }[] }>(
-    "SELECT to_char(day,'YYYY-MM-DD') AS day, items FROM view_captures WHERE blog_id=$1 AND kind='day' ORDER BY day DESC LIMIT 7",
-    [blogId],
-  ).catch(() => []);
-  const topMap = new Map<string, number>();
-  for (const r of topViews) for (const it of r.items ?? []) topMap.set(it.title, (topMap.get(it.title) ?? 0) + Number(it.views || 0));
-  const topPosts = [...topMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([title, views]) => ({ title, views }));
+  const topPosts = (await capturedPostViews(blogId)).items.slice(0,8);
   const metrics = { topPosts, rhythm: rh, titles: { avgLen: ts.avgLen, count: ts.count, withNumber: ts.withNumber, repeated: ts.repeated.slice(0, 5), special: ts.special.slice(0, 5), tooLong: ts.tooLong.slice(0, 5) }, indexed, ranks, structure: { avgChars: avg("chars"), avgImages: avg("images"), avgHeadings: avg("headings"), avgLists: avg("lists") }, visits: vis };
 
   // 6) AI 종합 진단 (단계별 AI의 '키워드' 담당 — 기본 무료 Gemini)
