@@ -21,10 +21,11 @@ export default async function ExtensionCard() {
           <span className="tiny muted">앱 비밀번호를 바꾸면 연결 코드도 바뀌어요. 그때는 확장 프로그램에 새 코드를 넣어 주세요.</span>
         </div>
         <details>
-          <summary className="small" style={{ cursor: "pointer" }}><b>설치 방법 (처음 한 번)</b></summary>
+          <summary className="small" style={{ cursor: "pointer" }}><b>설치 방법 (처음 한 번 · 윈도우·맥 모두)</b></summary>
           <ol className="small" style={{ margin: "6px 0 0", paddingLeft: 20, lineHeight: 1.8 }}>
+            <li><a className="btn btn-sm" href="/api/extension-zip">⬇️ 확장 프로그램 내려받기 (zip)</a> → 내려받은 파일을 <b>압축 풀기</b> (윈도우: 오른쪽 클릭 → 압축 풀기 / 맥: 더블클릭)</li>
             <li>크롬 주소창에 <code>chrome://extensions</code> 입력 → 오른쪽 위 <b>개발자 모드</b> 켜기</li>
-            <li><b>압축해제된 확장 프로그램을 로드합니다</b> 누르기 → 맥의 <code>project/refinder/content-office/chrome-extension</code> 폴더 선택</li>
+            <li><b>압축해제된 확장 프로그램을 로드합니다</b> 누르기 → 압축 푼 <code>content-office-extension</code> 폴더 선택</li>
             <li>크롬 오른쪽 위 퍼즐 아이콘 → <b>콘텐츠 오피스 보내기</b> 📌 고정</li>
             <li>아이콘을 눌러 위의 <b>앱 주소</b>와 <b>연결 코드</b>를 붙여넣고 <b>연결 확인</b></li>
             <li>같은 창에서 <b>보낼 글</b>을 고르기 → ChatGPT·제미나이에서 보내기</li>

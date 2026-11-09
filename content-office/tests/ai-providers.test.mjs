@@ -2276,3 +2276,14 @@ test('🍲 음식 클로즈업 릴스: 캐릭터 단계 생략, 음식 장면 �
  await call('/__reset','POST',undefined,MOCK);const clip=await call('/api/studio/'+id,'POST',{action:'scene_clip',index:0});assert.equal(clip.status,200,JSON.stringify(clip.data));const request=(await mockLog()).find(x=>x.body?.negative_prompt?.includes('people, hands'));assert(request);assert(request.body.prompt.includes('Food-only'));assert(!request.body.prompt.includes('Keep the main character'));
  const html=await (await fetch(BASE+'/studio/'+id)).text();assert(!html.includes('② 캐릭터'));assert(html.includes('음식 클로즈업'));
 });
+
+test("🧩 확장 프로그램 zip 내려받기 (윈도우 설치용)", async () => {
+  const res = await fetch(`${BASE}/api/extension-zip`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "application/zip");
+  const buf = Buffer.from(await res.arrayBuffer());
+  assert.equal(buf.readUInt32LE(0), 0x04034b50, "zip 머리");
+  const s = buf.toString("latin1");
+  for (const f of ["manifest.json", "background.js", "content.js", "content.css", "popup.html", "popup.js"]) assert.ok(s.includes(`content-office-extension/${f}`), f);
+  assert.ok(buf.toString("utf8").includes('"manifest_version": 3'));
+});
