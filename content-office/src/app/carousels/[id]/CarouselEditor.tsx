@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/components/client-utils";
 import type { Carousel, CarouselStyle, Slide } from "@/lib/carousel";
+import CardZoom from "../CardZoom";
+import CarouselTextAI from "../CarouselTextAI";
 import DesignPicker from "../DesignPicker";
 import { canvasBlob, FONT, renderSlide } from "../render";
 
@@ -50,13 +52,14 @@ function Preview({ slide, index, total, img, style, fontReady, onCanvas }: { sli
 
 export default function CarouselEditor({ initial, recent = [], types = [] }: { initial: Carousel; recent?: { title: string; url: string; blog: string }[]; types?: { id: string; label: string; range: string }[] }) {
   const router = useRouter();
+  const [zoomIndex,setZoomIndex]=useState<number|null>(null);
   const [c, setC] = useState(initial);
   const [slides, setSlides] = useState<Slide[]>(initial.slides);
   const [style, setStyle] = useState<CarouselStyle>({ ...initial.style, template: initial.style?.template ?? "photo", accent: initial.style?.accent ?? "#ff6b35", handle: initial.style?.handle ?? "" });
   const [caption, setCaption] = useState(initial.caption);
   const [tags, setTags] = useState(initial.hashtags.map((h) => "#" + h).join(" "));
   const [feedback, setFeedback] = useState("");
-  const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload" | "import" | "hooks">("");
+  const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload" | "import" | "hooks" | "text">("");
   const ctype = c.style?.contentType ?? "general";
   const [importUrl, setImportUrl] = useState(recent[0]?.url ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -342,22 +345,24 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
             <div className="row between">
               <b className="small">{i + 1}장 · {KIND[s.kind]}</b>
               <div className="row" style={{ gap: 4 }}>
-                <button className="btn btn-sm btn-ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label="위로">↑</button>
-                <button className="btn btn-sm btn-ghost" disabled={i === slides.length - 1} onClick={() => move(i, 1)} aria-label="아래로">↓</button>
-                <button className="btn btn-sm btn-ghost" disabled={slides.length <= 2} onClick={() => { setSlides(slides.filter((_, k) => k !== i)); setDirty(true); }} aria-label="삭제">✕</button>
+                <button className="btn btn-sm btn-ghost" disabled={!!busy||i === 0} onClick={() => move(i, -1)} aria-label="위로">↑</button>
+                <button className="btn btn-sm btn-ghost" disabled={!!busy||i === slides.length - 1} onClick={() => move(i, 1)} aria-label="아래로">↓</button>
+                <button className="btn btn-sm btn-ghost" disabled={!!busy||slides.length <= 2} onClick={() => { setSlides(slides.filter((_, k) => k !== i)); setDirty(true); }} aria-label="삭제">✕</button>
               </div>
             </div>
-            <Preview slide={s} index={i} total={slides.length} img={s.image != null ? imgs[s.image] ?? null : null} style={style} fontReady={fontReady} onCanvas={onCanvas} />
+            <button type="button" aria-label={`${i+1}장 크게 보기`} onClick={()=>setZoomIndex(i)} style={{border:0,padding:0,background:'transparent',cursor:'zoom-in',width:'100%'}}><Preview slide={s} index={i} total={slides.length} img={s.image != null ? imgs[s.image] ?? null : null} style={style} fontReady={fontReady} onCanvas={onCanvas} /></button>
             <textarea className="textarea" style={{ minHeight: 56, fontWeight: 700 }} value={s.headline} onChange={(e) => edit(i, { headline: e.target.value })} placeholder="큰 글씨 (줄바꿈 가능)" aria-label={`${i + 1}장 큰 글씨`} />
             <textarea className="textarea" style={{ minHeight: 56 }} value={s.body} onChange={(e) => edit(i, { body: e.target.value })} placeholder="작은 글씨 (선택)" aria-label={`${i + 1}장 작은 글씨`} />
             <select className="input" value={s.image ?? ""} onChange={(e) => edit(i, { image: e.target.value === "" ? null : Number(e.target.value) })} aria-label={`${i + 1}장 사진`}>
               <option value="">사진 없음</option>
               {c.images.map((im, n) => <option key={n} value={n}>사진 {n + 1}{im.alt ? ` · ${im.alt.slice(0, 20)}` : ""}</option>)}
             </select>
+            <CarouselTextAI id={c.id} kind="slide" index={i} slides={slides} disabled={!!busy} onBusy={b=>setBusy(b?'text':'')} onApply={draft=>{setSlides(current=>current.map((slide,n)=>n===i?{...slide,headline:draft.headline??slide.headline,body:draft.body??slide.body}:slide));setDirty(true);}}/>
           </section>
         ))}
         <button
           className="card card-pad"
+          disabled={!!busy}
           style={{ borderStyle: "dashed", minHeight: 120, cursor: "pointer", background: "var(--panel-2)" }}
           onClick={() => { const n = [...slides]; n.splice(Math.max(1, n.length - 1), 0, { kind: "content", headline: "새 장", body: "", image: null }); setSlides(n); setDirty(true); }}
         >
@@ -372,9 +377,11 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
         </div>
         <textarea className="textarea" style={{ minHeight: 160 }} value={caption} onChange={(e) => { setCaption(e.target.value); setDirty(true); }} aria-label="캡션" />
         <input className="input" value={tags} onChange={(e) => { setTags(e.target.value); setDirty(true); }} placeholder="#해시태그 3~5개" aria-label="해시태그" />
+        <CarouselTextAI id={c.id} kind="caption" slides={slides} caption={caption} hashtags={tags.split(/[\s,]+/).filter(Boolean)} disabled={!!busy} onBusy={b=>setBusy(b?'text':'')} onApply={draft=>{setCaption(draft.caption??caption);setTags((draft.hashtags??[]).map(t=>'#'+t).join(' '));setDirty(true);}}/>
         <p className="tiny muted" style={{ margin: 0 }}>첫 줄이 피드에서 보이는 후킹 문구예요. 해시태그는 요즘 3~5개만 붙이는 추세예요.</p>
       </section>
 
+      {zoomIndex!==null&&slides[zoomIndex]&&<CardZoom slides={slides} index={zoomIndex} img={slides[zoomIndex].image!=null?imgs[slides[zoomIndex].image!]??null:null} style={style} fontReady={fontReady} onIndex={setZoomIndex} onClose={()=>setZoomIndex(null)}/>}
       <div className="row">
         <button className="btn btn-ghost" onClick={remove}>🗑 이 캐러셀 지우기</button>
       </div>

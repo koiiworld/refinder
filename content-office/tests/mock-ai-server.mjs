@@ -288,6 +288,7 @@ http
         return JSON.stringify({ prompt: "A cute rabbit architect with a big head, small body" });
       }
       if(system.includes("영상 아이디어 재구성 편집자"))return JSON.stringify({prompt:"장면 1\n화면: 닭한마리 냄비의 조리 과정\n대사: 집에서 익히는 순서부터 볼게요.\n자막: 조리 순서 먼저\n장면 2\n화면: 완성한 닭한마리 한 그릇\n대사: 완성된 모습을 함께 확인해요.\n자막: 완성 한 그릇",changes:["조리 과정부터 시작하도록 전개 변경","자막과 내레이션 새로 작성"]});
+      if(system.includes("캐러셀 문구와 인스타그램 검색"))return prompt.includes("[기존 캡션]")?JSON.stringify({caption:"집에서 닭한마리 조리 순서를 확인해요.\n핵심 재료와 육수 준비를 정리했어요.",hashtags:["#닭한마리","닭한마리레시피","집밥레시피","닭한마리"]}):JSON.stringify({headline:"핵심 재료부터 준비해요",body:"닭, 양파, 대파 등 카드에 있는 재료를 먼저 확인해요."});
       if (system.includes("SEO 키워드 전문가")) return JSON.stringify({ keywords: [{ keyword: "김장 양념", reason: "김장철", season: "김장철" }, { keyword: "절임배추", reason: "수요 큼", season: "김장철" }, { keyword: "굴보쌈", reason: "제철", season: "" }, { keyword: "가습기", reason: "겨울 급상승", season: "", fit: false }] });
       if(system.includes("SEO 제목 전문가")&&prompt.includes("제목규칙테스트"))return JSON.stringify({candidates:[{title:"금지단어 포함 제목",reason:"제외할 후보"},{title:"제목규칙테스트 | 안전한 제목",reason:"규칙 통과"},{title:"제목규칙테스트 ｜ 다른 제목",reason:"대안"}],best:0,bestReason:"제외할 후보의 이유",subKeywords:[]});
       if (system.includes("SEO 제목 전문가")) return JSON.stringify({ candidates: [{ title: "절임배추 20kg 김장 양념 황금비율", reason: "검색량 큰 연관어" }, { title: "초보 김장 가이드", reason: "입문자" }], best: 0, bestReason: "메인 키워드 앞배치", subKeywords: ["김장양념", "절임배추20kg"] });

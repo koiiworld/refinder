@@ -53,19 +53,20 @@ export function parseRss(xml: string): BlogPostLink[] {
   return out;
 }
 
-export async function recentPosts(blog: Pick<Blog, "url">, limit = 30): Promise<BlogPostLink[]> {
+export async function recentPosts(blog: Pick<Blog, "url">, limit = 30, options:{force?:boolean;strict?:boolean}={}): Promise<BlogPostLink[]> {
   const rss = blog.url ? rssUrlOf(blog.url) : null;
-  if (!rss) return [];
+  if (!rss){if(options.strict)throw new Error("블로그 주소를 확인해 주세요.");return [];}
   const hit = cache.get(rss);
-  if (hit && Date.now() - hit.at < TTL) return hit.posts.slice(0, limit);
+  if (!options.force&&hit && Date.now() - hit.at < TTL) return hit.posts.slice(0, limit);
   try {
-    const res = await fetch(rss, { headers: { "user-agent": "Mozilla/5.0 (compatible; ContentOffice/1.0)" }, signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) return [];
-    const posts = parseRss(await res.text()).slice(0, 50);
+    const res = await fetch(rss, { cache:"no-store", headers: { "user-agent": "Mozilla/5.0 (compatible; ContentOffice/1.0)" }, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok){if(options.strict)throw new Error(`블로그 글 목록을 가져오지 못했어요 (HTTP ${res.status}). 기존 목록은 유지해요.`);return [];}
+    const xml=await res.text();if(options.strict&&!/<(?:rss|rdf:RDF)\b/i.test(xml))throw new Error("공개 RSS 글 목록을 확인하지 못했어요. 블로그 주소·공개 설정을 확인해 주세요.");
+    const posts = parseRss(xml).slice(0, 50);
     cache.set(rss, { at: Date.now(), posts });
     return posts.slice(0, limit);
-  } catch {
-    return [];
+  } catch(e) {
+    if(options.strict)throw e;return [];
   }
 }
 

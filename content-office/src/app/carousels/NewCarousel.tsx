@@ -25,6 +25,8 @@ export default function NewCarousel({ posts, published, blogs, made, formats, de
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [refreshNote,setRefreshNote]=useState("");
+  async function refreshPosts(){setBusy("refresh");setErr("");setRefreshNote("");try{const r=await api<{count:number;at:string}>("/api/carousels/sources/refresh","POST",{blogId:pickBlog});setRefreshNote(`${blogs.find(b=>b.id===pickBlog)?.name??"블로그"} 공개 글 목록 ${r.count}개 확인 · ${fmtDate(r.at)} (한국 시간)`);router.refresh();}catch(e){setErr((e as Error).message);}finally{setBusy("");}}
 
   async function create(payload: Record<string, unknown>) {
     setCreating(String(payload.url ? `u:${payload.url}` : payload.projectId ? `p:${payload.projectId}` : ""));
@@ -60,8 +62,10 @@ export default function NewCarousel({ posts, published, blogs, made, formats, de
       <div className="row" style={{ gap: 8 }}>
         <button className={`btn btn-sm ${mode === "post" ? "btn-primary" : ""}`} onClick={() => setMode("post")}>📝 블로그 글에서 만들기</button>
         <button className={`btn btn-sm ${mode === "topic" ? "btn-primary" : ""}`} onClick={() => setMode("topic")}>💡 주제로 따로 만들기</button>
+        {mode==="post"&&<button className="btn btn-sm" style={{marginLeft:'auto'}} disabled={!!busy||!pickBlog} onClick={refreshPosts}>{busy==="refresh"?'최신 글 확인 중…':'↻ 블로그 글 업데이트'}</button>}
       </div>
 
+      {refreshNote&&<p className="notice small" role="status">{refreshNote}</p>}
       {mode === "post" ? (
         <div className="stack" style={{ gap: 10 }}>
           <nav className="trend-tabs" aria-label="블로그" style={{ marginBottom: 0 }}>

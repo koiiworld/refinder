@@ -17,6 +17,7 @@
 | `brand.ts` | 왼쪽 위 로고 (아이콘 글자·이름·색) — settings 'brand' | Brand, DEFAULT_BRAND, getBrand, saveBrand |
 | `calendar.ts` | 📅 마케팅 달력 | CalCat, CalEvent, CAT_LABEL, krHolidays, monthEvents, addCalendarEvent, deleteCalendarEvent |
 | `carousel-design-types.ts` | 캐러셀 디자인 참고함과 실제 캔버스에 적용하는 값 (브라우저·서버 공용) | DesignRecipe, DesignAnalysis, DesignReference, BASE_RECIPE, cleanRecipe, LEARN_CATEGORIES, LearnCategory, LearningAnalysis … |
+| `carousel-text.ts` |  | CarouselTextInput, rewriteCarouselText |
 | `carousel.ts` | 📱 인스타 캐러셀(카드뉴스) | Slide, CarouselImage, TypeVersion, CarouselStyle, Carousel, CONTENT_TYPES, ContentTypeId, FORMATS … |
 | `convert.ts` | 📄 문서 → 마크다운 (마이크로소프트 MarkItDown, 맥에서 무료) | CONVERT_EXT, MAX_CONVERT_BYTES, Conversion, createConversion, listConversions, getConversion, runConversion |
 | `coupang.ts` | 쿠팡파트너스 Open API: 이번 달 수익·클릭·주문 자동 집계 | coupangConnected, coupangAuth, syncCoupang, lastCoupangSync |
@@ -117,9 +118,11 @@
 | `api/blogs/route.ts` |  | GET, POST |
 | `api/calendar/route.ts` | 행사 직접 추가 { title, start, end, kind: official/irregular, link, memo } · 지우기 { remove: id } | GET, POST |
 | `api/carousels/[id]/img/[n]/route.ts` | 캐러셀 사진을 같은 주소로 전달 (브라우저 캔버스에 그려 저장하려면 같은 출처여야 함) | GET |
+| `api/carousels/[id]/rewrite/route.ts` |  | GET, POST |
 | `api/carousels/[id]/route.ts` | 장면·캡션·해시태그·디자인 저장 | GET, PUT, POST, DELETE |
 | `api/carousels/ideas/route.ts` | 알고리즘 타기 쉬운 캐러셀 주제 추천 | POST |
 | `api/carousels/route.ts` | 새 캐러셀: { projectId } 블로그 글에서 · { topic, niche, format, blogId } 주제로 | GET, POST |
+| `api/carousels/sources/refresh/route.ts` |  | POST |
 | `api/convert/[id]/route.ts` | 결과 보기 · ?download=1 이면 .md 파일로 받기 | GET, DELETE |
 | `api/convert/route.ts` | 파일 올리기 (폼 'file', 여러 개 가능) → 맥에서 마크다운으로 | GET, POST |
 | `api/dashboard/balances/route.ts` | 충전 기록 추가: { provider, usd, at?, note? } · 지우기: { provider, remove: index } | GET, POST |
@@ -135,6 +138,7 @@
 | `api/export/route.ts` | 전체 백업 내보내기 (API 키는 DB에 저장하지 않으므로 포함되지 않음) | GET |
 | `api/ext/inbox/route.ts` | 🧩 확장 프로그램: ChatGPT·제미나이에서 보낸 글·사진 받기 {projectId, kind, html?, text?, image?(data URL), source} | POST |
 | `api/ext/posts/route.ts` | 🧩 확장 프로그램: 보낼 글 고르기 (최근 글 40개) — 연결 코드 확인은 proxy.ts | GET |
+| `api/extension-zip/route.ts` | 🧩 크롬 확장 프로그램 내려받기 (zip) — 윈도우 등 맥 폴더가 없는 컴퓨터용. 로그인한 사람만 (proxy.ts) | GET |
 | `api/health/route.ts` |  | GET |
 | `api/hot/route.ts` | action: report(새 리포트) · approve(승인 → 글 만들기 시작) · skip(넘기기) | GET, POST |
 | `api/ideas/[id]/route.ts` |  | GET, PUT, DELETE |
@@ -201,6 +205,8 @@
 | `blogs/page.tsx` |  | dynamic |
 | `calendar/CalendarView.tsx` | 연간 시즌 행사는 행사마다 확실히 다른 색 (그 달에 보이는 순서대로 하나씩 → 같이 보이는 행사끼리는 안 겹침) |  |
 | `calendar/page.tsx` |  | dynamic |
+| `carousels/CardZoom.tsx` |  |  |
+| `carousels/CarouselTextAI.tsx` |  |  |
 | `carousels/DesignPicker.tsx` |  |  |
 | `carousels/NewCarousel.tsx` |  |  |
 | `carousels/[id]/CarouselEditor.tsx` |  |  |

@@ -2287,3 +2287,26 @@ test("🧩 확장 프로그램 zip 내려받기 (윈도우 설치용)", async ()
   for (const f of ["manifest.json", "background.js", "content.js", "content.css", "popup.html", "popup.js"]) assert.ok(s.includes(`content-office-extension/${f}`), f);
   assert.ok(buf.toString("utf8").includes('"manifest_version": 3'));
 });
+
+
+test('📱 캡션·SEO 태그/카드별 문구 다시 요청: 의견·미저장 카드 반영, 미리보기는 기존 자료 보존',async()=>{
+ const c=(await call('/api/carousels')).data.find(x=>x.slides.length>=2);assert(c);
+ const snapshot=(await call('/api/carousels/'+c.id)).data,slides=structuredClone(snapshot.slides);slides[1].headline='저장 전 직접 고친 카드';
+ const endpoint='/api/carousels/'+c.id+'/rewrite';assert.equal((await call(endpoint+'?kind=caption')).status,200);
+ assert.equal((await call(endpoint,'POST',{kind:'caption',slides})).status,400);
+ const caption=await call(endpoint,'POST',{confirm:true,kind:'caption',slides,caption:'기존에 직접 쓴 캡션',hashtags:['닭한마리'],feedback:'더 담백하게 쓰고 레시피 검색어 중심의 태그로'});assert.equal(caption.status,200,JSON.stringify(caption.data));assert(caption.data.caption.includes('닭한마리'));assert.deepEqual(caption.data.hashtags,['닭한마리','닭한마리레시피','집밥레시피']);
+ let prompt=await stepPrompt('캐러셀 문구와 인스타그램 검색');assert(prompt.includes('더 담백하게 쓰고 레시피 검색어 중심의 태그로'));assert(prompt.includes('저장 전 직접 고친 카드'));
+ const single=await call(endpoint,'POST',{confirm:true,kind:'slide',index:1,slides,feedback:'재료를 먼저 보여주고 다른 장과 중복 줄이기'});assert.equal(single.status,200,JSON.stringify(single.data));assert(single.data.headline);assert(single.data.body);assert(!('slides' in single.data));
+ prompt=await stepPrompt('캐러셀 문구와 인스타그램 검색');assert(prompt.includes('2장만 다시 쓰세요'));assert(prompt.includes('다른 장과 중복 줄이기'));
+ const after=(await call('/api/carousels/'+c.id)).data;assert.deepEqual(after.slides,snapshot.slides);assert.equal(after.caption,snapshot.caption);assert.deepEqual(after.hashtags,snapshot.hashtags);
+ await call('/__reset','POST',undefined,MOCK);assert.equal((await call(endpoint,'POST',{confirm:true,kind:'slide',index:999,slides})).status,502);assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'잘못된 카드 요청은 AI 호출 없음');
+});
+
+
+test('↻ 캐러셀 원본 글 업데이트는 선택 블로그 RSS 캐시를 우회해 다시 읽고 AI를 호출하지 않음',async()=>{
+ await call('/api/blogs/blog_algokitchen','PUT',{url:'https://blog.naver.com/algo_kitchen'});
+ await call('/__reset','POST',undefined,MOCK);
+ const result=await call('/api/carousels/sources/refresh','POST',{blogId:'blog_algokitchen'});assert.equal(result.status,200,JSON.stringify(result.data));assert(result.data.count>0);assert(Date.parse(result.data.at)>0);
+ await call('/__reset','POST',undefined,MOCK);assert.equal((await call('/api/carousels/sources/refresh','POST',{blogId:'blog_algokitchen'})).status,200);const requests=await mockLog();assert(requests.some(x=>x.path==='/algo_kitchen.xml'),'캐시가 있어도 RSS를 다시 요청');assert(!requests.some(x=>x.path.includes('generateContent')||x.path.includes('completions')));
+ assert.equal((await call('/api/carousels/sources/refresh','POST',{blogId:'missing'})).status,400);
+});

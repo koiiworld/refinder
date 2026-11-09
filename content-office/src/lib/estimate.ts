@@ -7,6 +7,8 @@ import type { StepKey } from "./steps";
  * - 토큰 수는 지금까지 평균에 가까운 대략값. 실제 청구는 다를 수 있음
  */
 const TOKENS: Record<string, { step: StepKey; label: string; input: number; output: number }> = {
+  carousel_caption:{step:"carousel",label:"캐러셀 캡션·해시태그 다시 생성",input:3500,output:1600},
+  carousel_slide:{step:"carousel",label:"카드 한 장 문구 다시 생성",input:3500,output:1600},
   studio_rewrite:{step:"studio",label:"영상 문구·구성 다시 생성",input:3500,output:2200},
   outline: { step: "titles", label: "③-2 기획안 (목차·근거)", input: 2500, output: 1200 },
   write: { step: "writing", label: "④ 글 작성", input: 7000, output: 5000 },
