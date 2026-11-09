@@ -61,6 +61,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload" | "import" | "hooks" | "text">("");
   const ctype = c.style?.contentType ?? "general";
+  const [postSearch,setPostSearch]=useState("");
   const [importUrl, setImportUrl] = useState(recent[0]?.url ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -312,17 +313,22 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
           <button className="btn btn-sm" disabled={!!busy} onClick={() => fileRef.current?.click()}>{busy === "upload" ? <span className="spinner" /> : "📷 내 사진 올리기"}</button>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => e.target.files && void upload(Array.from(e.target.files))} />
         </div>
-        <div className="row" style={{ flexWrap: "nowrap", gap: 6 }}>
-          {recent.length ? (
-            <select className="input" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} aria-label="사진 가져올 블로그 글">
-              {recent.map((p) => <option key={p.url} value={p.url}>[{p.blog}] {p.title}</option>)}
-              <option value="">직접 주소 넣기…</option>
-            </select>
-          ) : null}
-          {(!recent.length || !importUrl || !recent.some((p) => p.url === importUrl)) && (
-            <input className="input" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="블로그 글 주소" aria-label="블로그 글 주소" />
-          )}
-          <button className="btn btn-sm" disabled={!!busy || !importUrl.trim()} onClick={importPhotos}>{busy === "import" ? <span className="spinner" /> : "📥 블로그 글 사진 가져오기"}</button>
+        <div className="stack" style={{gap:8}}>
+          <label className="small" htmlFor="carousel-post-search">블로그 글 검색하기</label>
+          <input id="carousel-post-search" className="input" type="search" value={postSearch} onChange={e=>setPostSearch(e.target.value)} placeholder="글 제목 또는 블로그 이름 검색" aria-describedby="carousel-post-search-help" />
+          <p id="carousel-post-search-help" className="tiny muted" style={{margin:0}}>가져온 최근 블로그 글 목록에서 검색해요. 목록에 없는 글은 아래에 주소를 붙여넣으세요.</p>
+          {postSearch.trim()&&(()=>{
+            const words=postSearch.normalize('NFKC').toLocaleLowerCase('ko-KR').trim().split(/\s+/);
+            const found=recent.filter(p=>words.every(word=>`${p.blog} ${p.title}`.normalize('NFKC').toLocaleLowerCase('ko-KR').includes(word)));
+            return <div className="stack" style={{gap:4}}><span className="tiny muted" role="status">검색 결과 {found.length}개</span>
+              {found.length?<div className="stack" style={{maxHeight:240,overflowY:'auto',gap:4}}>{found.map(p=><button type="button" key={p.url} className="btn btn-sm" style={{whiteSpace:'normal',textAlign:'left',justifyContent:'flex-start',overflowWrap:'anywhere'}} aria-pressed={importUrl===p.url} onClick={()=>{setImportUrl(p.url);setPostSearch('');}}>[{p.blog}] {p.title}</button>)}</div>:<p className="small muted" style={{margin:0}}>일치하는 글이 없어요. 다른 검색어나 글 주소를 입력해 주세요.</p>}
+            </div>;
+          })()}
+          {recent.some(p=>p.url===importUrl)&&<p className="small" style={{margin:0,overflowWrap:'anywhere'}}>선택한 글: {recent.find(p=>p.url===importUrl)?.title}</p>}
+          <div className="row" style={{gap:6}}>
+            <input className="input" style={{flex:1,minWidth:0}} value={importUrl} onChange={e=>setImportUrl(e.target.value)} placeholder="또는 블로그 글 주소 붙여넣기" aria-label="블로그 글 주소" />
+            <button className="btn btn-sm" disabled={!!busy || !importUrl.trim()} onClick={importPhotos}>{busy === "import" ? <span className="spinner" /> : "📥 블로그 글 사진 가져오기"}</button>
+          </div>
         </div>
         {c.images.length ? (
           <div className="row" style={{ gap: 6 }}>
