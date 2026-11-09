@@ -24,6 +24,7 @@ export const MENU_GROUPS: MenuGroup[] = [
   { id: "blog", label: "블로그 관리", items: [
     { href: "/posts", label: "업로드", short: "업로드", sub: "키워드 추천부터 발행 준비까지", badge: true, mobile: true },
     { href: "/repurpose", label: "채널 변환", sub: "글 하나로 릴스·카드뉴스·스레드 등" },
+    { href: "/seoichoo", label: "서이추 관리", sub: "크롬 연결 · 후보 검색·신청 · 네이버 자료 가져오기" },
     { href: "/diagnose", label: "진단", sub: "노출·제목·누락 점검" },
     { href: "/blogs", label: "설정", sub: "블로그별 말투·작성 규칙" },
   ] },

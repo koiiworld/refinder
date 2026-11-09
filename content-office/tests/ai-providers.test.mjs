@@ -2310,3 +2310,28 @@ test('↻ 캐러셀 원본 글 업데이트는 선택 블로그 RSS 캐시를 �
  await call('/__reset','POST',undefined,MOCK);assert.equal((await call('/api/carousels/sources/refresh','POST',{blogId:'blog_algokitchen'})).status,200);const requests=await mockLog();assert(requests.some(x=>x.path==='/algo_kitchen.xml'),'캐시가 있어도 RSS를 다시 요청');assert(!requests.some(x=>x.path.includes('generateContent')||x.path.includes('completions')));
  assert.equal((await call('/api/carousels/sources/refresh','POST',{blogId:'missing'})).status,400);
 });
+
+test('서이추 PC 연결: 블로그 분리·확인 필수·작업 단일 수신·취소·자료 주소 제한', async()=>{
+ const blogs=(await call('/api/blogs')).data;
+ const b=blogs.find(b=>b.platform==='naver'),other=blogs.find(b=>b.platform!=='naver');
+ if(other)assert.equal((await call('/api/seoichoo','POST',{blogId:other.id,kind:'search',payload:{keywords:'요리'}})).status,400);
+ assert.equal((await call('/api/seoichoo','POST',{blogId:b.id,kind:'collect',payload:{url:'https://example.com'}})).status,400);
+ let r=await call('/api/seoichoo','POST',{blogId:b.id,kind:'search',payload:{keywords:'요리'}});assert.equal(r.status,201,JSON.stringify(r.data));const search=r.data.id;
+ assert.equal((await call('/api/seoichoo','POST',{blogId:b.id,kind:'search',payload:{keywords:'육아'}})).status,400);
+ let job=(await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job;assert.equal(job.id,search);
+ assert.equal((await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job,null);
+ await call('/api/ext/seoichoo','POST',{action:'result',id:search,status:'done',result:{candidates:[{blog_id:'fixture',nick:'테스트',blog_name:'요리'}]}});
+ const request={blogId:b.id,kind:'apply',payload:{source:search,ids:['fixture'],message:'안녕하세요'}};
+ assert.equal((await call('/api/seoichoo','POST',request)).status,400);
+ assert.equal((await call('/api/seoichoo','POST',{...request,confirmed:true,payload:{...request.payload,ids:['unknown']}})).status,400);
+ r=await call('/api/seoichoo','POST',{...request,confirmed:true});assert.equal(r.status,201);const apply=r.data.id;
+ job=(await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job;assert.equal(job.payload.min,30);assert.equal(job.payload.max,120);assert.equal(job.payload.limit,100);
+ await call('/api/seoichoo','POST',{action:'cancel',id:apply});assert.equal((await call('/api/ext/seoichoo','POST',{action:'heartbeat',id:apply})).data.cancelled,true);
+ await call('/api/ext/seoichoo','POST',{action:'result',id:apply,status:'cancelled',result:{message:'중지'}});
+ // 늦은 결과가 완료된 기록을 덮어쓰지 않음.
+ await call('/api/ext/seoichoo','POST',{action:'result',id:apply,status:'done',result:{message:'오래된 응답'}});
+ const jobs=(await call('/api/seoichoo?blogId='+b.id)).data;assert.equal(jobs.find(j=>j.id===apply).status,'cancelled');
+ if(other)assert.equal((await call('/api/seoichoo?blogId='+other.id)).data.length,0);
+ r=await call('/api/seoichoo','POST',{blogId:b.id,kind:'collect',payload:{url:'https://creator-advisor.naver.com/new-windows/trend-stats'}});assert.equal(r.status,201);
+ await call('/api/seoichoo','POST',{action:'cancel',id:r.data.id});assert.equal((await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job,null);
+});

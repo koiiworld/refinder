@@ -689,3 +689,12 @@ CREATE TABLE IF NOT EXISTS blog_common_rules(
  id TEXT PRIMARY KEY,rules JSONB NOT NULL DEFAULT '[]',forbidden JSONB NOT NULL DEFAULT '[]',scopes JSONB NOT NULL,
  target JSONB NOT NULL,enabled BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- PC의 기존 네이버 로그인으로 실행. 미확인 신청은 자동 재시도하지 않음.
+CREATE TABLE IF NOT EXISTS seoichoo_jobs (
+ id TEXT PRIMARY KEY, blog_id TEXT NOT NULL REFERENCES blogs(id), kind TEXT NOT NULL,
+ payload JSONB NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'queued',
+ result JSONB NOT NULL DEFAULT '{}', cancelled BOOLEAN NOT NULL DEFAULT FALSE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seoichoo_one_active ON seoichoo_jobs ((TRUE)) WHERE status IN ('queued','running');

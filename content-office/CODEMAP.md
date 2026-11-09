@@ -73,6 +73,7 @@
 | `searchad.ts` | 네이버 검색광고 API - 키워드 도구 (월간 검색량·경쟁도·연관 키워드) | naverAdConnected, signature, KeywordStat, keywordStats, cachedStats |
 | `seasons.ts` | y년 m월의 n번째 요일(0=일) | SeasonTag, SeasonEvent, addDays, seasonEvents, LUNAR_YEARS, blogTags, seedsFor, KIND_LABEL |
 | `seed.ts` | 기본 역할 배정: 기획=Gemini, 원고=Claude, 검수=ChatGPT, 부분수정=Claude, 글감추천=Gemini | DEFAULT_MODELS, DEFAULT_ROLES, seedIfEmpty |
+| `seoichoo.ts` |  | SeoJob, seoJobs, queueSeo |
 | `series.ts` | 📺 시리즈 기획: 주인공·친구·주제 → N화를 한 번에 (화마다 제목·줄거리 3줄·8초 장면 프롬프트·유튜브 설명 2줄) | Episode, Series, listSeries, getSeries, createSeries, continueSeries, editEpisode, setCharacters … |
 | `settings.ts` | 기본 단가 (USD / 100만 토큰). 설정에서 직접 고치면 그 값이 우선합니다. | AppSettings, DEFAULT_PRICING, getSettings, saveSettings |
 | `steps.ts` | 글(프로젝트) 진행 단계 | StepKey, STEP_AI_LABEL, DEFAULT_STEP_AI, FALLBACK_MODELS, POST_STAGES, STEP_NAMES, stageLabel, stageStep |
@@ -138,6 +139,7 @@
 | `api/export/route.ts` | 전체 백업 내보내기 (API 키는 DB에 저장하지 않으므로 포함되지 않음) | GET |
 | `api/ext/inbox/route.ts` | 🧩 확장 프로그램: ChatGPT·제미나이에서 보낸 글·사진 받기 {projectId, kind, html?, text?, image?(data URL), source} | POST |
 | `api/ext/posts/route.ts` | 🧩 확장 프로그램: 보낼 글 고르기 (최근 글 40개) — 연결 코드 확인은 proxy.ts | GET |
+| `api/ext/seoichoo/route.ts` | /api/ext/는 proxy.ts에서 기존 앱 연결 코드로 인증. 비밀번호/네이버 쿠키 전송 없음. | POST |
 | `api/extension-zip/route.ts` | 🧩 크롬 확장 프로그램 내려받기 (zip) — 윈도우 등 맥 폴더가 없는 컴퓨터용. 로그인한 사람만 (proxy.ts) | GET |
 | `api/health/route.ts` |  | GET |
 | `api/hot/route.ts` | action: report(새 리포트) · approve(승인 → 글 만들기 시작) · skip(넘기기) | GET, POST |
@@ -177,6 +179,7 @@
 | `api/routines/route.ts` | 새 루틴 · { action: "tick" } 지금 바로 한 번 처리 (실행 만들기·마감·발송) | GET, POST |
 | `api/routines/runs/[id]/route.ts` | JSON { action: item {itemId, done} / complete / snooze } · 폼 { itemId, file } 캡처 등록 | GET, POST |
 | `api/routines/runs/route.ts` | 실행 기록: ?from=&to=&status=&routine= | GET |
+| `api/seoichoo/route.ts` |  | GET, POST |
 | `api/series/[id]/route.ts` | action: continue {count} · edit {n, request} · characters {text} · queue {ns?} | GET, POST, DELETE |
 | `api/series/route.ts` | { hero, friend, theme, style, count } → N화 한 번에 | GET, POST |
 | `api/settings/brand/route.ts` | { name, mark, color } 저장 · { reset: true } 기본값으로 | GET, POST |
@@ -257,6 +260,8 @@
 | `routines/page.tsx` |  | dynamic |
 | `routines/run/[id]/RunView.tsx` |  |  |
 | `routines/run/[id]/page.tsx` |  | dynamic |
+| `seoichoo/SeoBoard.tsx` |  |  |
+| `seoichoo/page.tsx` |  | dynamic |
 | `settings/BrandCard.tsx` | 왼쪽 위 로고 아이콘·이름 바꾸기 |  |
 | `settings/CopyText.tsx` | 값 + 복사 버튼 |  |
 | `settings/ExtensionCard.tsx` | 🧩 크롬 확장 프로그램 연결: 앱 주소 + 연결 코드 + 설치 방법 (로그인한 사람만 보는 설정 화면) |  |
@@ -332,4 +337,5 @@
 | `fake-rife.sh` |  |  |
 | `mock-ai-server.mjs` | 개발·테스트용 모의 AI 서버: OpenAI / Anthropic / Google 공식 API의 요청·응답 형식을 흉내 냅니다. |  |
 | `run-isolated.sh` |  |  |
+| `seo-extension.test.mjs` |  |  |
 | `workflow.test.mjs` | 통합 테스트 (AI 미연결 상태): 7단계 흐름이 끊기지 않고, 데이터를 지어내지 않는지 확인 |  |
