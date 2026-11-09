@@ -1,5 +1,15 @@
 # 작업 인계: 서이추 자동 프로그램
 
+## 2026-11-09 추가 작업
+
+- Windows GitHub Actions 자동 빌드·exe 자체 GUI/드라이버 검사·ZIP/SHA256·Releases latest 게시 구성 추가. Chrome/Edge만 사용하며 브라우저를 번들/자동 다운로드하지 않음. `build_exe.bat`로 로컬 빌드도 가능.
+- `--self-test --report <path>`는 임시 폴더에서 GUI를 만들고 전용 Worker에서 Playwright 드라이버만 시작/종료. 네이버 접속/신청 없음.
+- 현재 로컬 검증: 단위·로컬 가상 폼 테스트 10개 통과, Python 문법·YAML 구조 검증. 이 Linux 환경은 DISPLAY가 없어 GUI 자체 실행은 Windows CI에서 확인해야 함.
+- 성공 판정 보수화: 명시적인 완료 문구 없으면 `unconfirmed`, 자동 신청 중단·중복 제외·일일 횟수 보수 반영. 입력란 입력 실패 시 전송하지 않음. 숨긴 라디오 대신 보이는 라벨 선택. 단순 폼 이동/확인 질문은 성공이 아님.
+- `신청 폼 진단(전송 안 함)` 추가: 선택자 일치·입력 요소 메타데이터만 diagnostics.json에 저장. 비밀번호/쿠키/입력값/본문은 기록하지 않음.
+- 실제 네이버 계정 테스트는 여전히 미완료. 이 환경의 네이버 도메인 요청이 프록시 403으로 차단되며 로그인 세션 없음. 실제 선택자/완료 문구를 검증했다고 주장하지 말 것.
+- 이 아래 내용은 이전 인계 기록. CI/릴리스 상태는 실제 Actions 결과를 확인해서 갱신할 것.
+
 - 브랜치: `claude/seoichoo-automation-program-50awjg`
 - 폴더: `seoichoo/`
 - 참고한 글: https://m.blog.naver.com/lifestyle1015/224468480582

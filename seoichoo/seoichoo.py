@@ -35,6 +35,7 @@ STATUS_KO = {
     "limit": "일일 한도 초과",
     "group_full": "이웃 그룹 가득참",
     "error": "오류",
+    "unconfirmed": "직접 확인 필요",
 }
 
 DEFAULT_MESSAGE = "안녕하세요 {닉네임}님! 글 잘 보고 갑니다. 서로이웃 맺고 자주 소통해요 :)"
@@ -67,7 +68,7 @@ class History:
         """다시 시도할 필요가 없는 블로그 (완료/이미 이웃/불가)."""
         return {
             k for k, v in self.data["applied"].items()
-            if v.get("status") in ("success", "already", "refused")
+            if v.get("status") in ("success", "already", "refused", "unconfirmed")
         }
 
     def record(self, blog_id: str, status: str, detail: str = "") -> None:
@@ -76,7 +77,7 @@ class History:
             "detail": detail[:200],
             "at": dt.datetime.now().isoformat(timespec="seconds"),
         }
-        if status == "success":
+        if status in ("success", "unconfirmed"):
             d = self.today()
             self.data["daily"][d] = int(self.data["daily"].get(d, 0)) + 1
         self.save()
@@ -175,6 +176,7 @@ class App:
         bar = ttk.Frame(f3)
         bar.pack(fill="x")
         ttk.Button(bar, text="후보 전체 선택", command=lambda: self.select_all(True)).pack(side="left", **pad)
+        ttk.Button(bar, text="신청 폼 진단(전송 안 함)", command=self.on_inspect).pack(side="left", **pad)
         ttk.Button(bar, text="전체 해제", command=lambda: self.select_all(False)).pack(side="left", **pad)
         ttk.Button(bar, text="목록 비우기", command=self.clear_candidates).pack(side="left", **pad)
         self.cand_var = tk.StringVar(value="후보 0명")
@@ -310,7 +312,7 @@ class App:
                 self.ui(self.login_var.set, f"로그인됨 · 내 블로그: {bid}")
                 self.log(f"로그인 확인 완료 (내 블로그: https://blog.naver.com/{bid})")
             else:
-                self.ui(self.login_var.set, "로그인 안 됨")
+                self.ui(self.login_var.set, "로그인/내 블로그 확인 필요")
                 self.log("로그인되어 있지 않습니다. 브라우저에서 네이버 로그인 후 다시 확인하세요.")
 
         self.worker.submit(job)
@@ -389,6 +391,20 @@ class App:
         self._refresh_counts()
 
     # -------------------------------------------------------------- 3. 자동 신청
+    def on_inspect(self) -> None:
+        if self._busy_guard():
+            return
+        target = next((c for c in self.candidates.values() if c.selected), None)
+        if not target:
+            messagebox.showinfo("신청 폼 진단", "진단할 후보를 한 명 선택해 주세요. 신청은 전송하지 않습니다.")
+            return
+        def job(bot):
+            report = bot.inspect_form(target.blog_id)
+            path = BASE_DIR / "diagnostics.json"
+            path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            self.log("신청 폼 진단을 diagnostics.json에 저장했습니다. 신청은 전송하지 않았습니다.")
+        self.worker.submit(job)
+
     def on_apply(self) -> None:
         if self._busy_guard():
             return
@@ -453,7 +469,8 @@ class App:
                 if res.status == "group_full":
                     self.log("서로이웃 그룹 인원이 가득 찼습니다. 블로그 이웃 그룹을 확인하세요.")
                     break
-                if res.status == "error" and "로그인" in res.detail:
+                if res.status in ("error", "unconfirmed"):
+                    self.log("결과/화면을 확인할 수 없어 자동 신청을 멈춥니다. 현재 브라우저에서 직접 확인하세요.")
                     break
                 if i < len(targets) and done < batch:
                     wait = random.uniform(dmin, dmax)
@@ -476,7 +493,65 @@ class App:
         self.root.after(300, self.root.destroy)
 
 
+def self_test(report_path: Path) -> int:
+    """GUI와 패키징된 Playwright 드라이버만 검사. 네이버 접속/신청/사용자 파일 변경 없음."""
+    import sys
+    import tempfile
+    from playwright.sync_api import sync_playwright
+    result = {"ok": False, "frozen": bool(getattr(sys, "frozen", False)), "gui": False, "driver": False, "worker_thread": False}
+    root = app = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="seoichoo-gui-test-") as directory:
+            global HISTORY_FILE, SETTINGS_FILE
+            HISTORY_FILE, SETTINGS_FILE = Path(directory)/"history.json", Path(directory)/"settings.json"
+            root = tk.Tk()
+            root.withdraw()
+            app = App(root)
+            root.update()
+            result["gui"] = bool(app.tree.winfo_exists())
+            finished = threading.Event()
+            def probe(_bot):
+                try:
+                    result["worker_thread"] = threading.get_ident() != threading.main_thread().ident
+                    with sync_playwright() as pw:
+                        result["driver"] = pw.chromium.name == "chromium"
+                except Exception as error:
+                    result["error"] = str(error)
+                finally:
+                    finished.set()
+            app.worker.submit(probe)
+            deadline = time.monotonic()+15
+            def poll():
+                if finished.is_set() or time.monotonic() >= deadline:
+                    root.quit()
+                else:
+                    root.after(50, poll)
+            root.after(50, poll)
+            root.mainloop()
+            app.worker.submit(None)
+            app.worker.join(timeout=4)
+            result["ok"] = all(result[key] for key in ("gui", "driver", "worker_thread")) and finished.is_set()
+            if not finished.is_set():
+                result["error"] = "드라이버 검사 시간 초과"
+    except Exception as error:
+        result["error"] = str(error)
+    finally:
+        if root is not None:
+            root.destroy()
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    return 0 if result["ok"] else 1
+
+
 def main() -> None:
+    import sys
+    if "--self-test" in sys.argv:
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--self-test", action="store_true")
+        parser.add_argument("--report", type=Path, required=True)
+        args = parser.parse_args()
+        raise SystemExit(self_test(args.report))
     root = tk.Tk()
     try:
         ttk.Style().theme_use("vista")

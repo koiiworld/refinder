@@ -17,7 +17,6 @@ if not exist ".venv\Scripts\python.exe" (
 
 echo [2/3] 필요한 패키지 설치/확인 중...
 ".venv\Scripts\python.exe" -m pip install -q --disable-pip-version-check -r requirements.txt || goto :fail
-".venv\Scripts\python.exe" -m playwright install chromium > nul 2>&1
 
 echo [3/3] 프로그램 실행
 start "" ".venv\Scripts\pythonw.exe" seoichoo.py

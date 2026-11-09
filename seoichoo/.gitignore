@@ -4,3 +4,10 @@ settings.json
 *.tmp
 __pycache__/
 .venv/
+
+.build-venv/
+build/
+dist/
+*.spec
+self-test-report.json
+diagnostics.json

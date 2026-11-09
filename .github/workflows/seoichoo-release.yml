@@ -1,0 +1,87 @@
+name: Seoichoo Windows release
+
+on:
+  push:
+    branches: [claude/seoichoo-automation-program-50awjg]
+    paths:
+      - seoichoo/**
+      - .github/workflows/seoichoo-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seoichoo-windows-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/claude/seoichoo-automation-program-50awjg'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: seoichoo
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+          cache: pip
+          cache-dependency-path: |
+            seoichoo/requirements.txt
+            seoichoo/build-requirements.txt
+      - name: Install build requirements
+        run: python -m pip install -r build-requirements.txt
+      - name: Tests without Naver requests
+        run: python -m unittest discover -s tests -v
+      - name: Build standalone GUI exe (no bundled browsers)
+        run: pyinstaller --onefile --windowed --name seoichoo --collect-all playwright seoichoo.py
+      - name: Test packaged Tk GUI and Playwright driver
+        run: python tools/verify_exe.py dist/seoichoo.exe
+      - name: Package exe and instructions
+        run: python tools/package_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seoichoo-windows-x64
+          path: |
+            seoichoo/dist/seoichoo-windows-x64.zip
+            seoichoo/dist/seoichoo-windows-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: seoichoo-windows-x64
+          path: dist
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          tag="seoichoo-v${RUN_NUMBER}.${RUN_ATTEMPT}"
+          cat > release-notes.md <<'NOTES'
+          ## Windows 실행 방법
+          `seoichoo-windows-x64.zip`을 받아 압축을 모두 푼 뒤 `seoichoo.exe`를 더블클릭하세요.
+          Python 설치는 필요 없으며 PC의 Chrome 또는 Edge를 사용합니다.
+          
+          **검증 범위:** Windows exe/Tk GUI/Playwright 드라이버 및 모의 폼 테스트.
+          네이버 실계정 로그인·서이추 신청 폼/결과는 아직 실계정으로 검증하지 않았습니다.
+          우선 본인이 고른 2~3명으로 확인하세요. 기존 제한(1회 20명, 간격 30~120초, 일일 100명)을 유지합니다.
+          NOTES
+          gh release create "$tag" dist/seoichoo-windows-x64.zip dist/seoichoo-windows-x64.zip.sha256 --repo "$GH_REPO" --target "$BUILD_SHA" --title "서이추 Windows ${RUN_NUMBER}.${RUN_ATTEMPT}" --notes-file release-notes.md --latest

@@ -90,7 +90,7 @@ class Candidate:
 
 @dataclass
 class ApplyResult:
-    status: str  # success / already / refused / limit / group_full / error
+    status: str  # success / already / refused / limit / group_full / unconfirmed / error
     detail: str = ""
 
 
@@ -176,13 +176,14 @@ class NaverBot:
         if "nidlogin" in url:
             self.my_blog_id = None
             return None
-        m = re.search(r"[?&]blogId=([A-Za-z0-9_-]+)", url) or re.search(
-            r"blog\.naver\.com/([A-Za-z0-9_-]+)", url
-        )
-        if m and m.group(1).lower() not in ("myblog.naver", "postlist.naver"):
-            self.my_blog_id = m.group(1)
-        else:
-            self.my_blog_id = "(확인 불가)"
+        parsed = urllib.parse.urlparse(url)
+        bid = urllib.parse.parse_qs(parsed.query).get("blogId", [None])[0]
+        if not bid and parsed.hostname in ("blog.naver.com", "m.blog.naver.com"):
+            bid = parsed.path.strip("/").split("/")[0]
+        reserved = {"myblog", "postlist", "postview", "buddyaddform", "nidlogin"}
+        self.my_blog_id = bid if bid and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", bid) and bid.lower() not in reserved else None
+        if not self.my_blog_id:
+            self.log("로그인 쿠키는 있지만 내 블로그 ID를 확인하지 못했습니다. 브라우저의 내 블로그 주소를 확인해 주세요.")
         return self.my_blog_id
 
     def logout(self) -> None:
@@ -259,7 +260,7 @@ class NaverBot:
         for s in self.sel[key]:
             loc = page.locator(s).first
             try:
-                loc.wait_for(state="attached", timeout=timeout)
+                loc.wait_for(state="visible", timeout=timeout)
                 return loc
             except Exception:
                 timeout = 500  # 첫 후보 이후로는 짧게
@@ -267,14 +268,14 @@ class NaverBot:
         return None
 
     def _classify(self, text: str) -> ApplyResult | None:
-        if any(t in text for t in TEXT_LIMIT) and "신청" in text:
+        if any(t in text for t in TEXT_LIMIT) and "신청" in text and re.search(r"초과|도달|더 이상|할 수 없|불가", text):
             return ApplyResult("limit", text)
         if any(t in text for t in TEXT_ALREADY):
             return ApplyResult("already", text)
+        if re.search(r"그룹.{0,40}(?:가득|최대.{0,15}(?:초과|도달)|인원.{0,15}(?:초과|도달))", text):
+            return ApplyResult("group_full", text)
         if any(t in text for t in TEXT_REFUSED):
             return ApplyResult("refused", text)
-        if "그룹" in text and any(t in text for t in TEXT_GROUP_FULL[1:]):
-            return ApplyResult("group_full", text)
         return None
 
     def apply(self, blog_id: str, message: str) -> ApplyResult:
@@ -314,11 +315,13 @@ class NaverBot:
         page.wait_for_timeout(400)
 
         msg_box = self._first("message", timeout=1500)
-        if msg_box is not None and message:
+        if message:
+            if msg_box is None:
+                return ApplyResult("error", "신청문구 입력란을 찾지 못해 전송하지 않았습니다.")
             try:
                 msg_box.fill(message)
-            except Exception:
-                pass
+            except Exception as e:
+                return ApplyResult("error", f"신청문구 입력 실패로 전송하지 않았습니다: {e}")
 
         btn = self._first("submit", timeout=1500)
         if btn is None:
@@ -326,25 +329,29 @@ class NaverBot:
         try:
             btn.click(timeout=3000)
         except Exception as e:
-            return ApplyResult("error", f"확인 버튼 클릭 실패: {e}")
+            return ApplyResult("unconfirmed", f"전송 여부를 확인하지 못했습니다. 네이버에서 직접 확인하세요: {e}")
 
         page.wait_for_timeout(2000)
-        if self._last_dialog:
-            res = self._classify(self._last_dialog)
-            if res:
-                return res
-            if "신청" in self._last_dialog or "완료" in self._last_dialog:
-                return ApplyResult("success", self._last_dialog)
         try:
-            body = page.inner_text("body")[:800]
+            body = page.inner_text("body")[:1500]
         except Exception:
             body = ""
-        res = self._classify(body)
-        if res:
-            return res
-        if "BuddyAddForm" in page.url and msg_box is not None:
-            # 같은 폼에 머물러 있으면 실패로 간주
-            if "신청" in body and ("완료" in body or "보냈" in body):
-                return ApplyResult("success", "")
-            return ApplyResult("error", "신청 후에도 폼 화면에 머물러 있음")
-        return ApplyResult("success", self._last_dialog)
+        text = self._last_dialog + "\n" + body
+        classified = self._classify(text)
+        if classified:
+            return classified
+        if re.search(r"(?:서로이웃|이웃)\s*신청(?:이|을)?\s*(?:완료되었습니다|완료됐습니다|완료했습니다|성공했습니다|정상적으로 처리되었습니다)|(?:서로이웃|이웃)(?:을|이)?\s*(?:신청했습니다|신청되었습니다)", text):
+            return ApplyResult("success", "서로이웃 신청 완료 문구를 확인했습니다.")
+        return ApplyResult("unconfirmed", "확실한 완료 문구를 확인하지 못했습니다. 네이버에서 신청 상태를 직접 확인하세요.")
+
+    def inspect_form(self, blog_id: str) -> dict:
+        """신청 폼을 열어 선택자 정보만 진단. 클릭/문구 입력/신청 전송 없음."""
+        page = self._require_page()
+        self._last_dialog = ""
+        page.goto(BUDDY_FORM_URL.format(blog_id=blog_id), wait_until="domcontentloaded")
+        page.wait_for_timeout(1000)
+        parsed = urllib.parse.urlparse(page.url)
+        fields = page.locator("input,textarea,button,select,label").evaluate_all("""nodes => nodes.map(e => ({tag:e.tagName.toLowerCase(),id:e.id,name:e.getAttribute('name')||'',type:e.getAttribute('type')||'',disabled:!!e.disabled,visible:!!(e.offsetWidth||e.offsetHeight||e.getClientRects().length)}))""")
+        return {"page": parsed.scheme+"://"+parsed.netloc+parsed.path, "login_page": "nidlogin" in page.url,
+                "selectors": {key:[{"selector":selector,"count":page.locator(selector).count()} for selector in selectors] for key,selectors in self.sel.items()},
+                "fields":fields,"submitted":False,"note":"폼 진단만 수행. 비밀번호·쿠키·입력값·본문은 포함하지 않음. 실계정 신청 결과 검증과는 별개."}
