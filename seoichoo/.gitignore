@@ -1,0 +1,6 @@
+browser_profile/
+history.json
+settings.json
+*.tmp
+__pycache__/
+.venv/
