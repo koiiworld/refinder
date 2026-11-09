@@ -11,6 +11,7 @@ import html
 import json
 import random
 import re
+import sys
 import time
 import urllib.parse
 from dataclasses import dataclass, field
@@ -19,7 +20,11 @@ from typing import Callable
 
 from playwright.sync_api import BrowserContext, Page, sync_playwright
 
-BASE_DIR = Path(__file__).resolve().parent
+# exe 로 실행하면 exe 가 있는 폴더에, 아니면 이 파일이 있는 폴더에 데이터를 저장한다
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 PROFILE_DIR = BASE_DIR / "browser_profile"
 SELECTORS_FILE = BASE_DIR / "selectors.json"
 
@@ -119,11 +124,19 @@ class NaverBot:
             viewport={"width": 1100, "height": 850},
             locale="ko-KR",
         )
-        try:
-            # PC 에 설치된 크롬 우선 사용
-            self.ctx = self._pw.chromium.launch_persistent_context(channel="chrome", **kwargs)
-        except Exception:
-            self.ctx = self._pw.chromium.launch_persistent_context(**kwargs)
+        # PC 에 설치된 크롬 → 엣지(윈도우 기본 탑재) → Playwright 크로미움 순서로 시도
+        last_err = None
+        for channel in ("chrome", "msedge", None):
+            try:
+                opts = dict(kwargs, channel=channel) if channel else kwargs
+                self.ctx = self._pw.chromium.launch_persistent_context(**opts)
+                break
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+        if self.ctx is None:
+            self._pw.stop()
+            self._pw = None
+            raise RuntimeError(f"브라우저를 열 수 없습니다. 크롬 또는 엣지를 설치하세요. ({last_err})")
         self.page = self.ctx.pages[0] if self.ctx.pages else self.ctx.new_page()
         self.page.on("dialog", self._on_dialog)
         self.page.goto(LOGIN_URL)
