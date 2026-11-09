@@ -39,7 +39,16 @@ jobs:
       - name: Install build requirements
         run: python -m pip install -r build-requirements.txt
       - name: Tests without Naver requests
-        run: python -m unittest discover -s tests -v
+        run: |
+          @'
+          import io, os, pathlib, unittest
+          output = io.StringIO()
+          result = unittest.TextTestRunner(stream=output, verbosity=2).run(unittest.defaultTestLoader.discover('tests'))
+          text = output.getvalue()
+          print(text)
+          pathlib.Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('```text\n' + text + '\n```', encoding='utf-8')
+          raise SystemExit(not result.wasSuccessful())
+          '@ | python -
       - name: Build standalone GUI exe (no bundled browsers)
         run: pyinstaller --onefile --windowed --name seoichoo --collect-all playwright seoichoo.py
       - name: Test packaged Tk GUI and Playwright driver
