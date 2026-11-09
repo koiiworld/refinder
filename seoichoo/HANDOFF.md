@@ -2,9 +2,13 @@
 
 ## 2026-11-09 추가 작업
 
+- **배포 완료:** Windows 빌드·포장된 exe의 GUI/드라이버 검사·릴리스 게시 모두 성공. https://github.com/koiiworld/refinder/actions/runs/42629139666
+- 최신 릴리스: https://github.com/koiiworld/refinder/releases/latest (`seoichoo-v1.1`). ZIP 48.8MiB, ZIP/내부 파일 SHA256 전부 검증, Windows MZ 실행파일 확인. SHA256 `67c03e7343a5d7f6d3a949c6ca10775c1cac9629abfa7c7b725410f09ab02f13`.
+- **미완료:** 실제 네이버 계정으로 2~3명 신청 및 실제 폼/결과 문구 대조. 이 클라우드에서 네이버는 프록시 403 차단, 실제 로그인 세션 없음. 빌드 성공을 실계정 검증 성공으로 혼동하지 말 것.
+
 - Windows GitHub Actions 자동 빌드·exe 자체 GUI/드라이버 검사·ZIP/SHA256·Releases latest 게시 구성 추가. Chrome/Edge만 사용하며 브라우저를 번들/자동 다운로드하지 않음. `build_exe.bat`로 로컬 빌드도 가능.
 - `--self-test --report <path>`는 임시 폴더에서 GUI를 만들고 전용 Worker에서 Playwright 드라이버만 시작/종료. 네이버 접속/신청 없음.
-- 현재 로컬 검증: 단위·로컬 가상 폼 테스트 10개 통과, Python 문법·YAML 구조 검증. 이 Linux 환경은 DISPLAY가 없어 GUI 자체 실행은 Windows CI에서 확인해야 함.
+- 현재 로컬 검증: 단위·로컬 가상 폼 테스트 10개 통과, Python 문법·YAML 구조 검증. 이 Linux 환경은 DISPLAY가 없지만 GUI 자체 실행은 Windows CI에서 별도로 통과함.
 - 성공 판정 보수화: 명시적인 완료 문구 없으면 `unconfirmed`, 자동 신청 중단·중복 제외·일일 횟수 보수 반영. 입력란 입력 실패 시 전송하지 않음. 숨긴 라디오 대신 보이는 라벨 선택. 단순 폼 이동/확인 질문은 성공이 아님.
 - `신청 폼 진단(전송 안 함)` 추가: 선택자 일치·입력 요소 메타데이터만 diagnostics.json에 저장. 비밀번호/쿠키/입력값/본문은 기록하지 않음.
 - 실제 네이버 계정 테스트는 여전히 미완료. 이 환경의 네이버 도메인 요청이 프록시 403으로 차단되며 로그인 세션 없음. 실제 선택자/완료 문구를 검증했다고 주장하지 말 것.
