@@ -25,6 +25,8 @@ from naver import BASE_DIR, Candidate, NaverBot
 HISTORY_FILE = BASE_DIR / "history.json"
 SETTINGS_FILE = BASE_DIR / "settings.json"
 NAVER_DAILY_LIMIT = 100  # 네이버 정책상 하루 서이추 신청 최대 인원
+DEFAULT_BATCH = 20  # 한 번 [서이추 자동 신청] 할 때 최대 신청 인원
+DEFAULT_DMIN, DEFAULT_DMAX = 30, 120  # 신청 간격(초): 30초 ~ 2분
 
 STATUS_KO = {
     "success": "신청 완료",
@@ -197,11 +199,14 @@ class App:
         f4 = ttk.LabelFrame(top, text="4. 서이추 자동 신청")
         f4.pack(fill="x", **pad)
         ttk.Label(f4, text="신청 간격(초)").pack(side="left", **pad)
-        self.dmin_var = tk.IntVar(value=8)
-        self.dmax_var = tk.IntVar(value=20)
+        self.dmin_var = tk.IntVar(value=DEFAULT_DMIN)
+        self.dmax_var = tk.IntVar(value=DEFAULT_DMAX)
         ttk.Spinbox(f4, from_=3, to=300, width=5, textvariable=self.dmin_var).pack(side="left")
         ttk.Label(f4, text="~").pack(side="left")
         ttk.Spinbox(f4, from_=3, to=600, width=5, textvariable=self.dmax_var).pack(side="left")
+        ttk.Label(f4, text="  1회 최대").pack(side="left", **pad)
+        self.batch_var = tk.IntVar(value=DEFAULT_BATCH)
+        ttk.Spinbox(f4, from_=1, to=NAVER_DAILY_LIMIT, width=5, textvariable=self.batch_var).pack(side="left")
         ttk.Label(f4, text="  하루 최대").pack(side="left", **pad)
         self.limit_var = tk.IntVar(value=NAVER_DAILY_LIMIT)
         ttk.Spinbox(f4, from_=1, to=NAVER_DAILY_LIMIT, width=5, textvariable=self.limit_var).pack(side="left")
@@ -227,7 +232,8 @@ class App:
         self.kw_text.insert("1.0", s.get("keywords", ""))
         self.msg_text.insert("1.0", s.get("message", DEFAULT_MESSAGE))
         for var, key in ((self.pages_var, "pages"), (self.dmin_var, "dmin"),
-                         (self.dmax_var, "dmax"), (self.limit_var, "limit")):
+                         (self.dmax_var, "dmax"), (self.limit_var, "limit"),
+                         (self.batch_var, "batch")):
             if key in s:
                 var.set(s[key])
 
@@ -236,8 +242,9 @@ class App:
             "keywords": self.kw_text.get("1.0", "end").strip(),
             "message": self.msg_text.get("1.0", "end").strip(),
             "pages": self._int(self.pages_var, 5),
-            "dmin": self._int(self.dmin_var, 8),
-            "dmax": self._int(self.dmax_var, 20),
+            "dmin": self._int(self.dmin_var, DEFAULT_DMIN),
+            "dmax": self._int(self.dmax_var, DEFAULT_DMAX),
+            "batch": self._int(self.batch_var, DEFAULT_BATCH),
             "limit": self._int(self.limit_var, NAVER_DAILY_LIMIT),
         }
         try:
@@ -398,13 +405,16 @@ class App:
         if remain <= 0:
             messagebox.showinfo("일일 한도", f"오늘은 이미 {self.history.today_count()}명 신청했습니다. 내일 다시 시도하세요.")
             return
-        dmin = max(3, self._int(self.dmin_var, 8))
-        dmax = max(dmin, self._int(self.dmax_var, 20))
+        dmin = max(3, self._int(self.dmin_var, DEFAULT_DMIN))
+        dmax = max(dmin, self._int(self.dmax_var, DEFAULT_DMAX))
+        batch = max(1, self._int(self.batch_var, DEFAULT_BATCH))
+        planned = min(remain, batch, len(targets))
         self._save_settings()
         if not messagebox.askyesno(
             "서이추 자동 신청",
-            f"선택 {len(targets)}명 중 최대 {min(remain, len(targets))}명에게 서이추를 신청합니다.\n"
-            f"신청 간격: {dmin}~{dmax}초\n진행할까요?",
+            f"선택 {len(targets)}명 중 최대 {planned}명에게 서이추를 신청합니다.\n"
+            f"(1회 최대 {batch}명, 오늘 남은 한도 {remain}명)\n"
+            f"신청 간격: {dmin}~{dmax}초 (예상 소요 약 {planned * (dmin + dmax) // 120}분)\n진행할까요?",
         ):
             return
         self.stop_flag.clear()
@@ -418,6 +428,9 @@ class App:
             for i, c in enumerate(targets, 1):
                 if self.stop_flag.is_set():
                     self.log("사용자가 중지했습니다.")
+                    break
+                if done >= batch:
+                    self.log(f"이번 회차 최대 인원({batch}명)을 채워 중지합니다. 남은 후보는 다음에 다시 신청하세요.")
                     break
                 if self.history.today_count() >= limit:
                     self.log(f"오늘 신청 한도({limit}명)에 도달해 중지합니다.")
@@ -442,7 +455,7 @@ class App:
                     break
                 if res.status == "error" and "로그인" in res.detail:
                     break
-                if i < len(targets):
+                if i < len(targets) and done < batch:
                     wait = random.uniform(dmin, dmax)
                     end = time.time() + wait
                     while time.time() < end and not self.stop_flag.is_set():
