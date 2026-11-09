@@ -11,10 +11,23 @@ async function api(payload){
  const res=await fetch(u.origin+'/api/ext/seoichoo',{method:'POST',headers:{'content-type':'application/json','x-co-ext':code||''},body:JSON.stringify(payload),redirect:'error',signal:AbortSignal.timeout(15000)});
  const data=await res.json();if(!res.ok)throw Error(data.error||'웹앱 연결 실패');return data;
 }
-async function inject(func,args=[]){const [r]=await chrome.scripting.executeScript({target:{tabId},func,args});return r.result;}
+function missingTab(error){return /No tab with id|Invalid tab ID/i.test(error?.message??'');}
+async function inject(func,args=[]){
+ try{const [r]=await chrome.scripting.executeScript({target:{tabId},func,args});return r.result;}
+ catch(e){if(missingTab(e)){tabId=null;throw Error('네이버 작업 탭이 닫혔어요. 신청 여부를 직접 확인해 주세요. 이미 보낸 신청은 다시 전송하지 않습니다.');}throw e;}
+}
 async function open(url){
- if(tabId===null){const tab=await chrome.tabs.create({url,active:true});tabId=tab.id;}else await chrome.tabs.update(tabId,{url,active:true});
- const until=Date.now()+30000;while(Date.now()<until){if(stopped)throw Error('중지 요청됨');const tab=await chrome.tabs.get(tabId);if(tab.status==='complete'){await sleep(700);return;}await sleep(250);}throw Error('네이버 화면을 불러오지 못했습니다. 직접 확인해 주세요.');
+ // 이전 작업에서 닫힌 탭 ID를 재사용하지 않음. 전송 자체는 재시도하지 않음.
+ if(tabId!==null){try{await chrome.tabs.get(tabId);}catch(e){if(!missingTab(e))throw e;tabId=null;}}
+ if(tabId!==null){try{await chrome.tabs.update(tabId,{url,active:true});}catch(e){if(!missingTab(e))throw e;tabId=null;}}
+ if(tabId===null){const tab=await chrome.tabs.create({url,active:true});tabId=tab.id;}
+ const until=Date.now()+30000;
+ while(Date.now()<until){
+  if(stopped)throw Error('중지 요청됨');
+  let tab;try{tab=await chrome.tabs.get(tabId);}catch(e){if(!missingTab(e))throw e;tabId=null;throw Error('네이버 작업 탭이 닫혔어요. 실행창에서 작업을 다시 확인해 주세요.');}
+  if(tab.status==='complete'){await sleep(700);return;}await sleep(250);
+ }
+ throw Error('네이버 화면을 불러오지 못했습니다. 직접 확인해 주세요.');
 }
 async function saveHistory(){await chrome.storage.local.set({seoHistory:history});}
 function todayCount(){return base+Object.values(history).filter(x=>x.day===day()).length;}

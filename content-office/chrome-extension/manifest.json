@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "콘텐츠 오피스 보내기",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "AI Content Office에 글·사진 보내기, 네이버 서이추 관리와 자료 가져오기",
   "permissions": [
     "storage",
