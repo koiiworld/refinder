@@ -67,6 +67,15 @@ class LocalFormTests(unittest.TestCase):
         self.assertEqual(self.page.locator("#buddyAddMsg").input_value(), "안녕하세요")
         self.assertTrue(self.page.locator("#bothBuddyRadio").is_checked())
 
+    def test_actual_completion_wording_allows_consecutive_applications(self):
+        self.fixture("document.body.innerHTML='서로이웃 신청 완료<br>초보할머니님에게<br>서로이웃을 신청하였습니다.'")
+        for blog_id in ("first", "second"):
+            self.assertEqual(self.bot.apply(blog_id, "안녕하세요").status, "success")
+
+    def test_polite_confirmation_is_not_completion(self):
+        self.fixture("alert('서로이웃을 신청하시겠습니까?')")
+        self.assertEqual(self.bot.apply("fixture", "안녕하세요").status, "unconfirmed")
+
     def test_confirmation_dialog_is_not_completion(self):
         self.fixture("alert('서로이웃 신청하시겠습니까?')")
         self.assertEqual(self.bot.apply("fixture", "안녕하세요").status, "unconfirmed")

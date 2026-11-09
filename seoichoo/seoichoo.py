@@ -176,9 +176,11 @@ class App:
         bar = ttk.Frame(f3)
         bar.pack(fill="x")
         ttk.Button(bar, text="후보 전체 선택", command=lambda: self.select_all(True)).pack(side="left", **pad)
-        ttk.Button(bar, text="신청 폼 진단(전송 안 함)", command=self.on_inspect).pack(side="left", **pad)
-        ttk.Button(bar, text="전체 해제", command=lambda: self.select_all(False)).pack(side="left", **pad)
-        ttk.Button(bar, text="목록 비우기", command=self.clear_candidates).pack(side="left", **pad)
+        ttk.Button(bar, text="선택 전체 해제", command=lambda: self.select_all(False)).pack(side="left", **pad)
+        tools = ttk.Frame(f3)
+        tools.pack(fill="x")
+        ttk.Button(tools, text="신청 폼 진단(전송 안 함)", command=self.on_inspect).pack(side="left", **pad)
+        ttk.Button(tools, text="목록 비우기", command=self.clear_candidates).pack(side="left", **pad)
         self.cand_var = tk.StringVar(value="후보 0명")
         ttk.Label(bar, textvariable=self.cand_var).pack(side="right", **pad)
 
@@ -313,7 +315,7 @@ class App:
                 self.log(f"로그인 확인 완료 (내 블로그: https://blog.naver.com/{bid})")
             else:
                 self.ui(self.login_var.set, "로그인/내 블로그 확인 필요")
-                self.log("로그인되어 있지 않습니다. 브라우저에서 네이버 로그인 후 다시 확인하세요.")
+                self.log("로그인 또는 내 블로그 주소를 확인하지 못했습니다. 브라우저에서 현재 상태를 확인해 주세요. 이미 로그인되어 있다면 반복 로그인하지 마세요.")
 
         self.worker.submit(job)
 

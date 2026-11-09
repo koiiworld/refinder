@@ -123,6 +123,7 @@ class NaverBot:
             headless=False,
             viewport={"width": 1100, "height": 850},
             locale="ko-KR",
+            chromium_sandbox=True,
         )
         # PC 에 설치된 크롬 → 엣지(윈도우 기본 탑재) → Playwright 크로미움 순서로 시도
         last_err = None
@@ -340,7 +341,7 @@ class NaverBot:
         classified = self._classify(text)
         if classified:
             return classified
-        if re.search(r"(?:서로이웃|이웃)\s*신청(?:이|을)?\s*(?:완료되었습니다|완료됐습니다|완료했습니다|성공했습니다|정상적으로 처리되었습니다)|(?:서로이웃|이웃)(?:을|이)?\s*(?:신청했습니다|신청되었습니다)", text):
+        if re.search(r"(?:서로이웃|이웃)\s*신청(?:이|을)?\s*(?:완료되었습니다|완료됐습니다|완료했습니다|성공했습니다|정상적으로 처리되었습니다)|(?:서로이웃|이웃)(?:을|이)?\s*(?:신청했습니다|신청하였습니다|신청되었습니다)", text):
             return ApplyResult("success", "서로이웃 신청 완료 문구를 확인했습니다.")
         return ApplyResult("unconfirmed", "확실한 완료 문구를 확인하지 못했습니다. 네이버에서 신청 상태를 직접 확인하세요.")
 
