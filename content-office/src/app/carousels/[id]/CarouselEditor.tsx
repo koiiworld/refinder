@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import HashtagInput from "@/components/HashtagInput";
+import { formatHashtags, hashtagTokens } from "@/lib/caption-styles";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/components/client-utils";
@@ -106,7 +108,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
   async function save(silent = false) {
     setBusy("save");
     try {
-      const next = await api<Carousel>(`/api/carousels/${c.id}`, "PUT", { title: c.title, slides, caption, hashtags: tags.split(/[\s,]+/).filter(Boolean), style });
+      const next = await api<Carousel>(`/api/carousels/${c.id}`, "PUT", { title: c.title, slides, caption, hashtags: hashtagTokens(tags), style });
       apply(next);
       if (!silent) setMsg({ ok: true, text: "저장했어요." });
     } catch (e) {
@@ -157,7 +159,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
     setMsg(null);
     try {
       await api(`/api/carousels/${c.id}`, "PUT", { style });
-      const r = await api<Carousel & { reused: boolean }>(`/api/carousels/${c.id}`, "POST", { action: "switch_type", type: id, slides, caption, hashtags: tags.split(/[\s,]+/).filter(Boolean) });
+      const r = await api<Carousel & { reused: boolean }>(`/api/carousels/${c.id}`, "POST", { action: "switch_type", type: id, slides, caption, hashtags: hashtagTokens(tags) });
       apply(r);
       setMsg({ ok: true, text: r.reused ? `전에 만든 '${types.find((t) => t.id === id)?.label}' 버전을 불러왔어요 (AI 비용 없음).` : `'${types.find((t) => t.id === id)?.label}' 구성으로 새로 만들었어요.` });
       void made;
@@ -224,7 +226,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
   }
 
   async function copyCaption() {
-    const text = `${caption.trim()}\n\n${tags.trim()}`.trim();
+    const text = `${caption.trim()}\n\n${formatHashtags(tags, false)}`.trim();
     await navigator.clipboard.writeText(text);
     setMsg({ ok: true, text: "캡션+해시태그를 복사했어요." });
   }
@@ -373,8 +375,8 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
           <button className="btn btn-sm" onClick={copyCaption}>📋 캡션 복사</button>
         </div>
         <textarea className="textarea" style={{ minHeight: 160 }} value={caption} onChange={(e) => { setCaption(e.target.value); setDirty(true); }} aria-label="캡션" />
-        <input className="input" value={tags} onChange={(e) => { setTags(e.target.value); setDirty(true); }} placeholder="#해시태그 3~5개" aria-label="해시태그" />
-        <CarouselTextAI id={c.id} kind="caption" slides={slides} caption={caption} hashtags={tags.split(/[\s,]+/).filter(Boolean)} disabled={!!busy} onBusy={b=>setBusy(b?'text':'')} onApply={draft=>{setCaption(draft.caption??caption);setTags((draft.hashtags??[]).map(t=>'#'+t).join(' '));setDirty(true);}}/>
+        <HashtagInput value={tags} onChange={(v) => { setTags(v); setDirty(true); }} placeholder="#해시태그 입력 후 스페이스 (3~5개)" />
+        <CarouselTextAI id={c.id} kind="caption" slides={slides} caption={caption} hashtags={hashtagTokens(tags)} disabled={!!busy} onBusy={b=>setBusy(b?'text':'')} onApply={draft=>{setCaption(draft.caption??caption);setTags((draft.hashtags??[]).map(t=>'#'+t).join(' '));setDirty(true);}}/>
         <p className="tiny muted" style={{ margin: 0 }}>첫 줄이 피드에서 보이는 후킹 문구예요. 해시태그는 요즘 3~5개만 붙이는 추세예요.</p>
       </section>
 

@@ -2261,7 +2261,7 @@ test('📱 채널 변환 카드뉴스 → 기존 7장 문구 그대로 제작 �
  const doc=(await call('/api/repurpose','POST',{action:'make',title:'닭한마리 레시피',text,blogId:'blog_algokitchen',channels:['cards']})).data;
  await call('/__reset','POST',undefined,MOCK);
  const made=await call('/api/repurpose/'+doc.id,'POST',{action:'carousel'});assert.equal(made.status,201,JSON.stringify(made.data));
- const c=(await call('/api/carousels/'+made.data.id)).data;assert.equal(c.slides.length,7);assert.equal(c.slides[0].headline,'닭한마리 집에서 만들기');assert.equal(c.slides[0].body,'소개');assert.equal(c.slides[3].body,'닭, 양파, 대파를 준비해 주세요.');assert.equal(c.slides[6].kind,'cta');assert.equal(c.blog_id,'blog_algokitchen');assert.equal(c.project_id,null);
+ const c=(await call('/api/carousels/'+made.data.id)).data;assert.equal(c.slides.length,7);assert.equal(c.slides[0].headline,'닭한마리 집에서 만들기');assert.equal(c.slides[0].body,'소개');assert.equal(c.slides[3].body,'닭, 양파, 대파를 준비해 주세요.');assert.equal(c.slides[6].kind,'cta');assert.equal(c.blog_id,'blog_algokitchen');assert.equal(c.project_id,null);assert.equal(c.caption,'','캐러셀로 만들기는 카드 문구까지만');assert.deepEqual(c.hashtags,[]);
  const repeated=await Promise.all([call('/api/repurpose/'+doc.id,'POST',{action:'carousel'}),call('/api/repurpose/'+doc.id,'POST',{action:'carousel'})]);assert(repeated.every(x=>x.data.id===made.data.id));
  assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'기존 문구 연결은 외부/AI 호출 없음');
  const editor=await (await fetch(BASE+'/carousels/'+made.data.id)).text();assert(editor.includes('닭한마리 집에서 만들기'));assert.equal((await call('/api/repurpose/missing-id','POST',{action:'carousel'})).status,400);
@@ -2295,7 +2295,8 @@ test('📱 캡션·SEO 태그/카드별 문구 다시 요청: 의견·미저장 
  const endpoint='/api/carousels/'+c.id+'/rewrite';assert.equal((await call(endpoint+'?kind=caption')).status,200);
  assert.equal((await call(endpoint,'POST',{kind:'caption',slides})).status,400);
  const caption=await call(endpoint,'POST',{confirm:true,kind:'caption',slides,caption:'기존에 직접 쓴 캡션',hashtags:['닭한마리'],feedback:'더 담백하게 쓰고 레시피 검색어 중심의 태그로'});assert.equal(caption.status,200,JSON.stringify(caption.data));assert(caption.data.caption.includes('닭한마리'));assert.deepEqual(caption.data.hashtags,['닭한마리','닭한마리레시피','집밥레시피']);
- let prompt=await stepPrompt('캐러셀 문구와 인스타그램 검색');assert(prompt.includes('더 담백하게 쓰고 레시피 검색어 중심의 태그로'));assert(prompt.includes('저장 전 직접 고친 카드'));
+ let prompt=await stepPrompt('캐러셀 문구와 인스타그램 검색');assert(!prompt.includes('캡션 스타일 — 반드시'));assert(prompt.includes('더 담백하게 쓰고 레시피 검색어 중심의 태그로'));assert(prompt.includes('저장 전 직접 고친 카드'));
+ const styled=await call(endpoint,'POST',{confirm:true,kind:'caption',slides,caption:'',hashtags:[],captionStyle:'recipe'});assert.equal(styled.status,200,JSON.stringify(styled.data));prompt=await stepPrompt('캐러셀 문구와 인스타그램 검색');assert(prompt.includes('[캡션 스타일 — 반드시 따르기] 재료(분량 포함)'));
  const single=await call(endpoint,'POST',{confirm:true,kind:'slide',index:1,slides,feedback:'재료를 먼저 보여주고 다른 장과 중복 줄이기'});assert.equal(single.status,200,JSON.stringify(single.data));assert(single.data.headline);assert(single.data.body);assert(!('slides' in single.data));
  prompt=await stepPrompt('캐러셀 문구와 인스타그램 검색');assert(prompt.includes('2장만 다시 쓰세요'));assert(prompt.includes('다른 장과 중복 줄이기'));
  const after=(await call('/api/carousels/'+c.id)).data;assert.deepEqual(after.slides,snapshot.slides);assert.equal(after.caption,snapshot.caption);assert.deepEqual(after.hashtags,snapshot.hashtags);

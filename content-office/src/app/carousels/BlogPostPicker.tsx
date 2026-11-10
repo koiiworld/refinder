@@ -4,6 +4,9 @@ type Post={title:string;url:string;blog:string};
 export default function BlogPostPicker({id,recent,value,onChange}:{id:string;recent:Post[];value:string;onChange:(url:string)=>void}){
  const [query,setQuery]=useState(''),[remote,setRemote]=useState<Post[]>([]),[searched,setSearched]=useState(''),[next,setNext]=useState<number|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const active=useRef<AbortController|null>(null);
+ const [hidden,setHidden]=useState(false);
+ useEffect(()=>{try{setHidden(localStorage.getItem('carousel-recent-hidden')==='1');}catch{}},[]);
+ const toggleHidden=()=>setHidden(h=>{try{localStorage.setItem('carousel-recent-hidden',h?'0':'1');}catch{}return !h;});
  useEffect(()=>()=>active.current?.abort(),[]);
  const words=query.normalize('NFKC').toLocaleLowerCase('ko-KR').trim().split(/\s+/).filter(Boolean);
  const local=recent.filter(p=>words.every(w=>`${p.blog} ${p.title}`.normalize('NFKC').toLocaleLowerCase('ko-KR').includes(w)));
@@ -24,7 +27,7 @@ export default function BlogPostPicker({id,recent,value,onChange}:{id:string;rec
   <p className="tiny muted" style={{margin:0}}>입력하면 최근 목록에서 찾고, ‘예전 글도 검색’을 누르면 네이버 검색에 노출된 글까지 찾아요. 검색에 없는 글은 아래에 주소를 넣어 주세요.</p>
   {query.trim()&&<div className="stack" style={{gap:4}}><span className="tiny muted" role="status">검색 결과 {found.length}개</span>{found.length?<div className="stack" style={{maxHeight:240,overflowY:'auto',gap:4}}>{found.map(choose)}</div>:<p className="small muted" style={{margin:0}}>일치하는 글이 없어요. ‘예전 글도 검색’을 누르거나 글 주소를 입력해 주세요.</p>}{searched===query.trim()&&next&&<button className="btn btn-sm" disabled={busy} onClick={()=>search(next)}>검색 결과 더 보기</button>}</div>}
   {error&&<p className="notice small" role="alert">{error} 최근 글 목록과 직접 주소 입력은 계속 사용할 수 있어요.</p>}
-  <b className="small">최근 블로그 글 목록 · {recent.length}개</b>
-  {recent.length?<div className="stack" style={{maxHeight:220,overflowY:'auto',gap:4}}>{recent.map(choose)}</div>:<p className="small muted">불러온 최근 글이 없어요. 위에서 검색하거나 아래에 글 주소를 넣어 주세요.</p>}
+  <div className="row" style={{justifyContent:'space-between',alignItems:'center',gap:6}}><b className="small">최근 블로그 글 목록 · {recent.length}개</b>{recent.length>0&&<button type="button" className="btn btn-sm" aria-expanded={!hidden} onClick={toggleHidden}>{hidden?'▼ 목록 보기':'▲ 목록 숨기기'}</button>}</div>
+  {hidden?null:recent.length?<div className="stack" style={{maxHeight:220,overflowY:'auto',gap:4}}>{recent.map(choose)}</div>:<p className="small muted">불러온 최근 글이 없어요. 위에서 검색하거나 아래에 글 주소를 넣어 주세요.</p>}
  </div>;
 }
