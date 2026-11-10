@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.6.0
+// @version      1.7.0
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -39,7 +39,7 @@
     "안녕하세요 {닉네임}님, 블로그 분위기가 좋아서 이웃 맺고 싶어요. 잘 부탁드립니다!",
   ].join("\n");
   const OLD_DEFAULT_MSG = "안녕하세요 {닉네임}님! 글 잘 보고 갑니다. 서로이웃 맺고 자주 소통해요 :)";
-  const ACC_KEYS = ["history", "daily", "candidates", "keywords", "pages", "message", "cooldown", "cooldownMax"];
+  const ACC_KEYS = ["history", "daily", "candidates", "batches", "batchCur", "keywords", "pages", "message", "cooldown", "cooldownMax"];
 
   // 멘트 칸은 한 줄에 멘트 하나. 여러 줄이면 그중 하나를 무작위로 고른다 (직전 멘트는 가능하면 피함).
   function pickMessage(raw, last) {
@@ -272,13 +272,52 @@
   // ================================================================ 대상 검색 패널
   function searchPanel() {
     let acc = activeAcc();
-    let candidates = aget(acc, "candidates", []); // [{blogId,nick,blogName,keyword}]
+    let candidates = []; // 지금 보고 있는 검색 묶음의 후보 [{blogId,nick,blogName,keyword,sel}]
+    let batchId = null;  // 지금 보고 있는 검색 묶음 id
+    const MAX_BATCHES = 10;
     let cooldownUntil = 0;
     let loginId = detectLoginId();
 
     // 지금 로그인한 네이버 아이디와 연결된 탭이 있으면 그 탭을 연다
     const bound = loginId && accounts().find((a) => a.naverId === loginId);
-    if (bound && bound.id !== acc) { acc = bound.id; store.set("activeAcc", acc); candidates = aget(acc, "candidates", []); }
+    if (bound && bound.id !== acc) { acc = bound.id; store.set("activeAcc", acc); }
+
+    // -------------------------------------------------------------- 검색 묶음
+    // batches: [{ id, at, label, items }] 최신이 앞. 1.6 이하의 목록은 '이전 목록' 묶음으로 옮긴다.
+    function batchesOf(a) {
+      let bs = aget(a, "batches");
+      if (!Array.isArray(bs)) {
+        bs = [];
+        const old = aget(a, "candidates", []);
+        if (old.length) bs.push({ id: "b" + Date.now(), at: Date.now(), label: "이전 목록", items: old });
+        aset(a, "batches", bs);
+        store.del(`acc:${a}:candidates`);
+        if (bs.length) aset(a, "batchCur", bs[0].id);
+      }
+      return bs;
+    }
+    function loadBatch() {
+      const bs = batchesOf(acc);
+      const b = bs.find((x) => x.id === aget(acc, "batchCur")) || bs[0];
+      batchId = b ? b.id : null;
+      candidates = b ? b.items : [];
+    }
+    function saveBatch() {
+      const bs = batchesOf(acc);
+      const b = bs.find((x) => x.id === batchId);
+      if (b) { b.items = candidates; aset(acc, "batches", bs); }
+    }
+    function showBatch(id) {
+      if (running) { alert("자동 보내기 중에는 다른 검색 결과로 바꿀 수 없어요. 먼저 멈춰 주세요."); renderBatchNav(); return; }
+      aset(acc, "batchCur", id);
+      loadBatch();
+      render();
+    }
+    const fmtTime = (t) => {
+      const d = new Date(t);
+      const p2 = (n) => String(n).padStart(2, "0");
+      return `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    };
 
     const css = `
       #sc-panel{position:fixed;right:16px;bottom:16px;width:370px;max-height:86vh;z-index:2147483647;
@@ -316,6 +355,9 @@
       #sc-bubble::after{content:"";position:absolute;right:14px;top:100%;border:7px solid transparent;border-top-color:#1f2937}
       #sc-bubble.below::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:#1f2937}
       #sc-panel li.cur{background:#ecfdf5}
+      #sc-panel .batch{border:1px solid #e5e7eb;border-radius:8px;padding:6px 8px;background:#f9fafb;display:flex;flex-direction:column;gap:4px}
+      #sc-panel .batch select{flex:1;min-width:0;padding:5px 6px;border:1px solid #d1d5db;border-radius:8px;font:inherit;color:inherit;background:#fff}
+      #sc-panel .batch button{padding:4px 9px}
       #sc-panel.min .body,#sc-panel.min .tabs{display:none}
     `;
     document.head.append(el("style", {}, css));
@@ -332,6 +374,11 @@
     const autoBtn = el("button", { class: "pri", onclick: () => (running ? (stopReq = true) : autoRun()) }, "체크한 사람 자동 보내기");
     const warn = el("div", { class: "warn", hidden: "" });
     const info = el("div", { class: "muted" });
+    const batchSel = el("select", { title: "검색 결과 묶음 고르기" });
+    batchSel.addEventListener("change", () => showBatch(batchSel.value));
+    const olderBtn = el("button", { title: "이전 검색 결과", onclick: () => stepBatch(1) }, "‹");
+    const newerBtn = el("button", { title: "다음 검색 결과", onclick: () => stepBatch(-1) }, "›");
+    const batchStat = el("div", { class: "muted" });
     const list = el("ul");
     const nextBtn = el("button", { onclick: openNext, title: "한 명씩 직접 확인하며 보내기" }, "다음 신청창 열기");
     const skipBtn = el("button", { onclick: skipCurrent }, "건너뛰기");
@@ -350,7 +397,9 @@
           el("button", { onclick: addSamples, title: "준비된 예시 멘트 8개를 추가해요" }, "예시 멘트 넣기")),
         msg,
         el("div", { class: "row" }, "신청 간격", cool, "~", coolMax, "초 무작위"),
-        info,
+        el("div", { class: "batch" },
+          el("div", { class: "row" }, olderBtn, batchSel, newerBtn),
+          batchStat),
         el("div", { class: "row" }, selInfo,
           el("button", { onclick: () => selectAll(true) }, "전체 선택"),
           el("button", { onclick: () => selectAll(false) }, "선택 해제")),
@@ -358,7 +407,8 @@
         autoBtn,
         autoInfo,
         el("div", { class: "row" }, nextBtn, skipBtn,
-          el("button", { onclick: clearList, style: "margin-left:auto" }, "목록 비우기")),
+          el("button", { onclick: clearList, style: "margin-left:auto", title: "지금 보는 검색 결과 묶음을 지워요 (보낸 기록은 남아요)" }, "묶음 삭제")),
+        info,
         el("div", { class: "muted" },
           "탭마다 검색어·멘트·보낸 목록·하루 한도를 따로 기억해요. 탭 이름을 두 번 누르면 이름을 바꿀 수 있어요."),
       ),
@@ -373,7 +423,7 @@
       msg.value = !String(saved).trim() || String(saved).trim() === OLD_DEFAULT_MSG ? DEFAULT_MSG : saved;
       cool.value = String(aget(acc, "cooldown", DEFAULT_COOLDOWN));
       coolMax.value = String(aget(acc, "cooldownMax", DEFAULT_COOLDOWN_MAX));
-      candidates = aget(acc, "candidates", []);
+      loadBatch();
     }
     function persist() {
       aset(acc, "keywords", kw.value);
@@ -530,7 +580,7 @@
         const box = el("input", { type: "checkbox", style: "width:auto;margin:0", title: "자동 보내기 대상" });
         box.checked = !!c.sel && !done;
         box.disabled = done || running;
-        box.addEventListener("change", () => { c.sel = box.checked; aset(acc, "candidates", candidates); renderSel(); });
+        box.addEventListener("change", () => { c.sel = box.checked; saveBatch(); renderSel(); });
         const tag = el("span", { class: "s" }, LABEL[st] || (DONE.includes(st) ? "건너뜀" : "대기"));
         if (DONE.includes(st) && st !== "sent") {
           const why = reasonOf(st, (historyOf(acc)[c.blogId] || {}).detail);
@@ -544,7 +594,8 @@
         list.append(el("li", { class: cur.acc === acc && c.blogId === cur.blogId ? "cur" : "" }, box, a, tag));
       }
       renderSel();
-      info.textContent = `후보 ${candidates.length}명 · 남은 ${pending().length}명 · 오늘 보냄 ${todayCountOf(acc)}/${DAILY_LIMIT}`;
+      info.textContent = `오늘 보냄 ${todayCountOf(acc)}/${DAILY_LIMIT} (이 계정)`;
+      renderBatchNav();
       const problem = accountMismatch();
       if (problem) {
         warn.textContent = problem;
@@ -555,12 +606,52 @@
       tick();
     }
 
+    function batchCounts(items) {
+      const h = historyOf(acc);
+      let sent = 0, skipped = 0, left = 0;
+      for (const c of items) {
+        const st = (h[c.blogId] || {}).status || "";
+        if (st === "sent") sent++;
+        else if (DONE.includes(st)) skipped++;
+        else left++;
+      }
+      return { total: items.length, sent, skipped, left };
+    }
+    function renderBatchNav() {
+      const bs = batchesOf(acc);
+      batchSel.replaceChildren();
+      if (!bs.length) {
+        batchSel.append(el("option", { value: "" }, "아직 검색 결과가 없어요"));
+        batchSel.disabled = olderBtn.disabled = newerBtn.disabled = true;
+        batchStat.textContent = "검색어를 넣고 [대상 찾기]를 누르세요.";
+        return;
+      }
+      for (const b of bs) {
+        const n = batchCounts(b.items);
+        const opt = el("option", { value: b.id }, `${fmtTime(b.at)} · ${b.label} · ${n.total}명 (남은 ${n.left})`);
+        if (b.id === batchId) opt.selected = true;
+        batchSel.append(opt);
+      }
+      const i = bs.findIndex((b) => b.id === batchId);
+      batchSel.disabled = running;
+      olderBtn.disabled = running || i >= bs.length - 1;
+      newerBtn.disabled = running || i <= 0;
+      const n = batchCounts(candidates);
+      batchStat.textContent = `${n.total}명 · 남은 ${n.left}명 · 보냄 ${n.sent} · 건너뜀 ${n.skipped}` + (i === 0 ? "" : " · 이전 검색 결과");
+    }
+    function stepBatch(d) {
+      const bs = batchesOf(acc);
+      const i = bs.findIndex((b) => b.id === batchId);
+      const next = bs[i + d];
+      if (next) showBatch(next.id);
+    }
+
     const checked = () => pending().filter((c) => c.sel);
     function renderSel() { selInfo.textContent = `체크 ${checked().length}명`; }
     function selectAll(on) {
       if (running) return;
       for (const c of pending()) c.sel = on;
-      aset(acc, "candidates", candidates);
+      saveBatch();
       render();
     }
 
@@ -585,9 +676,10 @@
       const searchAcc = acc;
       const words = kw.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
       if (!words.length) { alert("검색어를 입력하세요."); return; }
+      if (running) { alert("자동 보내기 중에는 새로 찾을 수 없어요. 먼저 멈춰 주세요."); return; }
       const maxPage = Math.min(20, Math.max(1, Number(pages.value) || 3));
-      const found = aget(searchAcc, "candidates", []);
-      const known = new Set(found.map((c) => c.blogId));
+      const found = [];
+      const known = new Set();
       const h = historyOf(searchAcc);
       if (loginId) known.add(loginId);
       searchBtn.disabled = true;
@@ -615,13 +707,23 @@
           }
         }
       } finally {
-        aset(searchAcc, "candidates", found);
-        if (searchAcc === acc) candidates = found;
+        if (found.length) {
+          const bs = batchesOf(searchAcc);
+          const label = words[0] + (words.length > 1 ? ` 외 ${words.length - 1}개` : "");
+          const b = { id: "b" + Date.now(), at: Date.now(), label: label.slice(0, 30), items: found };
+          bs.unshift(b);
+          while (bs.length > MAX_BATCHES) bs.pop();
+          aset(searchAcc, "batches", bs);
+          aset(searchAcc, "batchCur", b.id);
+          if (searchAcc === acc) loadBatch();
+        }
         searchBtn.disabled = false;
         searchBtn.textContent = "대상 찾기";
         render();
       }
-      if (searchAcc === acc) info.textContent = `새 후보 ${added}명 추가 · ` + info.textContent;
+      if (searchAcc === acc && !added) {
+        batchStat.textContent = "새로 찾은 사람이 없어요. 다른 검색어를 넣어 보세요. (지금 보이는 건 이전 결과예요)";
+      }
     }
 
     function openNext() {
@@ -654,9 +756,13 @@
     }
 
     function clearList() {
-      if (!confirm("이 탭의 후보 목록을 비울까요? (보낸 기록은 남아요)")) return;
-      candidates = [];
-      aset(acc, "candidates", candidates);
+      if (running) return;
+      if (!batchId) return;
+      if (!confirm("지금 보는 검색 결과 묶음을 지울까요?\n(보낸 기록은 남아서 다음 검색에 다시 나오지 않아요)")) return;
+      const bs = batchesOf(acc).filter((b) => b.id !== batchId);
+      aset(acc, "batches", bs);
+      aset(acc, "batchCur", bs[0] ? bs[0].id : "");
+      loadBatch();
       render();
     }
 
