@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.0.0
+// @version      1.1.0
+// @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
+// @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다.
 // @match        https://section.blog.naver.com/*
 // @match        https://m.blog.naver.com/BuddyAddForm.naver*
@@ -20,7 +22,19 @@
   const DAILY_LIMIT = 100;      // 네이버 정책상 하루 서이추 최대
   const SESSION_LIMIT = 20;     // 한 번에 권장 인원 (넘으면 경고만)
   const DEFAULT_COOLDOWN = 30;  // 다음 신청창을 열기까지 최소 대기(초)
-  const DEFAULT_MSG = "안녕하세요 {닉네임}님! 글 잘 보고 갑니다. 서로이웃 맺고 자주 소통해요 :)";
+  const DEFAULT_MSG = [
+    "안녕하세요 {닉네임}님! 글 잘 보고 갑니다. 서로이웃 맺고 자주 소통해요 :)",
+    "{닉네임}님 블로그 구경하다가 신청드려요! 앞으로 자주 놀러올게요~",
+    "안녕하세요! 관심사가 비슷해서 서이추 신청드립니다. 잘 부탁드려요 {닉네임}님 :)",
+  ].join("\n");
+
+  // 멘트 칸은 한 줄에 멘트 하나. 여러 줄이면 그중 하나를 무작위로 고른다 (직전 멘트는 가능하면 피함).
+  function pickMessage(raw, last) {
+    const lines = String(raw || "").split("\n").map((s) => s.trim()).filter(Boolean);
+    if (!lines.length) return "";
+    const pool = lines.length > 1 ? lines.filter((l) => l !== last) : lines;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
   const POPUP_NAME = "seoichoo_buddy";
 
   const store = {
@@ -68,7 +82,8 @@
     const blogId = new URLSearchParams(location.search).get("blogId") || "";
     const cur = store.get("current", {});
     const nick = cur.blogId === blogId ? cur.nick : "";
-    const message = store.get("message", DEFAULT_MSG).replaceAll("{닉네임}", nick || blogId);
+    const template = cur.blogId === blogId && cur.message ? cur.message : pickMessage(store.get("message", DEFAULT_MSG), "");
+    const message = template.replaceAll("{닉네임}", nick || blogId);
 
     const banner = el("div", {
       style: "position:fixed;left:0;right:0;top:0;z-index:2147483647;padding:10px 12px;" +
@@ -165,7 +180,7 @@
     const kw = el("textarea", { rows: "3", placeholder: "검색어 (줄바꿈 또는 쉼표로 구분)\n예) 나는솔로1회, 나는솔로2회" });
     kw.value = store.get("keywords", "");
     const pages = el("input", { type: "number", min: "1", max: "20", value: String(store.get("pages", 3)), style: "width:64px" });
-    const msg = el("textarea", { rows: "3" });
+    const msg = el("textarea", { rows: "4", placeholder: "한 줄에 멘트 하나씩 적으세요" });
     msg.value = store.get("message", DEFAULT_MSG);
     const cool = el("input", { type: "number", min: "10", max: "600", value: String(store.get("cooldown", DEFAULT_COOLDOWN)), style: "width:64px" });
     const info = el("div", { class: "muted" });
@@ -180,7 +195,7 @@
       el("div", { class: "body" },
         kw,
         el("div", { class: "row" }, "검색어당 페이지", pages, el("span", { class: "muted" }, "(1페이지=7개 글)"), el("span", { style: "flex:1" }), searchBtn),
-        el("div", { class: "muted" }, "공용 멘트 ({닉네임} 은 상대 닉네임으로 바뀜)"),
+        el("div", { class: "muted" }, "멘트: 한 줄에 하나씩, 여러 줄이면 매번 무작위로 골라요. {닉네임}은 상대 닉네임으로 바뀜"),
         msg,
         el("div", { class: "row" }, "신청 간격 최소", cool, "초"),
         info,
@@ -278,7 +293,10 @@
       if (!c) return;
       if (todayCount() > 0 && todayCount() % SESSION_LIMIT === 0 &&
           !confirm(`오늘 ${todayCount()}명 보냈어요. 조금 쉬었다 하는 걸 권장해요. 계속할까요?`)) return;
-      store.set("current", { blogId: c.blogId, nick: c.nick });
+      const lastMsg = store.get("current", {}).message || "";
+      const chosen = pickMessage(msg.value, lastMsg);
+      if (!chosen) { alert("멘트를 한 줄 이상 적어주세요."); return; }
+      store.set("current", { blogId: c.blogId, nick: c.nick, message: chosen });
       if (statusOf(c.blogId) === "") record(c.blogId, "opened");
       const url = `https://m.blog.naver.com/BuddyAddForm.naver?blogId=${encodeURIComponent(c.blogId)}`;
       const w = window.open(url, POPUP_NAME, "width=460,height=760");
