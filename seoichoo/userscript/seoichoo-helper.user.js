@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.1.0
+// @version      1.2.0
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다.
@@ -26,7 +26,13 @@
     "안녕하세요 {닉네임}님! 글 잘 보고 갑니다. 서로이웃 맺고 자주 소통해요 :)",
     "{닉네임}님 블로그 구경하다가 신청드려요! 앞으로 자주 놀러올게요~",
     "안녕하세요! 관심사가 비슷해서 서이추 신청드립니다. 잘 부탁드려요 {닉네임}님 :)",
+    "{닉네임}님 글이 너무 재밌어서 이웃 신청드려요! 새 글 기다릴게요 :)",
+    "안녕하세요~ 우연히 들렀다가 좋은 글이 많아서 서로이웃 신청합니다!",
+    "{닉네임}님 반가워요! 서로 블로그 자주 들르면서 소통해요 ^^",
+    "글 잘 읽고 갑니다! 앞으로도 좋은 글 보고 싶어서 서이추 신청드려요~",
+    "안녕하세요 {닉네임}님, 블로그 분위기가 좋아서 이웃 맺고 싶어요. 잘 부탁드립니다!",
   ].join("\n");
+  const OLD_DEFAULT_MSG = "안녕하세요 {닉네임}님! 글 잘 보고 갑니다. 서로이웃 맺고 자주 소통해요 :)";
 
   // 멘트 칸은 한 줄에 멘트 하나. 여러 줄이면 그중 하나를 무작위로 고른다 (직전 멘트는 가능하면 피함).
   function pickMessage(raw, last) {
@@ -181,7 +187,15 @@
     kw.value = store.get("keywords", "");
     const pages = el("input", { type: "number", min: "1", max: "20", value: String(store.get("pages", 3)), style: "width:64px" });
     const msg = el("textarea", { rows: "4", placeholder: "한 줄에 멘트 하나씩 적으세요" });
-    msg.value = store.get("message", DEFAULT_MSG);
+    const saved = store.get("message", DEFAULT_MSG);
+    // 1.0 버전의 기본 멘트 한 줄만 있으면 새 기본 멘트 묶음으로 바꿔 준다
+    msg.value = !saved.trim() || saved.trim() === OLD_DEFAULT_MSG ? DEFAULT_MSG : saved;
+    function addSamples() {
+      const have = new Set(msg.value.split("\n").map((l) => l.trim()).filter(Boolean));
+      const add = DEFAULT_MSG.split("\n").filter((l) => !have.has(l));
+      msg.value = [...have, ...add].join("\n");
+      store.set("message", msg.value);
+    }
     const cool = el("input", { type: "number", min: "10", max: "600", value: String(store.get("cooldown", DEFAULT_COOLDOWN)), style: "width:64px" });
     const info = el("div", { class: "muted" });
     const list = el("ul");
@@ -195,7 +209,9 @@
       el("div", { class: "body" },
         kw,
         el("div", { class: "row" }, "검색어당 페이지", pages, el("span", { class: "muted" }, "(1페이지=7개 글)"), el("span", { style: "flex:1" }), searchBtn),
-        el("div", { class: "muted" }, "멘트: 한 줄에 하나씩, 여러 줄이면 매번 무작위로 골라요. {닉네임}은 상대 닉네임으로 바뀜"),
+        el("div", { class: "row" },
+          el("span", { class: "muted", style: "flex:1" }, "멘트: 한 줄에 하나씩, 매번 무작위로 골라요. {닉네임}은 상대 닉네임으로 바뀜"),
+          el("button", { onclick: addSamples, title: "준비된 예시 멘트 8개를 추가해요" }, "예시 멘트 넣기")),
         msg,
         el("div", { class: "row" }, "신청 간격 최소", cool, "초"),
         info,
