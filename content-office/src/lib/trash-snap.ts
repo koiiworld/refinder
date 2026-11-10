@@ -18,9 +18,10 @@ export const SNAP_KINDS = {
   calendar: { table: "calendar_events", label: "📅 캘린더 일정", children: [] },
   sample: { table: "blog_samples", label: "✍️ 문체 샘플", children: [] },
   convert: { table: "doc_conversions", label: "📄 문서 변환", children: [] },
+  igops: { table: "ig_ops", label: "📱 인스타 운영", children: [] },
 } as const;
 export type SnapKind = keyof typeof SNAP_KINDS;
-const PREFIX: [string, SnapKind][] = [["std_", "studio"], ["ser_", "series"], ["car_", "carousel"], ["idea_", "idea"], ["todo_", "todo"], ["rt_", "routine"], ["rp_", "repurpose"], ["study_", "study"], ["cal_", "calendar"], ["smp_", "sample"], ["md_", "convert"]];
+const PREFIX: [string, SnapKind][] = [["std_", "studio"], ["ser_", "series"], ["car_", "carousel"], ["idea_", "idea"], ["todo_", "todo"], ["rt_", "routine"], ["rp_", "repurpose"], ["study_", "study"], ["cal_", "calendar"], ["smp_", "sample"], ["md_", "convert"], ["igo_", "igops"]];
 export const snapKindOf = (id: string) => PREFIX.find(([p]) => id.startsWith(p))?.[1] ?? null;
 export const TRASH_DAYS = 30;
 

@@ -33,4 +33,3 @@ $("save").addEventListener("click", async () => {
 });
 $("target").addEventListener("change", saveTarget);
 
-$('seo').addEventListener('click',()=>chrome.tabs.create({url:chrome.runtime.getURL('seoichoo.html')}));

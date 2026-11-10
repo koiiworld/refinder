@@ -690,11 +690,11 @@ CREATE TABLE IF NOT EXISTS blog_common_rules(
  target JSONB NOT NULL,enabled BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- PC의 기존 네이버 로그인으로 실행. 미확인 신청은 자동 재시도하지 않음.
-CREATE TABLE IF NOT EXISTS seoichoo_jobs (
- id TEXT PRIMARY KEY, blog_id TEXT NOT NULL REFERENCES blogs(id), kind TEXT NOT NULL,
- payload JSONB NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'queued',
- result JSONB NOT NULL DEFAULT '{}', cancelled BOOLEAN NOT NULL DEFAULT FALSE,
- created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+-- 📱 인스타 운영 도구 기록 (릴스 대본·댓글 답글·프로필 점수·주간 계획·잘 된 영상)
+CREATE TABLE IF NOT EXISTS ig_ops (
+  id TEXT PRIMARY KEY, tool TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', blog_id TEXT,
+  input JSONB NOT NULL DEFAULT '{}', result JSONB NOT NULL DEFAULT '{}', model TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS seoichoo_one_active ON seoichoo_jobs ((TRUE)) WHERE status IN ('queued','running');
+CREATE INDEX IF NOT EXISTS ig_ops_tool ON ig_ops (tool, created_at DESC);

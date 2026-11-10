@@ -1,6 +1,8 @@
 "use client";
 
 import TitleRulesEditor from "@/components/TitleRulesEditor";
+import HashtagInput from "@/components/HashtagInput";
+import { hashtagTokens } from "@/lib/caption-styles";
 import {commonRulesText} from "@/lib/blog-rule-types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -446,13 +448,13 @@ function TitlePicker({ plan, current, draft, setDraft, choosing, disabled, onPic
 function Hashtags({ tags, disabled, onSave }: { tags: string[]; disabled: boolean; onSave: (t: string[]) => void }) {
   const [text, setText] = useState(tags.map((t) => "#" + t).join(" "));
   useEffect(() => setText(tags.map((t) => "#" + t).join(" ")), [tags]);
-  const dirty = text !== tags.map((t) => "#" + t).join(" ");
+  const dirty = hashtagTokens(text).join(" ") !== tags.join(" ");
   return (
     <div className="field">
       <span className="label">해시태그</span>
-      <textarea className="textarea" style={{ minHeight: 56 }} value={text} disabled={disabled} onChange={(e) => setText(e.target.value)} />
+      <HashtagInput multiline style={{ minHeight: 56 }} value={text} disabled={disabled} onChange={setText} />
       {dirty && (
-        <button className="btn btn-sm" style={{ alignSelf: "flex-start", marginTop: 6 }} onClick={() => onSave(text.split(/[\s,]+/).filter(Boolean))}>해시태그 저장</button>
+        <button className="btn btn-sm" style={{ alignSelf: "flex-start", marginTop: 6 }} onClick={() => onSave(hashtagTokens(text))}>해시태그 저장</button>
       )}
     </div>
   );

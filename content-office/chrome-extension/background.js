@@ -38,21 +38,6 @@ async function send(payload) {
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   (async () => {
-    if (msg.type === 'seo-lock') {
-      if (!Number.isInteger(msg.tabId) || _sender.url !== chrome.runtime.getURL('seoichoo.html')) throw new Error('실행창에서 요청해 주세요.');
-      const tab=await chrome.tabs.get(msg.tabId); if(tab.url!==chrome.runtime.getURL('seoichoo.html'))throw new Error('실행창이 아닙니다.');
-      const {seoRunner} = await chrome.storage.session.get('seoRunner');
-      if (seoRunner && seoRunner !== msg.tabId) {
-        try { await chrome.tabs.get(seoRunner); throw new Error('다른 서이추 실행창이 열려 있어요. 해당 창을 사용하거나 닫아 주세요.'); }
-        catch(e) { if(e.message.includes('다른 서이추')) throw e; }
-      }
-      await chrome.storage.session.set({seoRunner:msg.tabId}); return {ok:true};
-    }
-    if (msg.type === 'seo-unlock') {
-      const {seoRunner} = await chrome.storage.session.get('seoRunner');
-      if (_sender.url === chrome.runtime.getURL('seoichoo.html') && seoRunner === msg.tabId) await chrome.storage.session.remove('seoRunner');
-      return {ok:true};
-    }
     if (msg.type === "send") return send(msg.payload);
     if (msg.type === "posts") return api("/api/ext/posts");
     if (msg.type === "target") return (await get()).target || null;

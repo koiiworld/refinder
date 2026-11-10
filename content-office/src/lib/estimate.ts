@@ -8,6 +8,11 @@ import type { StepKey } from "./steps";
  */
 const TOKENS: Record<string, { step: StepKey; label: string; input: number; output: number }> = {
   carousel_caption:{step:"carousel",label:"캐러셀 캡션·해시태그 다시 생성",input:3500,output:1600},
+  ig_reel:{step:"carousel",label:"📱 릴스 대본",input:4000,output:2500},
+  ig_reply:{step:"carousel",label:"📱 댓글 답글",input:5000,output:4000},
+  ig_profile:{step:"carousel",label:"📱 프로필 점수 (캡처 포함)",input:6000,output:2500},
+  ig_plan:{step:"carousel",label:"📱 주간 계획",input:4000,output:2500},
+  ig_viral:{step:"carousel",label:"📱 잘 된 영상 분석",input:4500,output:2500},
   carousel_slide:{step:"carousel",label:"카드 한 장 문구 다시 생성",input:3500,output:1600},
   studio_rewrite:{step:"studio",label:"영상 문구·구성 다시 생성",input:3500,output:2200},
   outline: { step: "titles", label: "③-2 기획안 (목차·근거)", input: 2500, output: 1200 },

@@ -2312,32 +2312,6 @@ test('↻ 캐러셀 원본 글 업데이트는 선택 블로그 RSS 캐시를 �
  assert.equal((await call('/api/carousels/sources/refresh','POST',{blogId:'missing'})).status,400);
 });
 
-test('서이추 PC 연결: 블로그 분리·확인 필수·작업 단일 수신·취소·자료 주소 제한', async()=>{
- const blogs=(await call('/api/blogs')).data;
- const b=blogs.find(b=>b.platform==='naver'),other=blogs.find(b=>b.platform!=='naver');
- if(other)assert.equal((await call('/api/seoichoo','POST',{blogId:other.id,kind:'search',payload:{keywords:'요리'}})).status,400);
- assert.equal((await call('/api/seoichoo','POST',{blogId:b.id,kind:'collect',payload:{url:'https://example.com'}})).status,400);
- let r=await call('/api/seoichoo','POST',{blogId:b.id,kind:'search',payload:{keywords:'요리'}});assert.equal(r.status,201,JSON.stringify(r.data));const search=r.data.id;
- assert.equal((await call('/api/seoichoo','POST',{blogId:b.id,kind:'search',payload:{keywords:'육아'}})).status,400);
- let job=(await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job;assert.equal(job.id,search);
- assert.equal((await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job,null);
- await call('/api/ext/seoichoo','POST',{action:'result',id:search,status:'done',result:{candidates:[{blog_id:'fixture',nick:'테스트',blog_name:'요리'}]}});
- const request={blogId:b.id,kind:'apply',payload:{source:search,ids:['fixture'],message:'안녕하세요'}};
- assert.equal((await call('/api/seoichoo','POST',request)).status,400);
- assert.equal((await call('/api/seoichoo','POST',{...request,confirmed:true,payload:{...request.payload,ids:['unknown']}})).status,400);
- r=await call('/api/seoichoo','POST',{...request,confirmed:true});assert.equal(r.status,201);const apply=r.data.id;
- job=(await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job;assert.equal(job.payload.min,30);assert.equal(job.payload.max,120);assert.equal(job.payload.limit,100);
- await call('/api/seoichoo','POST',{action:'cancel',id:apply});assert.equal((await call('/api/ext/seoichoo','POST',{action:'heartbeat',id:apply})).data.cancelled,true);
- await call('/api/ext/seoichoo','POST',{action:'result',id:apply,status:'cancelled',result:{message:'중지'}});
- // 늦은 결과가 완료된 기록을 덮어쓰지 않음.
- await call('/api/ext/seoichoo','POST',{action:'result',id:apply,status:'done',result:{message:'오래된 응답'}});
- const jobs=(await call('/api/seoichoo?blogId='+b.id)).data;assert.equal(jobs.find(j=>j.id===apply).status,'cancelled');
- if(other)assert.equal((await call('/api/seoichoo?blogId='+other.id)).data.length,0);
- r=await call('/api/seoichoo','POST',{blogId:b.id,kind:'collect',payload:{url:'https://creator-advisor.naver.com/new-windows/trend-stats'}});assert.equal(r.status,201);
- await call('/api/seoichoo','POST',{action:'cancel',id:r.data.id});assert.equal((await call('/api/ext/seoichoo','POST',{action:'claim'})).data.job,null);
-});
-
-
 test('캐러셀 예전 글 검색: RSS 밖 검색·소유 블로그 필터·페이지·잘못된 입력',async()=>{
  const list=(await call('/api/carousels')).data;const c=list.find(c=>c.blog_id==='blog_algokitchen');assert.ok(c);
  let r=await call(`/api/carousels/${c.id}/sources?query=${encodeURIComponent('과거글찾기')}`);assert.equal(r.status,200,JSON.stringify(r.data));assert.equal(r.data.items.length,1);assert.equal(r.data.items[0].title,'RSS에 없는 예전 글');assert.equal(r.data.nextStart,101);
@@ -2345,4 +2319,40 @@ test('캐러셀 예전 글 검색: RSS 밖 검색·소유 블로그 필터·페�
  assert.equal((await call(`/api/carousels/${c.id}/sources?query=x&start=1001`)).status,400);
  assert.equal((await call(`/api/carousels/${c.id}/sources?query=`)).status,400);
  assert.equal((await call('/api/carousels/missing/sources?query=x')).status,404);
+});
+
+
+test('📱 인스타 운영: 비용 확인·말투 반영·프로필 점수 계산·조회수 배수·휴지통', async()=>{
+ assert.equal((await call('/api/instagram?estimate=reel')).status,200);
+ assert.equal((await call('/api/instagram','POST',{action:'run',tool:'reel',idea:'닭한마리'})).status,400,'비용 확인 없이는 실행 안 함');
+ await call('/__reset','POST',undefined,MOCK);
+ assert.equal((await call('/api/instagram','POST',{action:'run',tool:'viral',confirm:true,niche:'집밥',rows:'a | 100 | x\nb | 200 | y'})).status,502);
+ assert.deepEqual((await mockLog()).filter(x=>!x.path.startsWith('/__')),[],'3배 넘는 영상이 없으면 AI 호출 없음');
+ assert.equal((await call('/api/instagram','POST',{action:'voice',text:'말투마커 친근한 존댓말'})).status,200);
+ const reel=await call('/api/instagram','POST',{action:'run',tool:'reel',confirm:true,idea:'닭한마리 15분',seconds:'30'});assert.equal(reel.status,201,JSON.stringify(reel.data));
+ assert(reel.data.id.startsWith('igo_'));assert.equal(reel.data.result.beats[0].from,0);assert(reel.data.result.beats[1].to>reel.data.result.beats[0].to);
+ const prompt=await stepPrompt('한국 인스타그램 계정을 운영해 주는 편집자');assert(prompt.includes('말투마커'));assert(prompt.includes('#26 최상급'));
+ const prof=await call('/api/instagram','POST',{action:'run',tool:'profile',confirm:true,text:'알고키친 | 레시피',about:'집밥'});assert.equal(prof.status,201,JSON.stringify(prof.data));
+ const items=prof.data.result.items;assert.equal(items.length,12);assert.equal(items.find(x=>x.id==='name_field').score,12,'만점 넘는 점수는 잘라냄');assert.equal(prof.data.result.total,17);assert.equal(items.find(x=>x.id==='photo').seen,false);
+ const rows=['cook_a | 120000 | 이거 하나면 반찬 끝','cook_a | 15000 | 오늘 저녁','cook_a | 9000 | 계란말이','cook_b | 3.2만 | 냉장고 털이','cook_b | 30000 | 두부','cook_b | 1.1만 | 무침'].join('\n');
+ const viral=await call('/api/instagram','POST',{action:'run',tool:'viral',confirm:true,niche:'집밥',rows});assert.equal(viral.status,201,JSON.stringify(viral.data));
+ assert.equal(viral.data.result.top.length,1);assert.equal(viral.data.result.top[0].account,'cook_a');assert.equal(viral.data.result.top[0].multiple,8);
+ for(const t of [{tool:'reply',comments:'minji: 레시피\nshop_ad: 맞팔해요'},{tool:'plan',happened:'김장 20kg',offer:'집밥',themes:'반찬'}]){const r=await call('/api/instagram','POST',{action:'run',confirm:true,...t});assert.equal(r.status,201,JSON.stringify(r.data));}
+ const page=await (await fetch(BASE+'/instagram')).text();assert(page.includes('인스타 운영'));
+ assert.equal((await call('/api/trash','POST',{action:'trash',ids:[reel.data.id]})).status,200);
+ assert(!(await call('/api/instagram')).data.runs.some(r=>r.id===reel.data.id));
+ const page2=await (await fetch(BASE+'/trash')).text();assert(page2.includes('📱 인스타 운영'),'휴지통 화면에 보임');
+});
+
+test('#️⃣ 해시태그 입력 정리: 띄어쓰기·쉼표·붙여넣기·중복', async()=>{
+ const {formatHashtags,hashtagTokens}=await import('../src/lib/caption-styles.ts');
+ assert.equal(formatHashtags('#닭한마리 칼국수 ',true),'#닭한마리 #칼국수 #');
+ assert.equal(formatHashtags('#집밥 #레시피,저녁메뉴\n닭한마리 집밥',true),'#집밥 #레시피 #저녁메뉴 #닭한마리 #');
+ assert.deepEqual(hashtagTokens('#a # ##b'),['a','b']);
+ assert.equal(formatHashtags('',true),'#');
+});
+
+test('서이추 기능 삭제', async()=>{
+ assert.equal((await fetch(BASE+'/seoichoo')).status,404);
+ assert.equal((await call('/api/seoichoo')).status,404);
 });
