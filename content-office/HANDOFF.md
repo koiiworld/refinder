@@ -9,6 +9,7 @@
 - **해시태그 입력**: `components/HashtagInput.tsx` + `lib/caption-styles.ts`(formatHashtags/hashtagTokens). 스페이스·쉼표·엔터·붙여넣기 → 자동 `#`. 블로그 글·캐러셀·캐러셀 AI 새 안 모두 사용. 새 해시태그 칸을 만들면 이걸 쓸 것.
 - **캐러셀**: 채널 변환 '캐러셀로 만들기'는 카드 문구까지만(캡션·해시태그 비움). 캡션은 스타일 선택(CAPTION_STYLES) 후 사용자가 버튼으로 생성. 사진 ✕ 지우기 → `style.removedImages`(30일) → 되살리기, 카드 사진 번호 자동 당김(`removeImage`/`restoreImage`). 새 캐러셀 화면: 이미 만든 글도 순위에 '✅ 열기'로 남김, 검색칸(로컬 필터 + `/api/carousels/sources/search` 예전 글). 검색 로직 공용 `lib/blog-post-search.ts`.
 - **🎞 모션 캐러셀** (`carousels/MotionPanel.tsx`, `motion-video.ts`, `render.ts`의 `renderMotionFrame`): 브라우저에서 카드별 MP4(WebCodecs H.264 + `mp4-muxer`, 1080×1350·30fps, 3/5/7초). 사진은 카드 안에서 확대/축소/좌우 이동, 글자는 제목→본문 순서로 떠오름. 서버·맥·AI 비용 없음. 미지원 브라우저는 MediaRecorder.
+- **🎬 카드 AI 영상** (`carousel-video.ts`, `carousel-video-types.ts`, `CardVideoBox.tsx`): 카드 사진 → Higgsfield Wan 2.6(5초·720p·약 $0.5, 비용 확인 후). `slide.video`(jobId·url·status) 저장, saveCarousel은 서버 쪽 video 상태를 jobId로 유지. 영상은 `/api/carousels/:id/video/:jobId`(같은 출처 프록시)로 모션 내보내기 배경에 씀. Higgsfield 결과 주소는 만료될 수 있음(만료 시 '영상 빼기' 후 재생성). 모션 글자 움직임은 기본 '고정'.
 - 캘린더 목록: 완료한 할 일은 아래 '✅ 완료' 칸(회색·가운데 줄), ↺ 되돌리기 = PUT /api/todos/:id {done:false}.
 - ⚠️ 맥 재시작 빌드가 `.next/types`(옛 페이지 참조) 때문에 실패할 수 있음 → 페이지를 지운 뒤엔 `rm -rf .next/types` 후 재시작.
 - 글 편집기 본문은 높이 조절 가능한 스크롤 칸(`.editor-body`, localStorage `editor-body-height`).
