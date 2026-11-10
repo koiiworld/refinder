@@ -14,9 +14,9 @@ export default async function Carousels({ searchParams }: { searchParams: Promis
   const list = await listCarousels();
   const allBlogs = await listBlogs();
   const blogs = allBlogs.map((b) => ({ id: b.id, name: b.name, category: b.category }));
-  // 이미 캐러셀을 만든 글은 목록에서 빼고 '만든 캐러셀'로
-  const usedUrls = new Set(list.map((c) => (c.style?.sourceUrl ? postKey(c.style.sourceUrl) : "")).filter(Boolean));
-  const usedProjects = new Set(list.map((c) => c.project_id).filter(Boolean));
+  // 이미 캐러셀을 만든 글도 순위에 그대로 두고 '✅ 만듦 · 열기'로 표시
+  const usedUrls = new Map(list.filter((c) => c.style?.sourceUrl).map((c) => [postKey(c.style.sourceUrl!), c.id] as const));
+  const usedProjects = new Map(list.filter((c) => c.project_id).map((c) => [c.project_id!, c.id] as const));
   const viewPeriods:Record<string,string>={};
   const published = (
     await Promise.all(
@@ -24,10 +24,9 @@ export default async function Carousels({ searchParams }: { searchParams: Promis
         const [posts, stats, captured] = await Promise.all([recentPosts(b, 50), naverPostStats(b.url),capturedPostViews(b.id)]);
         viewPeriods[b.id]=captured.label;
         return posts
-          .filter((p) => !usedUrls.has(postKey(p.url)))
           .map((p) => {
             const st = stats[/\/(\d{6,})/.exec(p.url)?.[1] ?? ""] ?? null;
-            return { title: p.title, url: p.url, blogId: b.id, blog_name: b.name, likes: st?.likes ?? null, comments: st?.comments ?? null, views: matchCapturedViews(p.title,posts.map(x=>x.title),captured.items) };
+            return { title: p.title, url: p.url, blogId: b.id, blog_name: b.name, likes: st?.likes ?? null, comments: st?.comments ?? null, views: matchCapturedViews(p.title,posts.map(x=>x.title),captured.items), madeId: usedUrls.get(postKey(p.url)) ?? null };
           });
       }),
     )
@@ -38,7 +37,7 @@ export default async function Carousels({ searchParams }: { searchParams: Promis
          FROM projects p JOIN blogs b ON b.id=p.blog_id LEFT JOIN documents d ON d.project_id=p.id
         WHERE p.deleted_at IS NULL AND p.stage IN ('reviewing','ready','published') ORDER BY p.created_at DESC LIMIT 40`,
     )
-  ).filter((p) => !usedProjects.has(p.id));
+  ).map((p) => ({ ...p, madeId: usedProjects.get(p.id) ?? null }));
   const made = list.map((c) => ({ id: c.id, title: c.title, blog_id: c.blog_id, slides: c.slides.length, updated_at: c.updated_at, fromPost: !!(c.project_id || c.style?.sourceUrl) }));
   return (
     <div className="page">

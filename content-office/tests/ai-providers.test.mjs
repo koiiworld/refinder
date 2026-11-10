@@ -2356,3 +2356,28 @@ test('서이추 기능 삭제', async()=>{
  assert.equal((await fetch(BASE+'/seoichoo')).status,404);
  assert.equal((await call('/api/seoichoo')).status,404);
 });
+
+test('🖼 캐러셀 사진 지우기·되살리기: 카드 사진 번호 당김 · 30일 목록 · 저장해도 유지', async()=>{
+ const list=(await call('/api/carousels')).data;let c=list.find(x=>x.images.length>=3)??list[0];
+ if(c.images.length<3){for(let i=0;i<3;i++)await call('/api/carousels/'+c.id,'POST',{action:'upload',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='});c=(await call('/api/carousels/'+c.id)).data;}
+ const slides=c.slides.map((s,i)=>({...s,image:i===0?0:i===1?1:i===2?2:null}));
+ const before=c.images.length,second=c.images[1].url;
+ let r=await call('/api/carousels/'+c.id,'POST',{action:'remove_image',index:1,slides});assert.equal(r.status,200,JSON.stringify(r.data));
+ assert.equal(r.data.images.length,before-1);assert(!r.data.images.some(x=>x.url===second)||c.images.filter(x=>x.url===second).length>1);
+ assert.equal(r.data.slides[0].image,0);assert.equal(r.data.slides[1].image,null,'지운 사진 쓰던 카드는 사진 없음');assert.equal(r.data.slides[2].image,1,'뒤 번호 당김');
+ const removed=r.data.style.removedImages;assert.equal(removed[0].url,second);
+ assert.equal((await fetch(BASE+'/api/carousels/'+c.id+'/img/r0')).status===404,false,'지운 사진 미리보기 주소');
+ await call('/api/carousels/'+c.id,'PUT',{title:r.data.title,slides:r.data.slides,caption:r.data.caption,hashtags:r.data.hashtags,style:{...c.style}});
+ assert.equal((await call('/api/carousels/'+c.id)).data.style.removedImages.length,removed.length,'저장해도 지운 사진 목록 유지');
+ assert.equal((await call('/api/carousels/'+c.id,'POST',{action:'restore_image',at:'x',url:second})).status,502);
+ r=await call('/api/carousels/'+c.id,'POST',{action:'restore_image',at:removed[0].at,url:second});assert.equal(r.status,200,JSON.stringify(r.data));
+ assert.equal(r.data.images.at(-1).url,second);assert.equal(r.data.style.removedImages.length,removed.length-1);
+ assert.equal((await call('/api/carousels/'+c.id,'POST',{action:'remove_image',index:999})).status,502);
+});
+
+test('🔎 새 캐러셀: 블로그 예전 글 검색 · 만든 글도 순위에 열기로 표시', async()=>{
+ assert.equal((await call('/api/carousels/sources/search?blogId=missing&query=김장')).status,400);
+ const r=await call('/api/carousels/sources/search?blogId=blog_algokitchen&query=닭한마리');assert.equal(r.status,200,JSON.stringify(r.data));assert(Array.isArray(r.data.items));
+ assert.equal((await call('/api/carousels/sources/search?blogId=blog_algokitchen&query=')).status,400);
+ const page=await (await fetch(BASE+'/carousels')).text();assert(page.includes('글 제목·키워드 검색 또는 글 주소'));
+});

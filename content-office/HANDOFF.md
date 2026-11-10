@@ -2,6 +2,15 @@
 
 다른 AI 코딩 도구(Codex 등)가 이어서 작업할 때 **가장 먼저 읽을 문서**입니다. 기준 날짜: 2026-11-06. **파일 찾기는 `CODEMAP.md`(자동 생성: `node scripts/codemap.mjs`)를 먼저 보세요.**
 
+### Claude 작업 (2026-11-10)
+- 사용자는 **윈도우 PC + Render 주소**로 씀. 확장 프로그램은 설정 → 🧩 → zip 내려받기(`/api/extension-zip`)로 설치. 확장 1.2.0.
+- **서이추 기능 전부 삭제**(사용자 요청): `/seoichoo`, `/api/seoichoo`, `/api/ext/seoichoo`, `seoichoo.ts`, 확장의 seoichoo.*·seo-core.js·scripting 권한, 테스트. 실제 DB의 `seoichoo_jobs` 표는 건드리지 않음(스키마에서만 뺌).
+- **📱 인스타 운영** `/instagram` (`ig-ops.ts`, `ig-ops-types.ts`, 표 `ig_ops`, 휴지통 접두사 `igo_`): 릴스 대본(후킹 26공식·점수·초 단위 구성) · 댓글 답글(6분류) · 프로필 점수(12항목 100점, 합계는 코드가 계산) · 주간 계획 · 잘 된 영상(계정 중앙값 대비 배수는 코드 계산, 3배↑만 AI). '내 말투'는 settings key `ig_voice`. 담당 AI는 carousel 단계. 출처: instagram-agent-skill(MIT). 맥 `~/.claude/skills/ig-*`에도 원본 스킬 13개 설치.
+- **해시태그 입력**: `components/HashtagInput.tsx` + `lib/caption-styles.ts`(formatHashtags/hashtagTokens). 스페이스·쉼표·엔터·붙여넣기 → 자동 `#`. 블로그 글·캐러셀·캐러셀 AI 새 안 모두 사용. 새 해시태그 칸을 만들면 이걸 쓸 것.
+- **캐러셀**: 채널 변환 '캐러셀로 만들기'는 카드 문구까지만(캡션·해시태그 비움). 캡션은 스타일 선택(CAPTION_STYLES) 후 사용자가 버튼으로 생성. 사진 ✕ 지우기 → `style.removedImages`(30일) → 되살리기, 카드 사진 번호 자동 당김(`removeImage`/`restoreImage`). 새 캐러셀 화면: 이미 만든 글도 순위에 '✅ 열기'로 남김, 검색칸(로컬 필터 + `/api/carousels/sources/search` 예전 글). 검색 로직 공용 `lib/blog-post-search.ts`.
+- 글 편집기 본문은 높이 조절 가능한 스크롤 칸(`.editor-body`, localStorage `editor-body-height`).
+- 테스트: 격리 2 + 10 + 86 통과. ⚠️ UI 확인용 서버를 /tmp/co-test에서 띄웠으면 반드시 끄고 테스트(같은 PGlite 파일을 잡아 DB가 깨짐).
+
 ## ★ 지금 바로 이어서 (2026-11-07 밤, Claude 마지막 상태)
 
 ### 캐러셀 검색 확장·목록 복원·조회수 정렬 (2026-11-10 한국 시간)

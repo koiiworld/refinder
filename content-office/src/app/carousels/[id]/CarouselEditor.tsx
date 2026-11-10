@@ -62,7 +62,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
   const [caption, setCaption] = useState(initial.caption);
   const [tags, setTags] = useState(initial.hashtags.map((h) => "#" + h).join(" "));
   const [feedback, setFeedback] = useState("");
-  const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload" | "import" | "hooks" | "text">("");
+  const [busy, setBusy] = useState<"" | "save" | "ai" | "export" | "upload" | "import" | "hooks" | "text" | "photo">("");
   const ctype = c.style?.contentType ?? "general";
   const [importUrl, setImportUrl] = useState(recent[0]?.url ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -126,6 +126,33 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
       apply(await api<Carousel>(`/api/carousels/${c.id}`, "POST", { action: "regenerate", feedback }));
       setFeedback("");
       setMsg({ ok: true, text: "AI가 다시 만들었어요." });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+    setBusy("");
+  }
+
+  async function removePhoto(n: number) {
+    if (!confirm(`사진 ${n + 1}을(를) 지울까요?\n이 사진을 쓰던 카드는 '사진 없음'이 되고, 뒤 사진 번호는 하나씩 당겨져요.\n'지운 사진'에서 30일 안에 되살릴 수 있어요.`)) return;
+    setBusy("photo");
+    try {
+      const next = await api<Carousel>(`/api/carousels/${c.id}`, "POST", { action: "remove_image", index: n, slides });
+      setC((cur) => ({ ...cur, images: next.images, style: { ...cur.style, removedImages: next.style?.removedImages } }));
+      setSlides(next.slides);
+      setImgVer((v) => v + 1);
+      setMsg({ ok: true, text: `사진 ${n + 1}을(를) 지웠어요. 카드 내용은 저장됐어요.` });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+    setBusy("");
+  }
+  async function restorePhoto(at: string, url: string) {
+    setBusy("photo");
+    try {
+      const next = await api<Carousel>(`/api/carousels/${c.id}`, "POST", { action: "restore_image", at, url });
+      setC((cur) => ({ ...cur, images: next.images, style: { ...cur.style, removedImages: next.style?.removedImages } }));
+      setImgVer((v) => v + 1);
+      setMsg({ ok: true, text: `사진을 되살렸어요 (사진 ${next.images.length}). 카드마다 '사진'에서 다시 고르세요.` });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     }
@@ -330,11 +357,26 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/api/carousels/${c.id}/img/${n}?v=${imgVer}`} alt={im.alt} style={{ width: 64, height: 80, objectFit: "cover", borderRadius: 6, display: "block" }} />
                 <span className="tiny" style={{ position: "absolute", left: 3, top: 2, background: "rgba(0,0,0,.6)", color: "#fff", borderRadius: 4, padding: "0 4px" }}>{n + 1}</span>
+                <button type="button" aria-label={`사진 ${n + 1} 지우기`} title="사진 지우기 (아래 '지운 사진'에서 되살릴 수 있어요)" disabled={!!busy} onClick={() => void removePhoto(n)} style={{ position: "absolute", right: 2, top: 2, width: 20, height: 20, border: 0, borderRadius: 10, background: "rgba(0,0,0,.65)", color: "#fff", fontSize: 12, lineHeight: "20px", cursor: "pointer", padding: 0 }}>✕</button>
               </div>
             ))}
           </div>
         ) : (
           <p className="tiny muted" style={{ margin: 0 }}>사진이 없으면 글자 중심 카드로 만들어져요. 직접 찍은 사진을 올리면 저장·공유가 더 잘 나와요.</p>
+        )}
+        {!!c.style?.removedImages?.length && (
+          <details>
+            <summary className="small">🗑 지운 사진 ({c.style.removedImages.length}) · 30일 안에 되살릴 수 있어요</summary>
+            <div className="row" style={{ gap: 6, marginTop: 6 }}>
+              {c.style.removedImages.map((im, k) => (
+                <div key={im.at + im.url} style={{ position: "relative", opacity: 0.75 }} title={im.alt}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/api/carousels/${c.id}/img/r${k}?v=${imgVer}`} alt={im.alt} style={{ width: 64, height: 80, objectFit: "cover", borderRadius: 6, display: "block", background: "var(--panel-2)" }} onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} />
+                  <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => void restorePhoto(im.at, im.url)} style={{ position: "absolute", left: 2, right: 2, bottom: 2, padding: "0 4px", fontSize: 11 }}>되살리기</button>
+                </div>
+              ))}
+            </div>
+          </details>
         )}
       </section>
 

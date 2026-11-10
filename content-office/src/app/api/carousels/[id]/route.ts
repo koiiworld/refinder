@@ -1,5 +1,5 @@
 import { body, fail, handle, ok, type Ctx } from "@/lib/api";
-import { addUpload, deleteCarousel, generate, getCarousel, importBlogImages, regenerateHooks, saveCarousel, switchType, type CarouselStyle, type ContentTypeId, type Slide } from "@/lib/carousel";
+import { addUpload, deleteCarousel, generate, getCarousel, importBlogImages, regenerateHooks, saveCarousel, switchType, type CarouselStyle, type ContentTypeId, type Slide, removeImage, restoreImage } from "@/lib/carousel";
 
 export async function GET(_req: Request, ctx: Ctx) {
   return handle(async () => {
@@ -26,7 +26,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 export async function POST(req: Request, ctx: Ctx) {
   return handle(async () => {
     const id = (await ctx.params).id;
-    const b = await body<{ action?: string; feedback?: string; dataUrl?: string; url?: string; type?: ContentTypeId; slides?: Slide[]; caption?: string; hashtags?: string[] }>(req);
+    const b = await body<{ action?: string; index?: number; at?: string; feedback?: string; dataUrl?: string; url?: string; type?: ContentTypeId; slides?: Slide[]; caption?: string; hashtags?: string[] }>(req);
     try {
       if (b.action === "regenerate") await generate(id, String(b.feedback ?? "").slice(0, 2000));
       else if (b.action === "switch_type") {
@@ -38,6 +38,10 @@ export async function POST(req: Request, ctx: Ctx) {
       else if (b.action === "upload") {
         const index = await addUpload(id, String(b.dataUrl ?? ""));
         return ok({ index, carousel: await getCarousel(id) });
+      } else if (b.action === "remove_image") {
+        return ok(await removeImage(id, Number(b.index), b.slides));
+      } else if (b.action === "restore_image") {
+        return ok(await restoreImage(id, String(b.at ?? ""), String(b.url ?? "")));
       } else if (b.action === "import_images") {
         const added = await importBlogImages(id, String(b.url ?? ""));
         return ok({ added, carousel: await getCarousel(id) });

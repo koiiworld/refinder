@@ -19,6 +19,8 @@ import { importPostWithImages } from "./sample-html";
 
 export type Slide = { kind: "cover" | "content" | "cta"; headline: string; body: string; image: number | null };
 export type CarouselImage = { url: string; alt: string };
+/** 지운 사진 (30일 동안 되살리기 가능) */
+export type RemovedImage = CarouselImage & { at: string };
 /** 콘텐츠 유형별로 만들어 둔 결과 (다시 고르면 AI 없이 불러옴) */
 export type TypeVersion = { slides: Slide[]; caption: string; hashtags: string[]; hooks: string[] };
 export type CarouselStyle = { template: "photo" | "clean" | "bold"; accent: string; handle: string; design?: DesignRecipe | null; designRef?: string };
@@ -32,7 +34,7 @@ export type Carousel = {
   caption: string;
   hashtags: string[];
   images: CarouselImage[];
-  style: CarouselStyle & { hooks?: string[]; format?: string; niche?: string; sourceText?: string; sourceUrl?: string; contentType?: ContentTypeId; versions?: Partial<Record<ContentTypeId, TypeVersion>> };
+  style: CarouselStyle & { hooks?: string[]; format?: string; niche?: string; sourceText?: string; sourceUrl?: string; contentType?: ContentTypeId; versions?: Partial<Record<ContentTypeId, TypeVersion>>; removedImages?: RemovedImage[] };
   ai: { provider?: string; model?: string; at?: string };
   created_at: string;
   updated_at: string;
@@ -251,6 +253,7 @@ export async function saveCarousel(id: string, patch: { title?: string; slides?:
     image: s.image != null && Number.isInteger(Number(s.image)) && Number(s.image) >= 0 && Number(s.image) < c.images.length ? Number(s.image) : null,
   }));
   const style = { ...c.style, ...(patch.style ?? {}) };
+  style.removedImages = c.style?.removedImages; // 지운 사진 목록은 서버 것이 기준
   if (style.accent && !/^#[0-9a-f]{6}$/i.test(style.accent)) style.accent = DEFAULT_STYLE.accent;
   if (!["photo", "clean", "bold"].includes(style.template)) style.template = "photo";
   if (style.contentType && !CONTENT_TYPES.some((t) => t.id === style.contentType)) style.contentType = "general";
@@ -261,6 +264,33 @@ export async function saveCarousel(id: string, patch: { title?: string; slides?:
     id, String(patch.title ?? c.title).slice(0, 200), j(slides), String(patch.caption ?? c.caption).slice(0, 2200),
     j((patch.hashtags ?? c.hashtags).map((h) => String(h).replace(/^#/, "").replace(/\s+/g, "")).filter(Boolean).slice(0, 30)), j(style),
   ]);
+}
+
+const RESTORE_DAYS = 30;
+const liveRemoved = (r: RemovedImage[] | undefined) => (r ?? []).filter((x) => Date.now() - new Date(x.at).getTime() < RESTORE_DAYS * 86400_000);
+/** 사진 n번 빼기: 그 사진을 쓰던 카드는 '사진 없음', 뒤 번호는 하나씩 당김 (유형별 저장본 포함). 지운 사진은 되살리기 목록으로 */
+export async function removeImage(id: string, index: number, current?: Slide[]) {
+  const c = await getCarousel(id);
+  if (!c) throw new Error("캐러셀을 찾을 수 없어요.");
+  if (!Number.isInteger(index) || !c.images[index]) throw new Error("지울 사진을 다시 골라 주세요.");
+  const fix = (list: Slide[]) => list.map((s) => ({ ...s, image: s.image == null ? null : s.image === index ? null : s.image > index ? s.image - 1 : s.image }));
+  const slides = fix(Array.isArray(current) && current.length ? current : c.slides);
+  const versions = Object.fromEntries(Object.entries(c.style?.versions ?? {}).map(([k, v]) => [k, v ? { ...v, slides: fix(v.slides ?? []) } : v]));
+  const removed = [{ ...c.images[index], at: new Date().toISOString() }, ...liveRemoved(c.style?.removedImages)].slice(0, 40);
+  const images = c.images.filter((_, i) => i !== index);
+  await q("UPDATE carousels SET images=$2, slides=$3, style=$4, updated_at=NOW() WHERE id=$1", [id, j(images), j(slides), j({ ...c.style, versions, removedImages: removed })]);
+  return getCarousel(id);
+}
+/** 지운 사진 되살리기 → 사진 목록 맨 뒤에 다시 추가 */
+export async function restoreImage(id: string, at: string, url: string) {
+  const c = await getCarousel(id);
+  if (!c) throw new Error("캐러셀을 찾을 수 없어요.");
+  const removed = liveRemoved(c.style?.removedImages);
+  const hit = removed.find((x) => x.at === at && x.url === url);
+  if (!hit) throw new Error("되살릴 사진을 찾지 못했어요 (30일이 지나면 사라져요).");
+  const images = c.images.some((x) => x.url === hit.url) ? c.images : [...c.images, { url: hit.url, alt: hit.alt }].slice(0, 40);
+  await q("UPDATE carousels SET images=$2, style=$3, updated_at=NOW() WHERE id=$1", [id, j(images), j({ ...c.style, removedImages: removed.filter((x) => x !== hit) })]);
+  return getCarousel(id);
 }
 
 /** 내 사진 올리기 → 이 사이트 주소로 저장해 캐러셀 사진 목록에 추가 */

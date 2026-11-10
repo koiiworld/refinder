@@ -8,7 +8,8 @@ import { checkImageUrl } from "@/lib/official-images";
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; n: string }> }) {
   const { id, n } = await params;
   const c = await getCarousel(id);
-  const img = c?.images?.[Number(n)];
+  // r3 = 지운 사진 목록의 3번 (되살리기 미리보기)
+  const img = n.startsWith("r") ? c?.style?.removedImages?.[Number(n.slice(1))] : c?.images?.[Number(n)];
   if (!img?.url) return new Response("not found", { status: 404 });
   if (img.url.startsWith("/")) return Response.redirect(new URL(img.url, _req.url), 302);
   try {
