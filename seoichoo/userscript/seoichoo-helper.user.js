@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.4.0
+// @version      1.5.0
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -120,12 +120,17 @@
   };
   // 신청창에 뜨는 안내창(alert) 문구를 가로채서 읽는다. 자동 보내기 중에만 사용.
   const alertText = () => document.documentElement.getAttribute("data-sc-alert") || "";
+  // 안내 문구 → 상태. full = 상대 이웃이 5,000명이라 더 못 받음(건너뜀), limit = 내 하루 한도(멈춤)
   function classifyNotice(t) {
-    if (/하루|초과|제한|더\s*이상/.test(t)) return "limit";
+    t = String(t || "");
+    if (/(하루|오늘|일일|1일).{0,30}(초과|제한|최대|더\s*이상)|100\s*명/.test(t)) return "limit";
+    if (/5\s*,?\s*000|오천|상대.{0,20}(이웃|초과|가득|최대)|이웃\s*수.{0,15}(초과|최대|가득)|더\s*이상.{0,10}(받|추가할)/.test(t)) return "full";
     if (/이미/.test(t)) return "already";
-    if (/받지\s*않|할\s*수\s*없|차단|비공개/.test(t)) return "refused";
+    if (/받지\s*않|할\s*수\s*없|차단|비공개|초과|제한/.test(t)) return "refused";
     return "";
   }
+  // 다시 보내지 않을 상태들
+  const DONE = ["sent", "refused", "skipped", "already", "full"];
   function hookAlerts() {
     try {
       const w = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
@@ -138,7 +143,7 @@
   if (location.hostname === "m.blog.naver.com") {
     const cur = store.get("current", {});
     const id = new URLSearchParams(location.search).get("blogId") || "";
-    if (cur.auto && cur.blogId === id) hookAlerts();
+    if (cur.blogId === id) hookAlerts(); // 도우미가 연 신청창에서만
     onReady(buddyFormPage);
   } else {
     onReady(searchPanel);
@@ -172,15 +177,19 @@
       const done = fill();
       if (done || tries > 20) clearInterval(timer);
       if (!done && tries > 20) {
-        if (auto) {
-          const t = alertText();
-          const kind = classifyNotice(t);
-          if (kind === "already" || kind === "refused") record(acc, blogId, kind);
-          report(kind || "error", t || "신청 화면을 찾지 못함");
-          say(kind ? `자동 보내기: 건너뜀 (${t})` : "자동 보내기: 신청 화면을 찾지 못해 건너뛰어요.", "#b45309");
-        } else {
-          say("입력칸을 찾지 못했어요. 멘트는 복사해 두었으니 붙여넣고 직접 보내주세요.", "#b45309");
+        let t = alertText();
+        let kind = classifyNotice(t);
+        if (!kind) {
+          // 안내가 창이 아니라 화면 글자로 나오는 경우
+          const body = (document.body.innerText || "").replace(/\s+/g, " ").slice(0, 400);
+          if (classifyNotice(body)) { kind = classifyNotice(body); t = t || body.slice(0, 120); }
         }
+        if (kind && kind !== "limit") record(acc, blogId, kind);
+        if (auto) report(kind || "error", t || "신청 화면을 찾지 못함");
+        if (kind === "full") say("상대 이웃이 5,000명이라 신청할 수 없어요. 건너뛸게요.", "#b45309");
+        else if (kind) say(`신청할 수 없어서 건너뛰어요: ${t}`, "#b45309");
+        else if (auto) say("자동 보내기: 신청 화면을 찾지 못해 건너뛰어요.", "#b45309");
+        else say("입력칸을 찾지 못했어요. 멘트는 복사해 두었으니 붙여넣고 직접 보내주세요.", "#b45309");
       }
     }, 300);
 
@@ -221,7 +230,22 @@
       if (btn) {
         btn.style.outline = "3px solid #f59e0b";
         btn.style.outlineOffset = "2px";
-        btn.addEventListener("click", () => record(acc, blogId, "sent"), { capture: true });
+        btn.addEventListener("click", () => {
+          record(acc, blogId, "sent");
+          // 누른 뒤 뜬 안내로 이웃 5,000명 / 하루 한도 / 이미 신청 등을 확인한다
+          setTimeout(() => {
+            const t = alertText();
+            const kind = classifyNotice(t);
+            if (kind) {
+              record(acc, blogId, kind === "limit" ? "opened" : kind);
+              if (auto) report(kind, t);
+              say(kind === "full" ? "상대 이웃이 5,000명이라 신청이 안 됐어요. 건너뛸게요."
+                : kind === "limit" ? `오늘 신청 한도에 걸렸어요: ${t}` : `신청되지 않았어요: ${t}`, "#b45309");
+            } else if (t) {
+              say(`네이버 안내: ${t}`, "#15803d");
+            }
+          }, 2500);
+        }, { capture: true });
       }
       if (!auto) {
         say("멘트를 입력했어요. 내용을 확인하고 [확인]을 직접 눌러주세요.", "#15803d");
@@ -237,16 +261,7 @@
       setTimeout(() => {
         // 안내창이 가로채지지 않으면 click() 안에서 멈출 수 있어 먼저 알린다
         report("sent");
-        btn.click();
-        // 누른 뒤 안내창 문구로 한도 초과/이미 신청 등을 확인한다
-        setTimeout(() => {
-          const t = alertText();
-          const kind = classifyNotice(t);
-          if (kind) {
-            record(acc, blogId, kind === "limit" ? "opened" : kind);
-            report(kind, t);
-          }
-        }, 2500);
+        btn.click(); // 결과 확인은 위 click 핸들러가 한다
       }, rand(1500, 4000));
       return true;
     }
@@ -467,8 +482,8 @@
 
     // -------------------------------------------------------------- 목록
     const statusOf = (id) => (historyOf(acc)[id] || {}).status || "";
-    const LABEL = { sent: "보냄", refused: "불가", skipped: "건너뜀", opened: "열림" };
-    const pending = () => candidates.filter((c) => !["sent", "refused", "skipped"].includes(statusOf(c.blogId)));
+    const LABEL = { sent: "보냄", refused: "불가", skipped: "건너뜀", opened: "열림", already: "이미 이웃", full: "이웃 5000명" };
+    const pending = () => candidates.filter((c) => !DONE.includes(statusOf(c.blogId)));
 
     function render() {
       list.replaceChildren();
@@ -477,7 +492,7 @@
         const st = statusOf(c.blogId);
         const a = el("a", { href: `https://blog.naver.com/${encodeURIComponent(c.blogId)}`, target: "_blank", rel: "noopener", class: "n", title: c.blogName },
           `${c.nick || c.blogId} · ${c.blogName || ""}`);
-        const done = ["sent", "refused", "skipped"].includes(st);
+        const done = DONE.includes(st);
         const box = el("input", { type: "checkbox", style: "width:auto;margin:0", title: "자동 보내기 대상" });
         box.checked = !!c.sel && !done;
         box.disabled = done || running;
