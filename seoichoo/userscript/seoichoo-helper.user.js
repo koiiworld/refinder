@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.3.0
+// @version      1.4.0
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -12,7 +12,8 @@
 // @grant        GM_deleteValue
 // @grant        GM_setClipboard
 // @grant        GM_addValueChangeListener
-// @run-at       document-idle
+// @grant        unsafeWindow
+// @run-at       document-start
 // @noframes
 // ==/UserScript==
 
@@ -22,7 +23,9 @@
   // ---------------------------------------------------------------- 공통 설정
   const DAILY_LIMIT = 100;      // 네이버 정책상 계정당 하루 서이추 최대
   const SESSION_LIMIT = 20;     // 20명마다 쉬어가기 알림
-  const DEFAULT_COOLDOWN = 30;  // 다음 신청창을 열기까지 최소 대기(초)
+  const DEFAULT_COOLDOWN = 60;      // 신청 간격 최소(초)
+  const DEFAULT_COOLDOWN_MAX = 180; // 신청 간격 최대(초)
+  const MIN_COOLDOWN = 30;          // 이보다 짧게는 못 줄임
   const MAX_ACCOUNTS = 3;       // 계정 탭 최대 개수
   const POPUP_NAME = "seoichoo_buddy";
   const DEFAULT_MSG = [
@@ -36,7 +39,7 @@
     "안녕하세요 {닉네임}님, 블로그 분위기가 좋아서 이웃 맺고 싶어요. 잘 부탁드립니다!",
   ].join("\n");
   const OLD_DEFAULT_MSG = "안녕하세요 {닉네임}님! 글 잘 보고 갑니다. 서로이웃 맺고 자주 소통해요 :)";
-  const ACC_KEYS = ["history", "daily", "candidates", "keywords", "pages", "message", "cooldown"];
+  const ACC_KEYS = ["history", "daily", "candidates", "keywords", "pages", "message", "cooldown", "cooldownMax"];
 
   // 멘트 칸은 한 줄에 멘트 하나. 여러 줄이면 그중 하나를 무작위로 고른다 (직전 멘트는 가능하면 피함).
   function pickMessage(raw, last) {
@@ -85,9 +88,9 @@
     const prev = h[blogId] && h[blogId].status;
     h[blogId] = { status, at: new Date().toISOString() };
     aset(acc, "history", h);
-    if (status === "sent" && prev !== "sent") {
+    if ((status === "sent") !== (prev === "sent")) {
       const d = aget(acc, "daily", {});
-      d[today()] = (d[today()] || 0) + 1;
+      d[today()] = Math.max(0, (d[today()] || 0) + (status === "sent" ? 1 : -1));
       aset(acc, "daily", d);
     }
     store.set("ping", Date.now()); // 패널에 다시 그리라고 알림
@@ -110,8 +113,36 @@
     return (d.textContent || "").trim();
   };
 
-  if (location.hostname === "m.blog.naver.com") buddyFormPage();
-  else searchPanel();
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const onReady = (fn) => {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn, { once: true });
+    else fn();
+  };
+  // 신청창에 뜨는 안내창(alert) 문구를 가로채서 읽는다. 자동 보내기 중에만 사용.
+  const alertText = () => document.documentElement.getAttribute("data-sc-alert") || "";
+  function classifyNotice(t) {
+    if (/하루|초과|제한|더\s*이상/.test(t)) return "limit";
+    if (/이미/.test(t)) return "already";
+    if (/받지\s*않|할\s*수\s*없|차단|비공개/.test(t)) return "refused";
+    return "";
+  }
+  function hookAlerts() {
+    try {
+      const w = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+      const keep = (m) => { document.documentElement.setAttribute("data-sc-alert", String(m == null ? "" : m)); };
+      w.alert = function (m) { keep(m); };
+      w.confirm = function (m) { keep(m); return true; };
+    } catch (e) { /* 가로채기가 안 되면 안내창이 그대로 보인다 */ }
+  }
+
+  if (location.hostname === "m.blog.naver.com") {
+    const cur = store.get("current", {});
+    const id = new URLSearchParams(location.search).get("blogId") || "";
+    if (cur.auto && cur.blogId === id) hookAlerts();
+    onReady(buddyFormPage);
+  } else {
+    onReady(searchPanel);
+  }
 
   // ================================================================ 신청창: 멘트 자동 입력
   function buddyFormPage() {
@@ -121,6 +152,8 @@
     const acc = mine && cur.acc ? cur.acc : activeAcc();
     const template = mine && cur.message ? cur.message : pickMessage(aget(acc, "message", DEFAULT_MSG), "");
     const message = template.replaceAll("{닉네임}", (mine && cur.nick) || blogId);
+    const auto = mine && !!cur.auto;
+    const report = (status, detail) => store.set("result", { acc, blogId, status, detail: detail || "", at: Date.now() });
 
     const banner = el("div", {
       style: "position:fixed;left:0;right:0;top:0;z-index:2147483647;padding:10px 12px;" +
@@ -139,7 +172,15 @@
       const done = fill();
       if (done || tries > 20) clearInterval(timer);
       if (!done && tries > 20) {
-        say("입력칸을 찾지 못했어요. 멘트는 복사해 두었으니 붙여넣고 직접 보내주세요.", "#b45309");
+        if (auto) {
+          const t = alertText();
+          const kind = classifyNotice(t);
+          if (kind === "already" || kind === "refused") record(acc, blogId, kind);
+          report(kind || "error", t || "신청 화면을 찾지 못함");
+          say(kind ? `자동 보내기: 건너뜀 (${t})` : "자동 보내기: 신청 화면을 찾지 못해 건너뛰어요.", "#b45309");
+        } else {
+          say("입력칸을 찾지 못했어요. 멘트는 복사해 두었으니 붙여넣고 직접 보내주세요.", "#b45309");
+        }
       }
     }, 300);
 
@@ -152,8 +193,13 @@
         });
       if (!radio) return false;
       if (radio.disabled) {
-        say("이 블로그는 서로이웃 신청을 받지 않아요. 패널에서 [건너뛰기]를 누르세요.", "#b91c1c");
         record(acc, blogId, "refused");
+        if (auto) {
+          report("refused", "서로이웃 신청을 받지 않는 블로그");
+          say("서로이웃 신청을 받지 않는 블로그라 자동으로 건너뛰어요.", "#b91c1c");
+        } else {
+          say("이 블로그는 서로이웃 신청을 받지 않아요. 패널에서 [건너뛰기]를 누르세요.", "#b91c1c");
+        }
         return true;
       }
       if (!radio.checked) {
@@ -177,7 +223,31 @@
         btn.style.outlineOffset = "2px";
         btn.addEventListener("click", () => record(acc, blogId, "sent"), { capture: true });
       }
-      say("멘트를 입력했어요. 내용을 확인하고 [확인]을 직접 눌러주세요.", "#15803d");
+      if (!auto) {
+        say("멘트를 입력했어요. 내용을 확인하고 [확인]을 직접 눌러주세요.", "#15803d");
+        return true;
+      }
+      if (!btn) {
+        report("error", "확인 버튼을 찾지 못함");
+        say("자동 보내기: 확인 버튼을 찾지 못해 건너뛰어요.", "#b45309");
+        return true;
+      }
+      // 자동 보내기: 사람처럼 잠깐 뒤에 확인을 누른다
+      say("자동 보내기: 멘트를 넣었어요. 잠시 후 보냅니다…", "#15803d");
+      setTimeout(() => {
+        // 안내창이 가로채지지 않으면 click() 안에서 멈출 수 있어 먼저 알린다
+        report("sent");
+        btn.click();
+        // 누른 뒤 안내창 문구로 한도 초과/이미 신청 등을 확인한다
+        setTimeout(() => {
+          const t = alertText();
+          const kind = classifyNotice(t);
+          if (kind) {
+            record(acc, blogId, kind === "limit" ? "opened" : kind);
+            report(kind, t);
+          }
+        }, 2500);
+      }, rand(1500, 4000));
       return true;
     }
   }
@@ -217,7 +287,7 @@
       #sc-panel .row{display:flex;gap:6px;align-items:center}
       #sc-panel .muted{color:#6b7280;font-size:12px}
       #sc-panel .warn{background:#fef3c7;color:#92400e;border-radius:8px;padding:6px 8px;font-size:12px}
-      #sc-panel ul{list-style:none;margin:0;padding:0;border:1px solid #e5e7eb;border-radius:8px;max-height:200px;overflow:auto}
+      #sc-panel ul{list-style:none;margin:0;padding:0;border:1px solid #e5e7eb;border-radius:8px;min-height:90px;max-height:200px;overflow:auto;flex-shrink:0}
       #sc-panel li{display:flex;gap:6px;align-items:center;padding:5px 8px;border-bottom:1px solid #f3f4f6}
       #sc-panel li:last-child{border-bottom:0}
       #sc-panel li .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -231,11 +301,16 @@
     const kw = el("textarea", { rows: "3", placeholder: "검색어 (줄바꿈 또는 쉼표로 구분)\n예) 나는솔로1회, 나는솔로2회" });
     const pages = el("input", { type: "number", min: "1", max: "20", style: "width:64px" });
     const msg = el("textarea", { rows: "4", placeholder: "한 줄에 멘트 하나씩 적으세요" });
-    const cool = el("input", { type: "number", min: "10", max: "600", style: "width:64px" });
+    const cool = el("input", { type: "number", min: String(MIN_COOLDOWN), max: "600", style: "width:60px" });
+    const coolMax = el("input", { type: "number", min: String(MIN_COOLDOWN), max: "900", style: "width:60px" });
+    const autoInfo = el("div", { class: "muted", hidden: "" });
+    const selInfo = el("span", { class: "muted", style: "flex:1" });
+    let running = false, stopReq = false;
+    const autoBtn = el("button", { class: "pri", onclick: () => (running ? (stopReq = true) : autoRun()) }, "체크한 사람 자동 보내기");
     const warn = el("div", { class: "warn", hidden: "" });
     const info = el("div", { class: "muted" });
     const list = el("ul");
-    const nextBtn = el("button", { class: "pri", onclick: openNext }, "다음 신청창 열기");
+    const nextBtn = el("button", { onclick: openNext, title: "한 명씩 직접 확인하며 보내기" }, "다음 신청창 열기");
     const skipBtn = el("button", { onclick: skipCurrent }, "건너뛰기");
     const searchBtn = el("button", { onclick: search }, "대상 찾기");
     const minBtn = el("button", { onclick: () => panel.classList.toggle("min"), title: "접기/펴기" }, "–");
@@ -251,9 +326,14 @@
           el("span", { class: "muted", style: "flex:1" }, "멘트: 한 줄에 하나씩, 매번 무작위로 골라요. {닉네임}은 상대 닉네임으로 바뀜"),
           el("button", { onclick: addSamples, title: "준비된 예시 멘트 8개를 추가해요" }, "예시 멘트 넣기")),
         msg,
-        el("div", { class: "row" }, "신청 간격 최소", cool, "초"),
+        el("div", { class: "row" }, "신청 간격", cool, "~", coolMax, "초 무작위"),
         info,
+        el("div", { class: "row" }, selInfo,
+          el("button", { onclick: () => selectAll(true) }, "전체 선택"),
+          el("button", { onclick: () => selectAll(false) }, "선택 해제")),
         list,
+        autoBtn,
+        autoInfo,
         el("div", { class: "row" }, nextBtn, skipBtn,
           el("button", { onclick: clearList, style: "margin-left:auto" }, "목록 비우기")),
         el("div", { class: "muted" },
@@ -269,15 +349,19 @@
       const saved = aget(acc, "message", DEFAULT_MSG);
       msg.value = !String(saved).trim() || String(saved).trim() === OLD_DEFAULT_MSG ? DEFAULT_MSG : saved;
       cool.value = String(aget(acc, "cooldown", DEFAULT_COOLDOWN));
+      coolMax.value = String(aget(acc, "cooldownMax", DEFAULT_COOLDOWN_MAX));
       candidates = aget(acc, "candidates", []);
     }
     function persist() {
       aset(acc, "keywords", kw.value);
       aset(acc, "pages", Number(pages.value) || 3);
       aset(acc, "message", msg.value);
-      aset(acc, "cooldown", Math.max(10, Number(cool.value) || DEFAULT_COOLDOWN));
+      const lo = Math.max(MIN_COOLDOWN, Number(cool.value) || DEFAULT_COOLDOWN);
+      const hi = Math.max(lo, Number(coolMax.value) || DEFAULT_COOLDOWN_MAX);
+      aset(acc, "cooldown", lo);
+      aset(acc, "cooldownMax", hi);
     }
-    [kw, pages, msg, cool].forEach((i) => i.addEventListener("change", persist));
+    [kw, pages, msg, cool, coolMax].forEach((i) => i.addEventListener("change", persist));
 
     function addSamples() {
       const have = new Set(msg.value.split("\n").map((l) => l.trim()).filter(Boolean));
@@ -307,6 +391,7 @@
 
     function switchTo(id) {
       if (id === acc) return;
+      if (running) { alert("자동 보내기 중에는 탭을 바꿀 수 없어요. 먼저 멈춰 주세요."); return; }
       persist();
       acc = id;
       store.set("activeAcc", id);
@@ -392,8 +477,14 @@
         const st = statusOf(c.blogId);
         const a = el("a", { href: `https://blog.naver.com/${encodeURIComponent(c.blogId)}`, target: "_blank", rel: "noopener", class: "n", title: c.blogName },
           `${c.nick || c.blogId} · ${c.blogName || ""}`);
-        list.append(el("li", { class: cur.acc === acc && c.blogId === cur.blogId ? "cur" : "" }, a, el("span", { class: "s" }, LABEL[st] || "대기")));
+        const done = ["sent", "refused", "skipped"].includes(st);
+        const box = el("input", { type: "checkbox", style: "width:auto;margin:0", title: "자동 보내기 대상" });
+        box.checked = !!c.sel && !done;
+        box.disabled = done || running;
+        box.addEventListener("change", () => { c.sel = box.checked; aset(acc, "candidates", candidates); renderSel(); });
+        list.append(el("li", { class: cur.acc === acc && c.blogId === cur.blogId ? "cur" : "" }, box, a, el("span", { class: "s" }, LABEL[st] || "대기")));
       }
+      renderSel();
       info.textContent = `후보 ${candidates.length}명 · 남은 ${pending().length}명 · 오늘 보냄 ${todayCountOf(acc)}/${DAILY_LIMIT}`;
       const problem = accountMismatch();
       if (problem) {
@@ -405,9 +496,20 @@
       tick();
     }
 
+    const checked = () => pending().filter((c) => c.sel);
+    function renderSel() { selInfo.textContent = `체크 ${checked().length}명`; }
+    function selectAll(on) {
+      if (running) return;
+      for (const c of pending()) c.sel = on;
+      aset(acc, "candidates", candidates);
+      render();
+    }
+
     function tick() {
       const wait = Math.ceil((cooldownUntil - Date.now()) / 1000);
-      if (!warn.hidden) {
+      if (running) {
+        nextBtn.disabled = true; nextBtn.textContent = "자동 보내기 중";
+      } else if (!warn.hidden) {
         nextBtn.disabled = true; nextBtn.textContent = "다른 계정 탭이에요";
       } else if (todayCountOf(acc) >= DAILY_LIMIT) {
         nextBtn.disabled = true; nextBtn.textContent = "오늘 한도 도달";
@@ -479,8 +581,7 @@
       const url = `https://m.blog.naver.com/BuddyAddForm.naver?blogId=${encodeURIComponent(c.blogId)}`;
       const w = window.open(url, POPUP_NAME, "width=460,height=760");
       if (!w) alert("팝업이 차단됐어요. 주소창 오른쪽에서 이 사이트의 팝업을 허용해주세요.");
-      const sec = Math.max(10, Number(cool.value) || DEFAULT_COOLDOWN);
-      cooldownUntil = Date.now() + (sec + Math.random() * sec) * 1000; // 최소 간격 ~ 2배 사이 랜덤
+      cooldownUntil = Date.now() + nextGap();
       render();
     }
 
@@ -500,7 +601,112 @@
       render();
     }
 
-    try { GM_addValueChangeListener("ping", () => render()); } catch (e) { /* ignore */ }
+    // 설정한 간격(최소~최대) 사이 무작위 대기 시간(ms)
+    function nextGap() {
+      const lo = Math.max(MIN_COOLDOWN, Number(cool.value) || DEFAULT_COOLDOWN);
+      const hi = Math.max(lo, Number(coolMax.value) || DEFAULT_COOLDOWN_MAX);
+      return rand(lo, hi) * 1000;
+    }
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    async function waitResult(blogId, since, timeoutMs) {
+      const end = Date.now() + timeoutMs;
+      while (Date.now() < end && !stopReq) {
+        const r = store.get("result");
+        if (r && r.blogId === blogId && r.at >= since) return r;
+        await sleep(500);
+      }
+      return null;
+    }
+
+    async function waitWithCountdown(ms, label) {
+      const end = Date.now() + ms;
+      while (Date.now() < end && !stopReq) {
+        autoBtn.textContent = `■ 멈추기 · ${label} ${Math.ceil((end - Date.now()) / 1000)}초`;
+        await sleep(500);
+      }
+    }
+
+    function note(text) { autoInfo.textContent = text; autoInfo.hidden = false; }
+
+    async function autoRun() {
+      persist();
+      if (accountMismatch()) { render(); return; }
+      const n = checked().length;
+      if (!n) { alert("자동으로 보낼 사람을 목록에서 체크해 주세요."); return; }
+      const lo = Number(cool.value), hi = Number(coolMax.value);
+      if (!confirm(`체크한 ${n}명에게 서이추를 자동으로 보냅니다.\n` +
+          `· 간격 ${lo}~${hi}초 무작위, 멘트 무작위\n· 서이추를 안 받는 사람은 건너뜀\n` +
+          `· 한 번에 최대 ${SESSION_LIMIT}명, 하루 ${DAILY_LIMIT}명에서 멈춤\n진행할까요?`)) return;
+
+      const runAcc = acc;
+      let sentRun = 0;
+      running = true; stopReq = false;
+      note("자동 보내기를 시작했어요. 신청 창은 닫지 말고 그대로 두세요.");
+      render();
+      try {
+        while (!stopReq) {
+          if (accountMismatch()) { note("로그인한 계정이 이 탭과 달라서 멈췄어요."); break; }
+          if (todayCountOf(runAcc) >= DAILY_LIMIT) { note(`오늘 ${DAILY_LIMIT}명을 채워서 멈췄어요.`); break; }
+          if (sentRun >= SESSION_LIMIT) { note(`${SESSION_LIMIT}명을 보내서 멈췄어요. 좀 쉬었다가 다시 시작하세요.`); break; }
+          const c = checked()[0];
+          if (!c) { note(`체크한 사람에게 모두 보냈어요. (이번에 ${sentRun}명)`); break; }
+
+          const prev = store.get("current", {});
+          const chosen = pickMessage(msg.value, prev.acc === runAcc ? prev.message : "");
+          if (!chosen) { note("멘트를 한 줄 이상 적어주세요."); break; }
+          const since = Date.now();
+          store.set("current", { acc: runAcc, blogId: c.blogId, nick: c.nick, message: chosen, auto: true });
+          if (statusOf(c.blogId) === "") record(runAcc, c.blogId, "opened");
+          const w = window.open(`https://m.blog.naver.com/BuddyAddForm.naver?blogId=${encodeURIComponent(c.blogId)}`,
+            POPUP_NAME, "width=460,height=760");
+          if (!w) { note("팝업이 차단됐어요. 주소창 오른쪽에서 팝업을 허용한 뒤 다시 시작하세요."); break; }
+          autoBtn.textContent = `■ 멈추기 · ${c.nick || c.blogId}님에게 보내는 중`;
+          render();
+
+          const res = await waitResult(c.blogId, since, 30000);
+          if (stopReq) break;
+          let gap;
+          if (!res && statusOf(c.blogId) === "sent") {
+            sentRun++;
+            note(`${c.nick || c.blogId}님에게 보냈어요. (이번에 ${sentRun}명)`);
+            gap = nextGap();
+          } else if (!res) {
+            record(runAcc, c.blogId, "skipped");
+            note(`${c.nick || c.blogId}: 신청 창이 응답하지 않아 건너뛰었어요.`);
+            gap = rand(5000, 10000);
+          } else if (res.status === "sent") {
+            sentRun++;
+            note(`${c.nick || c.blogId}님에게 보냈어요. (이번에 ${sentRun}명)`);
+            gap = nextGap();
+          } else if (res.status === "limit") {
+            note(`네이버에서 한도 안내가 떴어요: ${res.detail}`);
+            break;
+          } else {
+            if (res.status === "error") record(runAcc, c.blogId, "skipped");
+            note(`${c.nick || c.blogId}: 건너뜀 (${res.detail || res.status})`);
+            gap = rand(4000, 8000); // 안 보낸 경우엔 짧게 쉬고 다음 사람
+          }
+          render();
+          await waitWithCountdown(gap, "다음까지");
+          // 보낸 직후 늦게 뜬 한도 안내 확인
+          const late = store.get("result");
+          if (late && late.blogId === c.blogId && late.status === "limit") {
+            note(`네이버에서 한도 안내가 떴어요: ${late.detail}`);
+            break;
+          }
+        }
+        if (stopReq) note("자동 보내기를 멈췄어요.");
+      } finally {
+        running = false; stopReq = false;
+        const cur = store.get("current", {});
+        if (cur.auto) store.set("current", Object.assign(cur, { auto: false }));
+        autoBtn.textContent = "체크한 사람 자동 보내기";
+        render();
+      }
+    }
+
+    try { GM_addValueChangeListener("ping", () => { if (!running) render(); else renderSel(); }); } catch (e) { /* ignore */ }
     loadFields();
     renderTabs();
     render();
