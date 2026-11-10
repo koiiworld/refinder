@@ -5,7 +5,7 @@ import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { H, W } from "./render";
 
 export const FPS = 30;
-type Draw = (canvas: HTMLCanvasElement, t: number) => void;
+type Draw = (canvas: HTMLCanvasElement, t: number) => void | Promise<void>;
 
 async function pickCodec() {
   if (typeof VideoEncoder === "undefined") return null;
@@ -30,7 +30,7 @@ async function encodeWebCodecs(cfg: VideoEncoderConfig, draw: Draw, seconds: num
   const frames = Math.round(seconds * FPS);
   for (let i = 0; i < frames; i++) {
     if (failed) throw failed;
-    draw(canvas, frames > 1 ? i / (frames - 1) : 1);
+    await draw(canvas, frames > 1 ? i / (frames - 1) : 1);
     const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1_000_000) / FPS), duration: Math.round(1_000_000 / FPS) });
     enc.encode(frame, { keyFrame: i % (FPS * 2) === 0 });
     frame.close();
@@ -51,7 +51,7 @@ async function encodeRecorder(draw: Draw, seconds: number, onProgress?: (p: numb
   canvas.height = H;
   if (typeof MediaRecorder === "undefined" || !canvas.captureStream) throw new Error("이 브라우저는 영상 만들기를 지원하지 않아요. 크롬이나 엣지에서 해 주세요.");
   const type = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
-  draw(canvas, 0);
+  await draw(canvas, 0);
   const stream = canvas.captureStream(FPS);
   const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 8_000_000 } : undefined);
   const parts: Blob[] = [];
@@ -62,10 +62,11 @@ async function encodeRecorder(draw: Draw, seconds: number, onProgress?: (p: numb
   await new Promise<void>((ok) => {
     const tick = () => {
       const t = Math.min(1, (performance.now() - t0) / (seconds * 1000));
-      draw(canvas, t);
-      onProgress?.(t);
-      if (t < 1) requestAnimationFrame(tick);
-      else ok();
+      void Promise.resolve(draw(canvas, t)).then(() => {
+        onProgress?.(t);
+        if (t < 1) requestAnimationFrame(tick);
+        else ok();
+      });
     };
     requestAnimationFrame(tick);
   });

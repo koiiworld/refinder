@@ -1,4 +1,5 @@
 import {parseRepurposeCards} from "./repurpose-cards";
+import type { CardVideo } from "./carousel-video-types";
 import "server-only";
 import crypto from "node:crypto";
 import { q, q1, newId, j } from "./db";
@@ -17,7 +18,7 @@ import { importPostWithImages } from "./sample-html";
  * - 이미지는 브라우저에서 그림(서버 부담 없음) → 사진 앱에 저장/공유
  */
 
-export type Slide = { kind: "cover" | "content" | "cta"; headline: string; body: string; image: number | null };
+export type Slide = { kind: "cover" | "content" | "cta"; headline: string; body: string; image: number | null; video?: CardVideo };
 export type CarouselImage = { url: string; alt: string };
 /** 지운 사진 (30일 동안 되살리기 가능) */
 export type RemovedImage = CarouselImage & { at: string };
@@ -248,7 +249,10 @@ export async function regenerateHooks(id: string) {
 export async function saveCarousel(id: string, patch: { title?: string; slides?: Slide[]; caption?: string; hashtags?: string[]; style?: Partial<CarouselStyle> & { contentType?: ContentTypeId } }) {
   const c = await getCarousel(id);
   if (!c) throw new Error("캐러셀을 찾을 수 없습니다.");
+  // AI 카드 영상은 서버에 있는 최신 상태로 (브라우저가 보낸 건 작업 번호만 믿음)
+  const vids = new Map(c.slides.filter((s) => s.video?.jobId).map((s) => [s.video!.jobId, s.video!]));
   const slides = (patch.slides ?? c.slides).slice(0, 15).map((s) => ({
+    ...(s.video?.jobId && vids.has(s.video.jobId) ? { video: vids.get(s.video.jobId) } : {}),
     kind: (["cover", "content", "cta"].includes(s.kind) ? s.kind : "content") as Slide["kind"],
     headline: String(s.headline ?? "").slice(0, 80),
     body: String(s.body ?? "").slice(0, 300),

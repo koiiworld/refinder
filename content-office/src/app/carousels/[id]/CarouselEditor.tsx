@@ -3,6 +3,7 @@
 import Link from "next/link";
 import HashtagInput from "@/components/HashtagInput";
 import MotionPanel from "../MotionPanel";
+import CardVideoBox from "../CardVideoBox";
 import { formatHashtags, hashtagTokens } from "@/lib/caption-styles";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -132,6 +133,24 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
     }
     setBusy("");
   }
+
+  /** 서버의 카드 AI 영상 상태를 지금 화면 카드에 합치기 (작업 번호 기준, 화면에서 고친 글자는 그대로) */
+  function mergeVideos(next: Carousel) {
+    const byJob = new Map(next.slides.filter((s) => s.video?.jobId).map((s) => [s.video!.jobId, s.video!]));
+    setSlides((cur) => cur.map((s, i) => {
+      const v = s.video?.jobId ? byJob.get(s.video.jobId) : next.slides[i]?.video;
+      if (s.video?.jobId && !byJob.has(s.video.jobId) && !next.slides[i]?.video) { const { video: _v, ...rest } = s; return rest; }
+      return v ? { ...s, video: v } : s;
+    }));
+  }
+  const pendingVideo = slides.some((s) => s.video && !s.video.url && !["failed", "nsfw", "canceled", "error"].includes(s.video.status));
+  useEffect(() => {
+    if (!pendingVideo) return;
+    const t = setInterval(async () => {
+      try { mergeVideos(await api<Carousel>(`/api/carousels/${c.id}`, "POST", { action: "card_video_refresh" })); } catch {}
+    }, 10_000);
+    return () => clearInterval(t);
+  }, [pendingVideo, c.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function removePhoto(n: number) {
     if (!confirm(`사진 ${n + 1}을(를) 지울까요?\n이 사진을 쓰던 카드는 '사진 없음'이 되고, 뒤 사진 번호는 하나씩 당겨져요.\n'지운 사진'에서 30일 안에 되살릴 수 있어요.`)) return;
@@ -280,7 +299,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
           </div>
         </div>
         {msg && <div className={`notice ${msg.ok ? "notice-ok" : "notice-bad"} small`}>{msg.text}</div>}
-        <MotionPanel title={c.title} slides={slides} imgFor={(s) => (s.image != null ? imgs[s.image] ?? null : null)} style={style} fontReady={fontReady} canvases={canvases} disabled={!!busy} onBusy={(b) => setBusy(b ? "export" : "")} beforeExport={async () => { if (dirty) await save(true); }} />
+        <MotionPanel carouselId={c.id} title={c.title} slides={slides} imgFor={(s) => (s.image != null ? imgs[s.image] ?? null : null)} style={style} fontReady={fontReady} canvases={canvases} disabled={!!busy} onBusy={(b) => setBusy(b ? "export" : "")} beforeExport={async () => { if (dirty) await save(true); }} />
         <div className="row" style={{ gap: 8 }}>
           {TEMPLATES.map((t) => (
             <button key={t.id} className={`btn btn-sm ${style.template === t.id ? "btn-primary" : ""}`} onClick={() => { setStyle({ ...style, template: t.id, design: null, designRef: "" }); setDirty(true); }}>{t.label}</button>
@@ -400,6 +419,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
               <option value="">사진 없음</option>
               {c.images.map((im, n) => <option key={n} value={n}>사진 {n + 1}{im.alt ? ` · ${im.alt.slice(0, 20)}` : ""}</option>)}
             </select>
+            <CardVideoBox carouselId={c.id} index={i} slide={s} slides={slides} disabled={!!busy} onCarousel={mergeVideos} />
             <CarouselTextAI id={c.id} kind="slide" index={i} slides={slides} disabled={!!busy} onBusy={b=>setBusy(b?'text':'')} onApply={draft=>{setSlides(current=>current.map((slide,n)=>n===i?{...slide,headline:draft.headline??slide.headline,body:draft.body??slide.body}:slide));setDirty(true);}}/>
           </section>
         ))}

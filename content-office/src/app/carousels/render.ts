@@ -16,7 +16,10 @@ export const MOTION_EFFECTS: { id: MotionEffect; label: string }[] = [
   { id: "still", label: "사진 고정 (글자만 움직임)" },
 ];
 /** 지금 그리는 프레임의 진행도 (null = 일반 사진 저장) */
-let motion: { t: number; sec: number; effect: MotionEffect; text: number } | null = null;
+let motion: { t: number; sec: number; effect: MotionEffect; text: number; textAnim: boolean } | null = null;
+/** 카드 그림: 사진 또는 AI 영상의 지금 프레임 */
+export type Pic = HTMLImageElement | HTMLVideoElement;
+const picSize = (p: Pic) => (p instanceof HTMLVideoElement ? [p.videoWidth, p.videoHeight] : [p.naturalWidth, p.naturalHeight]);
 const ease = (x: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
 
 /** 글자 너비에 맞춰 줄바꿈 (띄어쓰기 우선, 긴 단어는 글자 단위) */
@@ -58,18 +61,20 @@ function fitLines(ctx: CanvasRenderingContext2D, text: string, weight: number, s
   return { lines: wrap(ctx, text, max).slice(0, maxLines), size: s };
 }
 
-function cover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
-  const r = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+function cover(ctx: CanvasRenderingContext2D, img: Pic, x: number, y: number, w: number, h: number) {
+  const [nw, nh] = picSize(img);
+  if (!nw || !nh) return;
+  const r = Math.max(w / nw, h / nh);
   let sw = w / r, sh = h / r, dx = 0;
   if (motion && motion.effect !== "still") {
     // 사진 영역 안에서만 움직임 (테두리·모양은 그대로)
     const t = motion.t, z = motion.effect === "zoomIn" ? 1 + 0.14 * t : motion.effect === "zoomOut" ? 1.14 - 0.14 * t : 1.12;
     sw /= z; sh /= z;
-    const room = (img.naturalWidth - sw) / 2;
+    const room = (nw - sw) / 2;
     if (motion.effect === "panLeft") dx = room * (1 - 2 * t) * 0.9;
     if (motion.effect === "panRight") dx = -room * (1 - 2 * t) * 0.9;
   }
-  ctx.drawImage(img, (img.naturalWidth - sw) / 2 + dx, (img.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
+  ctx.drawImage(img, (nw - sw) / 2 + dx, (nh - sh) / 2, sw, sh, x, y, w, h);
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -106,7 +111,7 @@ function centered(ctx: CanvasRenderingContext2D, slide: Slide, opt: { weight: nu
 }
 
 function drawText(ctx: CanvasRenderingContext2D, lines: string[], x: number, y: number, size: number, lineH = 1.25) {
-  if (motion) {
+  if (motion?.textAnim) {
     // 제목 → 본문 순서로 아래에서 살짝 올라오며 나타남
     const k = motion.text++;
     const a = ease((motion.sec - 0.15 - k * 0.35) / 0.8);
@@ -119,8 +124,8 @@ function drawText(ctx: CanvasRenderingContext2D, lines: string[], x: number, y: 
 }
 
 /** 모션 영상의 한 프레임 (t: 0~1). 끝나면 일반 그리기로 돌아감 */
-export function renderMotionFrame(canvas: HTMLCanvasElement, slide: Slide, index: number, total: number, img: HTMLImageElement | null, style: CarouselStyle, t: number, seconds: number, effect: MotionEffect) {
-  motion = { t, sec: t * seconds, effect, text: 0 };
+export function renderMotionFrame(canvas: HTMLCanvasElement, slide: Slide, index: number, total: number, img: Pic | null, style: CarouselStyle, t: number, seconds: number, effect: MotionEffect, textAnim = false) {
+  motion = { t, sec: t * seconds, effect, text: 0, textAnim };
   try {
     renderSlide(canvas, slide, index, total, img, style);
   } finally {
@@ -128,7 +133,7 @@ export function renderMotionFrame(canvas: HTMLCanvasElement, slide: Slide, index
   }
 }
 
-export function renderSlide(canvas: HTMLCanvasElement, slide: Slide, index: number, total: number, img: HTMLImageElement | null, style: CarouselStyle) {
+export function renderSlide(canvas: HTMLCanvasElement, slide: Slide, index: number, total: number, img: Pic | null, style: CarouselStyle) {
   if (canvas.width !== W) canvas.width = W;
   if (canvas.height !== H) canvas.height = H;
   const ctx = canvas.getContext("2d")!;
@@ -265,7 +270,7 @@ export function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 /** 학습한 색·여백·글자 크기를 실제 내보내기에도 반영 */
-function renderLearned(ctx: CanvasRenderingContext2D, slide: Slide, index: number, total: number, img: HTMLImageElement | null, style: CarouselStyle) {
+function renderLearned(ctx: CanvasRenderingContext2D, slide: Slide, index: number, total: number, img: Pic | null, style: CarouselStyle) {
   const d = cleanRecipe(style.design), pad = d.spacing === "airy" ? 100 : 64;
   const weight = d.typography === "strong" ? 900 : 600;
   ctx.textBaseline = "top"; ctx.textAlign = "left";

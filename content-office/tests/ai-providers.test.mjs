@@ -2400,3 +2400,27 @@ test('🖼 지운 사진은 블로그 글 사진 다시 가져오기로 되살�
  assert.equal(imp.status,502);assert.match(imp.data.error,/지운 사진은 다시 가져오지 않아요/);
  const after=(await call('/api/carousels/'+t.id)).data;assert(!after.images.some(x=>x.url===first),'지운 사진은 다시 안 들어옴');assert.equal(after.images.length,n-1);
 });
+
+test('🎬 캐러셀 카드 사진 → AI 영상: 비용 확인 필수 · 움직임 프롬프트 · 상태 갱신 · 같은 주소로 영상 · 저장해도 유지 · 빼기', async()=>{
+ const t=(await call('/api/carousels','POST',{topic:'카드영상시험'})).data;
+ const up=(await call(`/api/carousels/${t.id}`,'POST',{action:'upload',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='})).data;
+ let c=(await call('/api/carousels/'+t.id)).data;const slides=c.slides.map((s,i)=>({...s,image:i===0?up.index:null}));
+ await call('/api/carousels/'+t.id,'PUT',{title:c.title,slides,caption:c.caption,hashtags:c.hashtags,style:c.style});
+ assert.equal((await call(`/api/carousels/${t.id}`,'POST',{action:'card_video_estimate',index:1,motions:['boil']})).status,502,'사진 없는 카드는 안 됨');
+ const est=await call(`/api/carousels/${t.id}`,'POST',{action:'card_video_estimate',index:0,motions:['boil','steam']});assert.equal(est.status,200,JSON.stringify(est.data));assert.equal(est.data.seconds,5);
+ await call('/__reset','POST',undefined,MOCK);
+ assert.equal((await call(`/api/carousels/${t.id}`,'POST',{action:'card_video',index:0,motions:['boil']})).status,400,'비용 확인 없이는 안 만듦');
+ assert.deepEqual((await mockLog()).filter(x=>x.path.includes('wan')),[]);
+ let r=await call(`/api/carousels/${t.id}`,'POST',{action:'card_video',index:0,motions:['boil','noodles'],confirm:true});assert.equal(r.status,200,JSON.stringify(r.data));
+ const v=r.data.slides[0].video;assert(v.jobId);assert.match(v.prompt,/보글보글/);
+ const sent=(await mockLog()).find(x=>x.path==='/wan/v2.6/image-to-video');assert(sent,'Wan 요청');assert.match(sent.body.prompt,/bubbles/);assert.match(sent.body.prompt,/noodles/);assert.match(sent.body.image_url,/^https:\/\/app\.example\.test\/api\/img\//);assert.match(sent.body.negative_prompt,/hands/);
+ assert.equal((await call(`/api/carousels/${t.id}`,'POST',{action:'card_video',index:0,motions:['boil'],confirm:true})).status,502,'만드는 중엔 두 번 안 만듦');
+ for(let k=0;k<4&&!r.data.slides[0].video.url;k++)r=await call(`/api/carousels/${t.id}`,'POST',{action:'card_video_refresh'});
+ assert(r.data.slides[0].video.url,'완성 영상 주소');
+ const vid=await fetch(`${BASE}/api/carousels/${t.id}/video/${v.jobId}`);assert.equal(vid.status,200);assert.match(vid.headers.get('content-type')??'',/video|octet/);
+ assert.equal((await fetch(`${BASE}/api/carousels/${t.id}/video/mj_nope`)).status,404);
+ const stale=r.data.slides.map(s=>s.video?{...s,video:{jobId:s.video.jobId,status:'queued'}}:s);
+ await call('/api/carousels/'+t.id,'PUT',{title:c.title,slides:stale,caption:c.caption,hashtags:c.hashtags,style:c.style});
+ assert((await call('/api/carousels/'+t.id)).data.slides[0].video.url,'저장해도 서버 영상 상태 유지');
+ r=await call(`/api/carousels/${t.id}`,'POST',{action:'card_video_remove',index:0});assert.equal(r.status,200);assert.equal(r.data.slides[0].video,undefined);
+});
