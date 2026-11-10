@@ -131,8 +131,10 @@ export async function importBlogImages(id: string, url: string) {
   const c = await getCarousel(id);
   if (!c) throw new Error("캐러셀을 찾을 수 없습니다.");
   const post = await importPostWithImages(url, await allowedHosts());
-  const add = post.images.filter((u) => !c.images.some((x) => x.url === u)).map((u, i) => ({ url: u, alt: `${post.title.slice(0, 20)} ${i + 1}` }));
-  if (!add.length) throw new Error("이 글에서 새로 가져올 사진을 찾지 못했어요.");
+  // 지운 사진(30일 목록)은 다시 가져오지 않음
+  const removed = new Set((c.style?.removedImages ?? []).map((x) => x.url));
+  const add = post.images.filter((u) => !c.images.some((x) => x.url === u) && !removed.has(u)).map((u, i) => ({ url: u, alt: `${post.title.slice(0, 20)} ${i + 1}` }));
+  if (!add.length) throw new Error(post.images.some((u) => removed.has(u)) ? "이 글에서 새로 가져올 사진이 없어요. 지운 사진은 다시 가져오지 않아요 — 필요하면 아래 '지운 사진'에서 되살려 주세요." : "이 글에서 새로 가져올 사진을 찾지 못했어요.");
   const images = [...c.images, ...add].slice(0, 40);
   await q("UPDATE carousels SET images=$2, updated_at=NOW() WHERE id=$1", [id, j(images)]);
   return images.length - c.images.length;

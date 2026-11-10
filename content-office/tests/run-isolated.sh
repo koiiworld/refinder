@@ -28,7 +28,7 @@ if(path.isAbsolute(fs.existsSync(path.join(dst,'node_modules/.bin/next'))?fs.rea
 }
 NODE
 cd "$DST"
-node --test tests/carousel-sources.test.mjs
+node --test tests/carousel-sources.test.mjs && node --conditions=react-server --test tests/post-images.test.mjs
 env -i PATH="$PATH" HOME="$HOME" NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 ./node_modules/.bin/next build > build.log 2>&1 || { tail -40 build.log; exit 1; }
 # 격리 복사본 이외의 데이터는 지우지 않음
 [ "$PWD" = "/tmp/co-test" ] || exit 1

@@ -2390,3 +2390,13 @@ test('📅 캘린더: 완료한 할 일은 아래 ✅ 완료 칸 · 되돌리기
  const r=await call('/api/todos/'+t.id,'PUT',{done:false});assert.equal(r.status,200);assert.equal(r.data.done_at??null,null);
  page=await (await fetch(BASE+'/calendar')).text();assert(page.indexOf('캘린더완료칸시험')>0);assert(!page.includes('완료 취소 — 다시 할 일로')||page.indexOf('캘린더완료칸시험')<page.indexOf('✅ 완료'));
 });
+
+test('🖼 지운 사진은 블로그 글 사진 다시 가져오기로 되살아나지 않음', async()=>{
+ const t=(await call('/api/carousels','POST',{topic:'사진재가져오기시험'})).data;
+ let imp=await call(`/api/carousels/${t.id}`,'POST',{action:'import_images',url:'https://blog.naver.com/algo_kitchen/224458356410'});assert.equal(imp.status,200,JSON.stringify(imp.data));
+ const n=imp.data.carousel.images.length;assert(n>=1);const first=imp.data.carousel.images[0].url;
+ const r=await call(`/api/carousels/${t.id}`,'POST',{action:'remove_image',index:0});assert.equal(r.status,200);
+ imp=await call(`/api/carousels/${t.id}`,'POST',{action:'import_images',url:'https://blog.naver.com/algo_kitchen/224458356410'});
+ assert.equal(imp.status,502);assert.match(imp.data.error,/지운 사진은 다시 가져오지 않아요/);
+ const after=(await call('/api/carousels/'+t.id)).data;assert(!after.images.some(x=>x.url===first),'지운 사진은 다시 안 들어옴');assert.equal(after.images.length,n-1);
+});

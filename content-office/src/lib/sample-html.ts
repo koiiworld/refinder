@@ -84,10 +84,17 @@ export async function importPostWithImages(raw: string, allowedHosts: string[]) 
 /** 글 본문 사진만 골라냄 (프로필·아이콘·스티커 제외) */
 export function postImages(html: string, url: URL): string[] {
   const start = Math.max(0, html.search(/se-main-container|class="(?:tt_article_useless_p_margin|entry-content|article-view|contents_style)"|<article\b/i));
-  const body = html.slice(start, start + 1_500_000);
+  let body = html.slice(start, start + 1_500_000);
+  // 본문 끝(공감·댓글·인기글 영역)부터는 다른 글 사진이라 버림
+  const end = body.search(/class="[^"]*\b(?:post_footer_contents|wrap_postcomment|area_sympathy|post-btn)\b/i);
+  if (end > 0) body = body.slice(0, end);
   const out: string[] = [];
   for (const m of body.matchAll(/<img\b[^>]*>/gi)) {
     const tag = m[0];
+    // 링크 카드(다른 글·사이트 미리보기)의 썸네일은 이 글 사진이 아님
+    const comp = body.lastIndexOf('class="se-component ', m.index);
+    if (comp >= 0 && /se-oglink/i.test(body.slice(comp, comp + 80))) continue;
+    if (/dthumb-phinf\.pstatic\.net|blogthumb\.pstatic\.net|og_thumbnail|link-thumbnail/i.test(tag)) continue;
     let src = (/\bdata-lazy-src=["']([^"']+)["']/i.exec(tag) ?? /\bdata-src=["']([^"']+)["']/i.exec(tag) ?? /\bsrc=["']([^"']+)["']/i.exec(tag))?.[1];
     if (!src || src.startsWith("data:")) continue;
     src = src.replace(/&amp;/g, "&");
