@@ -58,6 +58,32 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
   const shown = events.filter((e) => show[e.cat]);
   const on = (d: string) => shown.filter((e) => e.start <= d && e.end >= d);
   const list = useMemo(() => (day ? on(day) : shown), [day, shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** 완료한 할 일 → 다시 할 일로 (완료 취소) */
+  async function undo(e: CalEvent) {
+    if (!e.todoId) return;
+    setBusy(`undo:${e.id}`);
+    try {
+      await api(`/api/todos/${e.todoId}`, "PUT", { done: false });
+      router.refresh();
+    } catch (x) {
+      alert((x as Error).message);
+    }
+    setBusy("");
+  }
+  const row = (e: CalEvent) => (
+    <div key={e.id} className="row" style={{ flexWrap: "nowrap", gap: 0, borderBottom: "1px solid var(--line)" }}>
+      <button className="list-item" style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: 0, cursor: "pointer", gap: 10, flexWrap: "nowrap", color: e.done ? "var(--muted)" : undefined }} onClick={() => setOpen(e)}>
+        <span className="dot" style={{ background: evColor(e), flexShrink: 0 }} />
+        <span className="small" style={{ flexShrink: 0, width: 78, textDecoration: e.done ? "line-through" : undefined }}>{md(e.start)}{e.end !== e.start ? `~${md(e.end)}` : ""}</span>
+        <span className="small ellipsis" style={{ flex: 1, textDecoration: e.done ? "line-through" : undefined }}>{e.done ? e.title : <b>{e.title}</b>} <span className="tiny muted">· {labels[e.cat]}{e.sub ? ` · ${e.sub}` : ""}</span></span>
+      </button>
+      {e.done && e.todoId && (
+        <button className="btn btn-sm btn-ghost" style={{ flexShrink: 0, marginRight: 8 }} disabled={!!busy} title="완료 취소 — 다시 할 일로" aria-label={`${e.title} 완료 취소`} onClick={() => void undo(e)}>
+          {busy === `undo:${e.id}` ? <span className="spinner" /> : "↺ 되돌리기"}
+        </button>
+      )}
+    </div>
+  );
 
   /** 아이디어로 저장 → 아이디어 노트에서 바로 열기 */
   async function saveIdea(ev: CalEvent, seed?: string) {
@@ -158,13 +184,13 @@ export default function CalendarView({ ym, today, events, labels, blogs }: { ym:
         </div>
         <div className="list">
           {!list.length && <div className="list-item small muted">일정이 없어요.</div>}
-          {list.map((e) => (
-            <button key={e.id} className="list-item" style={{ width: "100%", textAlign: "left", background: "none", border: 0, borderBottom: "1px solid var(--line)", cursor: "pointer", gap: 10, flexWrap: "nowrap" }} onClick={() => setOpen(e)}>
-              <span className="dot" style={{ background: evColor(e), flexShrink: 0 }} />
-              <span className="small" style={{ flexShrink: 0, width: 78 }}>{md(e.start)}{e.end !== e.start ? `~${md(e.end)}` : ""}</span>
-              <span className="small ellipsis" style={{ flex: 1 }}><b>{e.title}</b> <span className="tiny muted">· {labels[e.cat]}{e.sub ? ` · ${e.sub}` : ""}</span></span>
-            </button>
-          ))}
+          {list.filter((e) => !e.done).map((e) => row(e))}
+          {list.some((e) => e.done) && (
+            <>
+              <div className="list-item tiny muted" style={{ background: "var(--panel-2)", borderBottom: "1px solid var(--line)" }}>✅ 완료 ({list.filter((e) => e.done).length})</div>
+              {list.filter((e) => e.done).map((e) => row(e))}
+            </>
+          )}
         </div>
       </section>
 

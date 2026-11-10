@@ -2381,3 +2381,12 @@ test('🔎 새 캐러셀: 블로그 예전 글 검색 · 만든 글도 순위에
  assert.equal((await call('/api/carousels/sources/search?blogId=blog_algokitchen&query=')).status,400);
  const page=await (await fetch(BASE+'/carousels')).text();assert(page.includes('글 제목·키워드 검색 또는 글 주소'));
 });
+
+test('📅 캘린더: 완료한 할 일은 아래 ✅ 완료 칸 · 되돌리기로 다시 할 일', async()=>{
+ const t=(await call('/api/todos','POST',{title:'캘린더완료칸시험',due_date:kstDate(0)})).data;
+ await call('/api/todos/'+t.id,'PUT',{done:true});
+ let page=await (await fetch(BASE+'/calendar')).text();
+ assert(page.includes('✅ 완료'));assert(page.includes('되돌리기'));assert(page.indexOf('캘린더완료칸시험')>page.indexOf('✅ 완료'),'완료 칸 아래에 표시');
+ const r=await call('/api/todos/'+t.id,'PUT',{done:false});assert.equal(r.status,200);assert.equal(r.data.done_at??null,null);
+ page=await (await fetch(BASE+'/calendar')).text();assert(page.indexOf('캘린더완료칸시험')>0);assert(!page.includes('완료 취소 — 다시 할 일로')||page.indexOf('캘린더완료칸시험')<page.indexOf('✅ 완료'));
+});
