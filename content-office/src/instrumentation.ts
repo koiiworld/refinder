@@ -5,5 +5,7 @@ export async function register() {
     ensureWorker();
     const { startKeySync } = await import("./lib/keystore");
     startKeySync();
+    const { startKeepAlive } = await import("./lib/keepalive");
+    startKeepAlive();
   }
 }
