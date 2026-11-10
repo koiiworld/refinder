@@ -8,6 +8,9 @@
 - **📱 인스타 운영** `/instagram` (`ig-ops.ts`, `ig-ops-types.ts`, 표 `ig_ops`, 휴지통 접두사 `igo_`): 릴스 대본(후킹 26공식·점수·초 단위 구성) · 댓글 답글(6분류) · 프로필 점수(12항목 100점, 합계는 코드가 계산) · 주간 계획 · 잘 된 영상(계정 중앙값 대비 배수는 코드 계산, 3배↑만 AI). '내 말투'는 settings key `ig_voice`. 담당 AI는 carousel 단계. 출처: instagram-agent-skill(MIT). 맥 `~/.claude/skills/ig-*`에도 원본 스킬 13개 설치.
 - **해시태그 입력**: `components/HashtagInput.tsx` + `lib/caption-styles.ts`(formatHashtags/hashtagTokens). 스페이스·쉼표·엔터·붙여넣기 → 자동 `#`. 블로그 글·캐러셀·캐러셀 AI 새 안 모두 사용. 새 해시태그 칸을 만들면 이걸 쓸 것.
 - **캐러셀**: 채널 변환 '캐러셀로 만들기'는 카드 문구까지만(캡션·해시태그 비움). 캡션은 스타일 선택(CAPTION_STYLES) 후 사용자가 버튼으로 생성. 사진 ✕ 지우기 → `style.removedImages`(30일) → 되살리기, 카드 사진 번호 자동 당김(`removeImage`/`restoreImage`). 새 캐러셀 화면: 이미 만든 글도 순위에 '✅ 열기'로 남김, 검색칸(로컬 필터 + `/api/carousels/sources/search` 예전 글). 검색 로직 공용 `lib/blog-post-search.ts`.
+- **🎞 모션 캐러셀** (`carousels/MotionPanel.tsx`, `motion-video.ts`, `render.ts`의 `renderMotionFrame`): 브라우저에서 카드별 MP4(WebCodecs H.264 + `mp4-muxer`, 1080×1350·30fps, 3/5/7초). 사진은 카드 안에서 확대/축소/좌우 이동, 글자는 제목→본문 순서로 떠오름. 서버·맥·AI 비용 없음. 미지원 브라우저는 MediaRecorder.
+- 캘린더 목록: 완료한 할 일은 아래 '✅ 완료' 칸(회색·가운데 줄), ↺ 되돌리기 = PUT /api/todos/:id {done:false}.
+- ⚠️ 맥 재시작 빌드가 `.next/types`(옛 페이지 참조) 때문에 실패할 수 있음 → 페이지를 지운 뒤엔 `rm -rf .next/types` 후 재시작.
 - 글 편집기 본문은 높이 조절 가능한 스크롤 칸(`.editor-body`, localStorage `editor-body-height`).
 - 테스트: 격리 2 + 10 + 86 통과. ⚠️ UI 확인용 서버를 /tmp/co-test에서 띄웠으면 반드시 끄고 테스트(같은 PGlite 파일을 잡아 DB가 깨짐).
 
