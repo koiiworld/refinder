@@ -255,6 +255,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tb:hover { background: var(--panel-2); }
 .tb.on { background: var(--accent-soft); color: var(--accent); }
 .tb-sep { width: 1px; background: var(--line); margin: 4px 3px; }
+.editor-body { min-height: 200px; overflow-y: auto; resize: vertical; border-bottom: 1px dashed var(--line); }
+.editor-body::-webkit-resizer { background: linear-gradient(135deg, transparent 50%, var(--muted, #999) 50%); }
 .title-input { width: 100%; border: 0; background: none; font-size: 22px; font-weight: 700; padding: 18px 20px 4px; outline: none; }
 .prose { padding: 8px 20px 28px; min-height: 360px; outline: none; font-size: 16px; line-height: 1.8; }
 .prose:focus { outline: none; }

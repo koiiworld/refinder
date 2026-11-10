@@ -72,6 +72,15 @@ export default function DocEditor({
   const [capturing, setCapturing] = useState(false);
   const [drag, setDrag] = useState<null | { x0: number; y0: number; x1: number; y1: number }>(null);
   const shellRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [bodyH, setBodyH] = useState<number | null>(null);
+  useEffect(() => { try { const v = Number(localStorage.getItem("editor-body-height")); if (v >= 200) setBodyH(v); } catch {} }, []);
+  useEffect(() => {
+    const el = bodyRef.current; if (!el || typeof ResizeObserver === "undefined") return;
+    let first = true;
+    const ro = new ResizeObserver(() => { if (first) { first = false; return; } try { localStorage.setItem("editor-body-height", String(Math.round(el.offsetHeight))); } catch {} });
+    ro.observe(el); return () => ro.disconnect();
+  }, []);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -438,7 +447,9 @@ export default function DocEditor({
           }}
         />
         <div ref={shellRef} style={{ position: "relative" }}>
-          <EditorContent editor={editor} />
+          <div ref={bodyRef} className="editor-body" style={{ height: bodyH ?? "70vh" }}>
+            <EditorContent editor={editor} />
+          </div>
           {capturing && (
             <div
               role="presentation"
@@ -464,6 +475,7 @@ export default function DocEditor({
             {state === "saving" && <span className="spinner" style={{ width: 10, height: 10 }} />}
             <span style={{ color: state === "error" || state === "conflict" ? "var(--bad)" : undefined }}>{stateLabel[state]}</span>
           </span>
+          <span className="tiny muted">본문 칸 오른쪽 아래 모서리를 끌면 높이가 바뀌어요</span>
           <div className="row">
             {state === "error" && (
               <button className="btn btn-sm" onClick={() => void save(true)}>
