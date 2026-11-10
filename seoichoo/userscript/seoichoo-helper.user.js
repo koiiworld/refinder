@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.5.0
+// @version      1.6.0
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -83,10 +83,12 @@
   const historyOf = (acc) => aget(acc, "history", {});          // { blogId: {status, at} }
   const todayCountOf = (acc) => (aget(acc, "daily", {})[today()] || 0);
 
-  function record(acc, blogId, status) {
+  // detail: 건너뛴 사유나 네이버 안내 문구 (말풍선에 보여줌)
+  function record(acc, blogId, status, detail) {
     const h = historyOf(acc);
     const prev = h[blogId] && h[blogId].status;
     h[blogId] = { status, at: new Date().toISOString() };
+    if (detail) h[blogId].detail = String(detail).slice(0, 200);
     aset(acc, "history", h);
     if ((status === "sent") !== (prev === "sent")) {
       const d = aget(acc, "daily", {});
@@ -184,7 +186,7 @@
           const body = (document.body.innerText || "").replace(/\s+/g, " ").slice(0, 400);
           if (classifyNotice(body)) { kind = classifyNotice(body); t = t || body.slice(0, 120); }
         }
-        if (kind && kind !== "limit") record(acc, blogId, kind);
+        if (kind && kind !== "limit") record(acc, blogId, kind, t);
         if (auto) report(kind || "error", t || "신청 화면을 찾지 못함");
         if (kind === "full") say("상대 이웃이 5,000명이라 신청할 수 없어요. 건너뛸게요.", "#b45309");
         else if (kind) say(`신청할 수 없어서 건너뛰어요: ${t}`, "#b45309");
@@ -202,7 +204,7 @@
         });
       if (!radio) return false;
       if (radio.disabled) {
-        record(acc, blogId, "refused");
+        record(acc, blogId, "refused", "서로이웃 선택 칸이 막혀 있음");
         if (auto) {
           report("refused", "서로이웃 신청을 받지 않는 블로그");
           say("서로이웃 신청을 받지 않는 블로그라 자동으로 건너뛰어요.", "#b91c1c");
@@ -237,7 +239,7 @@
             const t = alertText();
             const kind = classifyNotice(t);
             if (kind) {
-              record(acc, blogId, kind === "limit" ? "opened" : kind);
+              record(acc, blogId, kind === "limit" ? "opened" : kind, t);
               if (auto) report(kind, t);
               say(kind === "full" ? "상대 이웃이 5,000명이라 신청이 안 됐어요. 건너뛸게요."
                 : kind === "limit" ? `오늘 신청 한도에 걸렸어요: ${t}` : `신청되지 않았어요: ${t}`, "#b45309");
@@ -307,6 +309,12 @@
       #sc-panel li:last-child{border-bottom:0}
       #sc-panel li .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #sc-panel li .s{font-size:11px;color:#6b7280;white-space:nowrap}
+      #sc-panel li .s.why{color:#b45309;cursor:help;border-bottom:1px dotted currentColor}
+      #sc-bubble{position:fixed;z-index:2147483647;max-width:240px;padding:8px 11px;border-radius:12px;
+        background:#1f2937;color:#f9fafb;font:12px/1.5 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+        white-space:pre-line;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none}
+      #sc-bubble::after{content:"";position:absolute;right:14px;top:100%;border:7px solid transparent;border-top-color:#1f2937}
+      #sc-bubble.below::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:#1f2937}
       #sc-panel li.cur{background:#ecfdf5}
       #sc-panel.min .body,#sc-panel.min .tabs{display:none}
     `;
@@ -482,7 +490,33 @@
 
     // -------------------------------------------------------------- 목록
     const statusOf = (id) => (historyOf(acc)[id] || {}).status || "";
-    const LABEL = { sent: "보냄", refused: "불가", skipped: "건너뜀", opened: "열림", already: "이미 이웃", full: "이웃 5000명" };
+    const LABEL = { sent: "보냄", opened: "열림" }; // 그 외 완료 상태는 모두 '건너뜀'
+    const REASON = {
+      refused: "서로이웃 신청을 받지 않는 블로그",
+      already: "이미 이웃이거나 이미 신청한 상태",
+      full: "상대 이웃이 5,000명이라 더 못 받음",
+      skipped: "건너뜀",
+    };
+    function reasonOf(st, detail) {
+      if (st === "skipped") return detail || "직접 건너뜀";
+      const base = REASON[st] || "사유를 알 수 없음";
+      return detail && detail !== base ? `${base}\n네이버 안내: "${detail}"` : base;
+    }
+
+    // 말풍선: 건너뜀에 마우스를 올리면 사유를 보여준다
+    const bubble = el("div", { id: "sc-bubble", hidden: "" });
+    document.body.append(bubble);
+    function showBubble(target, text) {
+      bubble.textContent = text;
+      bubble.hidden = false;
+      const r = target.getBoundingClientRect();
+      const b = bubble.getBoundingClientRect();
+      const below = r.top - b.height - 10 < 8;
+      bubble.className = below ? "below" : "";
+      bubble.style.top = `${below ? r.bottom + 10 : r.top - b.height - 10}px`;
+      bubble.style.left = `${Math.max(8, Math.min(window.innerWidth - b.width - 8, r.right - b.width + 6))}px`;
+    }
+    const hideBubble = () => { bubble.hidden = true; };
     const pending = () => candidates.filter((c) => !DONE.includes(statusOf(c.blogId)));
 
     function render() {
@@ -497,7 +531,17 @@
         box.checked = !!c.sel && !done;
         box.disabled = done || running;
         box.addEventListener("change", () => { c.sel = box.checked; aset(acc, "candidates", candidates); renderSel(); });
-        list.append(el("li", { class: cur.acc === acc && c.blogId === cur.blogId ? "cur" : "" }, box, a, el("span", { class: "s" }, LABEL[st] || "대기")));
+        const tag = el("span", { class: "s" }, LABEL[st] || (DONE.includes(st) ? "건너뜀" : "대기"));
+        if (DONE.includes(st) && st !== "sent") {
+          const why = reasonOf(st, (historyOf(acc)[c.blogId] || {}).detail);
+          tag.classList.add("why");
+          tag.tabIndex = 0;
+          tag.addEventListener("mouseenter", () => showBubble(tag, why));
+          tag.addEventListener("focus", () => showBubble(tag, why));
+          tag.addEventListener("mouseleave", hideBubble);
+          tag.addEventListener("blur", hideBubble);
+        }
+        list.append(el("li", { class: cur.acc === acc && c.blogId === cur.blogId ? "cur" : "" }, box, a, tag));
       }
       renderSel();
       info.textContent = `후보 ${candidates.length}명 · 남은 ${pending().length}명 · 오늘 보냄 ${todayCountOf(acc)}/${DAILY_LIMIT}`;
@@ -604,7 +648,7 @@
       const cur = store.get("current", {});
       const id = (cur.acc === acc && cur.blogId) || (pending()[0] || {}).blogId;
       if (!id) return;
-      record(acc, id, "skipped");
+      record(acc, id, "skipped", "직접 건너뜀");
       cooldownUntil = 0;
       render();
     }
@@ -687,7 +731,7 @@
             note(`${c.nick || c.blogId}님에게 보냈어요. (이번에 ${sentRun}명)`);
             gap = nextGap();
           } else if (!res) {
-            record(runAcc, c.blogId, "skipped");
+            record(runAcc, c.blogId, "skipped", "신청 창이 30초 동안 응답하지 않음");
             note(`${c.nick || c.blogId}: 신청 창이 응답하지 않아 건너뛰었어요.`);
             gap = rand(5000, 10000);
           } else if (res.status === "sent") {
@@ -698,7 +742,7 @@
             note(`네이버에서 한도 안내가 떴어요: ${res.detail}`);
             break;
           } else {
-            if (res.status === "error") record(runAcc, c.blogId, "skipped");
+            if (res.status === "error") record(runAcc, c.blogId, "skipped", res.detail || "알 수 없는 오류");
             note(`${c.nick || c.blogId}: 건너뜀 (${res.detail || res.status})`);
             gap = rand(4000, 8000); // 안 보낸 경우엔 짧게 쉬고 다음 사람
           }
