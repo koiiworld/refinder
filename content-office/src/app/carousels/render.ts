@@ -6,6 +6,19 @@ export const W = 1080;
 export const H = 1350;
 export const FONT = `"Noto Sans KR", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
 
+/** 🎞 모션 캐러셀: 사진 움직임 종류 */
+export type MotionEffect = "zoomIn" | "zoomOut" | "panLeft" | "panRight" | "still";
+export const MOTION_EFFECTS: { id: MotionEffect; label: string }[] = [
+  { id: "zoomIn", label: "천천히 확대" },
+  { id: "zoomOut", label: "천천히 축소" },
+  { id: "panLeft", label: "왼쪽으로 이동" },
+  { id: "panRight", label: "오른쪽으로 이동" },
+  { id: "still", label: "사진 고정 (글자만 움직임)" },
+];
+/** 지금 그리는 프레임의 진행도 (null = 일반 사진 저장) */
+let motion: { t: number; sec: number; effect: MotionEffect; text: number } | null = null;
+const ease = (x: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+
 /** 글자 너비에 맞춰 줄바꿈 (띄어쓰기 우선, 긴 단어는 글자 단위) */
 function wrap(ctx: CanvasRenderingContext2D, text: string, max: number): string[] {
   const out: string[] = [];
@@ -47,8 +60,16 @@ function fitLines(ctx: CanvasRenderingContext2D, text: string, weight: number, s
 
 function cover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
   const r = Math.max(w / img.naturalWidth, h / img.naturalHeight);
-  const sw = w / r, sh = h / r;
-  ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
+  let sw = w / r, sh = h / r, dx = 0;
+  if (motion && motion.effect !== "still") {
+    // 사진 영역 안에서만 움직임 (테두리·모양은 그대로)
+    const t = motion.t, z = motion.effect === "zoomIn" ? 1 + 0.14 * t : motion.effect === "zoomOut" ? 1.14 - 0.14 * t : 1.12;
+    sw /= z; sh /= z;
+    const room = (img.naturalWidth - sw) / 2;
+    if (motion.effect === "panLeft") dx = room * (1 - 2 * t) * 0.9;
+    if (motion.effect === "panRight") dx = -room * (1 - 2 * t) * 0.9;
+  }
+  ctx.drawImage(img, (img.naturalWidth - sw) / 2 + dx, (img.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -85,14 +106,35 @@ function centered(ctx: CanvasRenderingContext2D, slide: Slide, opt: { weight: nu
 }
 
 function drawText(ctx: CanvasRenderingContext2D, lines: string[], x: number, y: number, size: number, lineH = 1.25) {
-  lines.forEach((l, i) => ctx.fillText(l, x, y + i * size * lineH));
+  if (motion) {
+    // 제목 → 본문 순서로 아래에서 살짝 올라오며 나타남
+    const k = motion.text++;
+    const a = ease((motion.sec - 0.15 - k * 0.35) / 0.8);
+    ctx.save();
+    ctx.globalAlpha *= a;
+    lines.forEach((l, i) => ctx.fillText(l, x, y + i * size * lineH + (1 - a) * 46));
+    ctx.restore();
+  } else lines.forEach((l, i) => ctx.fillText(l, x, y + i * size * lineH));
   return y + lines.length * size * lineH;
 }
 
+/** 모션 영상의 한 프레임 (t: 0~1). 끝나면 일반 그리기로 돌아감 */
+export function renderMotionFrame(canvas: HTMLCanvasElement, slide: Slide, index: number, total: number, img: HTMLImageElement | null, style: CarouselStyle, t: number, seconds: number, effect: MotionEffect) {
+  motion = { t, sec: t * seconds, effect, text: 0 };
+  try {
+    renderSlide(canvas, slide, index, total, img, style);
+  } finally {
+    motion = null;
+  }
+}
+
 export function renderSlide(canvas: HTMLCanvasElement, slide: Slide, index: number, total: number, img: HTMLImageElement | null, style: CarouselStyle) {
-  canvas.width = W;
-  canvas.height = H;
+  if (canvas.width !== W) canvas.width = W;
+  if (canvas.height !== H) canvas.height = H;
   const ctx = canvas.getContext("2d")!;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.clearRect(0, 0, W, H);
   if (style.design) { renderLearned(ctx, slide, index, total, img, style); return; }
   const accent = style.accent || "#ff6b35";
   const pad = 88;

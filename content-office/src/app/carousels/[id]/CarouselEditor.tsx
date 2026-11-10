@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import HashtagInput from "@/components/HashtagInput";
+import MotionPanel from "../MotionPanel";
 import { formatHashtags, hashtagTokens } from "@/lib/caption-styles";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -279,6 +280,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
           </div>
         </div>
         {msg && <div className={`notice ${msg.ok ? "notice-ok" : "notice-bad"} small`}>{msg.text}</div>}
+        <MotionPanel title={c.title} slides={slides} imgFor={(s) => (s.image != null ? imgs[s.image] ?? null : null)} style={style} fontReady={fontReady} canvases={canvases} disabled={!!busy} onBusy={(b) => setBusy(b ? "export" : "")} beforeExport={async () => { if (dirty) await save(true); }} />
         <div className="row" style={{ gap: 8 }}>
           {TEMPLATES.map((t) => (
             <button key={t.id} className={`btn btn-sm ${style.template === t.id ? "btn-primary" : ""}`} onClick={() => { setStyle({ ...style, template: t.id, design: null, designRef: "" }); setDirty(true); }}>{t.label}</button>
