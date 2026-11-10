@@ -22,7 +22,10 @@ const TEMPLATES: { id: CarouselStyle["template"]; label: string }[] = [
 ];
 const KIND: Record<Slide["kind"], string> = { cover: "표지", content: "내용", cta: "마무리(저장·태그)" };
 
-function useImages(id: string, count: number, version: number) {
+/** 사진 주소별 짧은 열쇠 — 브라우저가 사진을 '번호'가 아니라 '사진 자체'로 기억하게 (지우면 번호가 당겨져도 옛 사진이 안 보임) */
+export const imgKey = (url: string) => { let h = 5381; for (let i = 0; i < url.length; i++) h = ((h * 33) ^ url.charCodeAt(i)) >>> 0; return h.toString(36); };
+function useImages(id: string, urls: string[], version: number) {
+  const count = urls.length, keys = urls.map(imgKey).join(".");
   const [imgs, setImgs] = useState<(HTMLImageElement | null)[]>([]);
   useEffect(() => {
     let alive = true;
@@ -32,14 +35,14 @@ function useImages(id: string, count: number, version: number) {
           const im = new Image();
           im.onload = () => ok(im);
           im.onerror = () => ok(null);
-          im.src = `/api/carousels/${id}/img/${n}?v=${version}`;
+          im.src = `/api/carousels/${id}/img/${n}?k=${imgKey(urls[n])}&v=${version}`;
         }),
       ),
     ).then((list) => alive && setImgs(list));
     return () => {
       alive = false;
     };
-  }, [id, count, version]);
+  }, [id, keys, version]); // eslint-disable-line react-hooks/exhaustive-deps
   return imgs;
 }
 
@@ -74,7 +77,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
   const [fontReady, setFontReady] = useState(false);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-  const imgs = useImages(c.id, c.images.length, imgVer);
+  const imgs = useImages(c.id, c.images.map((x) => x.url), imgVer);
   const onCanvas = useMemo(() => (i: number, el: HTMLCanvasElement | null) => { canvases.current[i] = el; }, []);
 
   useEffect(() => {
@@ -376,7 +379,11 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
             {c.images.map((im, n) => (
               <div key={n} style={{ position: "relative" }} title={im.alt}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/carousels/${c.id}/img/${n}?v=${imgVer}`} alt={im.alt} style={{ width: 64, height: 80, objectFit: "cover", borderRadius: 6, display: "block" }} />
+                {imgs.length === c.images.length && imgs[n] === null ? (
+                  <div className="tiny" style={{ width: 64, height: 80, borderRadius: 6, background: "var(--panel-2)", border: "1px dashed var(--bad)", color: "var(--bad)", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 4, lineHeight: 1.25 }}>⚠️ 블로그에서 지워진 사진</div>
+                ) : (
+                  <img src={`/api/carousels/${c.id}/img/${n}?k=${imgKey(im.url)}`} alt={im.alt} style={{ width: 64, height: 80, objectFit: "cover", borderRadius: 6, display: "block" }} />
+                )}
                 <span className="tiny" style={{ position: "absolute", left: 3, top: 2, background: "rgba(0,0,0,.6)", color: "#fff", borderRadius: 4, padding: "0 4px" }}>{n + 1}</span>
                 <button type="button" aria-label={`사진 ${n + 1} 지우기`} title="사진 지우기 (아래 '지운 사진'에서 되살릴 수 있어요)" disabled={!!busy} onClick={() => void removePhoto(n)} style={{ position: "absolute", right: 2, top: 2, width: 20, height: 20, border: 0, borderRadius: 10, background: "rgba(0,0,0,.65)", color: "#fff", fontSize: 12, lineHeight: "20px", cursor: "pointer", padding: 0 }}>✕</button>
               </div>
@@ -392,7 +399,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
               {c.style.removedImages.map((im, k) => (
                 <div key={im.at + im.url} style={{ position: "relative", opacity: 0.75 }} title={im.alt}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/carousels/${c.id}/img/r${k}?v=${imgVer}`} alt={im.alt} style={{ width: 64, height: 80, objectFit: "cover", borderRadius: 6, display: "block", background: "var(--panel-2)" }} onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} />
+                  <img src={`/api/carousels/${c.id}/img/r${k}?k=${imgKey(im.url)}`} alt={im.alt} style={{ width: 64, height: 80, objectFit: "cover", borderRadius: 6, display: "block", background: "var(--panel-2)" }} onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} />
                   <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => void restorePhoto(im.at, im.url)} style={{ position: "absolute", left: 2, right: 2, bottom: 2, padding: "0 4px", fontSize: 11 }}>되살리기</button>
                 </div>
               ))}

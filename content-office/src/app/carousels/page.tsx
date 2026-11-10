@@ -15,8 +15,10 @@ export default async function Carousels({ searchParams }: { searchParams: Promis
   const allBlogs = await listBlogs();
   const blogs = allBlogs.map((b) => ({ id: b.id, name: b.name, category: b.category }));
   // 이미 캐러셀을 만든 글도 순위에 그대로 두고 '✅ 만듦 · 열기'로 표시
-  const usedUrls = new Map(list.filter((c) => c.style?.sourceUrl).map((c) => [postKey(c.style.sourceUrl!), c.id] as const));
-  const usedProjects = new Map(list.filter((c) => c.project_id).map((c) => [c.project_id!, c.id] as const));
+  // 같은 글로 만든 캐러셀이 여럿이면 가장 최근에 고친 것을 엶 (목록은 최근 순 → 뒤집어서 최근 것이 마지막에 덮어씀)
+  const recentLast = [...list].sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)));
+  const usedUrls = new Map(recentLast.filter((c) => c.style?.sourceUrl).map((c) => [postKey(c.style.sourceUrl!), c.id] as const));
+  const usedProjects = new Map(recentLast.filter((c) => c.project_id).map((c) => [c.project_id!, c.id] as const));
   const viewPeriods:Record<string,string>={};
   const published = (
     await Promise.all(
