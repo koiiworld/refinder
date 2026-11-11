@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.7.3
+// @version      1.8.0
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -23,7 +23,7 @@
   "use strict";
 
   // ---------------------------------------------------------------- 공통 설정
-  const VERSION = "1.7.3";
+  const VERSION = "1.8.0";
   const DAILY_LIMIT = 100;      // 네이버 정책상 계정당 하루 서이추 최대
   const SESSION_LIMIT = 20;     // 20명마다 쉬어가기 알림
   const DEFAULT_COOLDOWN = 60;      // 신청 간격 최소(초)
@@ -813,7 +813,31 @@
       const hi = Math.max(lo, Number(coolMax.value) || DEFAULT_COOLDOWN_MAX);
       return rand(lo, hi) * 1000;
     }
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // 탭이 안 보이면 크롬이 setTimeout 을 크게 늦추므로(최대 1분에 한 번),
+    // 자동 보내기 중에는 백그라운드에서도 잘 늦춰지지 않는 Worker 의 신호로 시간을 잰다.
+    let ticker = null;
+    const waiters = new Set();
+    function startTicker() {
+      if (ticker) return;
+      try {
+        const url = URL.createObjectURL(new Blob(["setInterval(function(){postMessage(0)},500)"], { type: "text/javascript" }));
+        ticker = new Worker(url);
+        ticker.onmessage = () => {
+          const now = Date.now();
+          for (const w of [...waiters]) if (now >= w.end) { waiters.delete(w); w.done(); }
+        };
+      } catch (e) { ticker = null; } // 안 되면 일반 타이머만 쓴다
+    }
+    function stopTicker() {
+      try { if (ticker) ticker.terminate(); } catch (e) { /* ignore */ }
+      ticker = null;
+      for (const w of [...waiters]) { waiters.delete(w); w.done(); }
+    }
+    const sleep = (ms) => new Promise((resolve) => {
+      const w = { end: Date.now() + ms, done: () => { clearTimeout(w.t); waiters.delete(w); resolve(); } };
+      w.t = setTimeout(w.done, ms);
+      waiters.add(w);
+    });
 
     async function waitResult(blogId, since, timeoutMs) {
       const end = Date.now() + timeoutMs;
@@ -825,32 +849,53 @@
       return null;
     }
 
-    async function waitWithCountdown(ms, label) {
+    async function waitWithCountdown(ms, label, run) {
       const end = Date.now() + ms;
+      let lastBeat = 0;
       while (Date.now() < end && !stopReq) {
         autoBtn.textContent = `■ 멈추기 · ${label} ${Math.ceil((end - Date.now()) / 1000)}초`;
+        if (run && Date.now() - lastBeat > 10000) { saveRun(run); lastBeat = Date.now(); }
         await sleep(500);
       }
     }
 
-    function note(text) { autoInfo.textContent = text; autoInfo.hidden = false; }
+    function note(text) {
+      autoInfo.textContent = text;
+      autoInfo.hidden = false;
+      store.set("lastNote", { acc, text, at: Date.now() });
+    }
 
-    async function autoRun() {
+    // 자동 보내기 진행 상태를 저장해 둔다. 크롬이 탭을 쉬게 하거나 새로고침해도 다시 열리면 이어서 보낸다.
+    const RUN_KEY = "autoRun";
+    const saveRun = (st) => store.set(RUN_KEY, Object.assign({}, st, { beat: Date.now() }));
+
+    async function autoRun(resume) {
       persist();
       if (accountMismatch()) { render(); return; }
       const n = checked().length;
-      if (!n) { alert("자동으로 보낼 사람을 목록에서 체크해 주세요."); return; }
+      if (!n) { if (!resume) alert("자동으로 보낼 사람을 목록에서 체크해 주세요."); store.del(RUN_KEY); return; }
       const lo = Number(cool.value), hi = Number(coolMax.value);
-      if (!confirm(`체크한 ${n}명에게 서이추를 자동으로 보냅니다.\n` +
+      if (!resume && !confirm(`체크한 ${n}명에게 서이추를 자동으로 보냅니다.\n` +
           `· 간격 ${lo}~${hi}초 무작위, 멘트 무작위\n· 서이추를 안 받는 사람은 건너뜀\n` +
           `· 한 번에 최대 ${SESSION_LIMIT}명, 하루 ${DAILY_LIMIT}명에서 멈춤\n진행할까요?`)) return;
 
       const runAcc = acc;
-      let sentRun = 0;
+      const saved = resume ? store.get(RUN_KEY, {}) : {};
+      let sentRun = saved.sentRun || 0;
+      const run = { acc: runAcc, batchId, sentRun, nextAt: saved.nextAt || 0 };
+      saveRun(run);
       running = true; stopReq = false;
-      note("자동 보내기를 시작했어요. 신청 창은 닫지 말고 그대로 두세요.");
+      startTicker();
+      // 자동 보내기 중에는 크롬이 이 탭을 얼려 두지 않게 잠금을 잡아 둔다
+      let releaseLock = null;
+      try {
+        if (navigator.locks) navigator.locks.request("seoichoo-auto-send", () => new Promise((r) => { releaseLock = r; })).catch(() => {});
+      } catch (e) { /* ignore */ }
+      note(resume ? "탭이 다시 열려서 자동 보내기를 이어서 해요." : "자동 보내기를 시작했어요. 신청 창은 닫지 말고 그대로 두세요.");
       render();
       try {
+        // 이어서 할 때는 원래 기다리던 시간이 남았으면 마저 기다린다
+        if (run.nextAt > Date.now()) await waitWithCountdown(run.nextAt - Date.now(), "다음까지", run);
         while (!stopReq) {
           if (accountMismatch()) { note("로그인한 계정이 이 탭과 달라서 멈췄어요."); break; }
           if (todayCountOf(runAcc) >= DAILY_LIMIT) { note(`오늘 ${DAILY_LIMIT}명을 채워서 멈췄어요.`); break; }
@@ -894,7 +939,10 @@
             gap = rand(4000, 8000); // 안 보낸 경우엔 짧게 쉬고 다음 사람
           }
           render();
-          await waitWithCountdown(gap, "다음까지");
+          run.sentRun = sentRun;
+          run.nextAt = Date.now() + gap;
+          saveRun(run);
+          await waitWithCountdown(gap, "다음까지", run);
           // 보낸 직후 늦게 뜬 한도 안내 확인
           const late = store.get("result");
           if (late && late.blogId === c.blogId && late.status === "limit") {
@@ -905,6 +953,9 @@
         if (stopReq) note("자동 보내기를 멈췄어요.");
       } finally {
         running = false; stopReq = false;
+        store.del(RUN_KEY); // 정상적으로 끝났을 때만 지운다 (탭이 닫히면 여기까지 안 옴)
+        stopTicker();
+        try { if (releaseLock) releaseLock(); } catch (e) { /* ignore */ }
         // 자동 보내기가 끝나면 신청 창을 닫는다 (마지막 결과가 기록될 시간을 조금 준 뒤)
         if (popup) {
           const p = popup;
@@ -923,5 +974,28 @@
     renderTabs();
     render();
     if (!loginId) detectLoginIdAsync();
+
+    // 자동 보내기 중에 탭이 새로고침됐으면(크롬 메모리 절약 등) 이어서 보낸다
+    const pendingRun = store.get(RUN_KEY);
+    if (pendingRun && Date.now() - (pendingRun.beat || 0) < 20 * 60 * 1000 &&
+        accounts().some((a) => a.id === pendingRun.acc)) {
+      if (pendingRun.acc !== acc) switchTo(pendingRun.acc);
+      if (pendingRun.batchId && pendingRun.batchId !== batchId && batchesOf(acc).some((b) => b.id === pendingRun.batchId)) {
+        aset(acc, "batchCur", pendingRun.batchId);
+        loadBatch();
+        render();
+      }
+      autoInfo.textContent = "자동 보내기가 중간에 끊겨서 잠시 후 이어서 보내요…";
+      autoInfo.hidden = false;
+      setTimeout(() => { if (!running) autoRun(true); }, 3000);
+    } else {
+      if (pendingRun) store.del(RUN_KEY);
+      // 지난번 자동 보내기가 어떻게 끝났는지 보여준다
+      const last = store.get("lastNote");
+      if (last && last.acc === acc && Date.now() - last.at < 60 * 60 * 1000) {
+        autoInfo.textContent = `지난 자동 보내기 (${fmtTime(last.at)}): ${last.text}`;
+        autoInfo.hidden = false;
+      }
+    }
   }
 })();
