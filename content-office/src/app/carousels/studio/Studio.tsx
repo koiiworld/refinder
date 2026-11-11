@@ -44,13 +44,34 @@ function Thumb({ scene, imgs, ready }: { scene: Scene; imgs: (HTMLImageElement |
 function Num({ label, value, onChange, step = 1, w = 72 }: { label: string; value: number; onChange: (n: number) => void; step?: number; w?: number }) {
   return <label className="tiny stack" style={{ gap: 2 }}>{label}<input className="input" type="number" step={step} value={Math.round(value * 100) / 100} onChange={(e) => onChange(Number(e.target.value))} style={{ width: w, padding: "4px 6px" }} /></label>;
 }
+/** 숫자 칸: 직접 입력 (지우는 중·소수점 입력 중에도 막히지 않게 글자로 들고 있다가, 숫자가 되면 반영) */
+function NumBox({ value, onChange, min, max, step = 1, unit = "", label, w = 64 }: { value: number; onChange: (n: number) => void; min: number; max: number; step?: number; unit?: string; label: string; w?: number }) {
+  const shown = String(Math.round(value * 100) / 100);
+  const [text, setText] = useState(shown);
+  const [focus, setFocus] = useState(false);
+  useEffect(() => { if (!focus) setText(shown); }, [shown, focus]);
+  // 직접 입력은 막대 범위보다 넓게 (막대 최대의 2배까지, 0~1 값은 그대로)
+  const hi = max <= 1 ? max : max * 2;
+  const commit = (raw: string) => { const n = Number(raw.replace(",", ".")); if (raw.trim() !== "" && Number.isFinite(n)) onChange(Math.min(hi, Math.max(min, n))); };
+  return (
+    <span className="row" style={{ gap: 2, flexWrap: "nowrap", flexShrink: 0 }}>
+      <input className="input" type="text" inputMode="decimal" aria-label={`${label} 숫자`} value={focus ? text : shown}
+        onFocus={(e) => { setFocus(true); setText(shown); e.currentTarget.select(); }}
+        onChange={(e) => { setText(e.target.value); commit(e.target.value); }}
+        onBlur={() => { setFocus(false); commit(text); }}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); const n = Math.min(hi, Math.max(min, value + (e.key === "ArrowUp" ? 1 : -1) * step * (e.shiftKey ? 10 : 1))); onChange(Math.round(n * 1000) / 1000); setText(String(Math.round(n * 100) / 100)); } }}
+        style={{ width: w, padding: "3px 6px", textAlign: "right", fontSize: 13 }} />
+      {unit && <span className="tiny muted">{unit}</span>}
+    </span>
+  );
+}
 function Slider({ label, value, min, max, step = 1, onChange, unit = "" }: { label: string; value: number; min: number; max: number; step?: number; onChange: (n: number) => void; unit?: string }) {
   return (
-    <label className="small row" style={{ gap: 8, flexWrap: "nowrap" }}>
+    <div className="small row" style={{ gap: 8, flexWrap: "nowrap" }}>
       <span style={{ width: 64, flexShrink: 0 }}>{label}</span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ flex: 1, accentColor: "var(--accent)" }} />
-      <span className="tiny muted" style={{ width: 48, textAlign: "right" }}>{Math.round(value * 100) / 100}{unit}</span>
-    </label>
+      <input type="range" min={min} max={max} step={step} value={Math.min(max, Math.max(min, value))} onChange={(e) => onChange(Number(e.target.value))} style={{ flex: 1, minWidth: 0, accentColor: "var(--accent)" }} aria-label={label} />
+      <NumBox value={value} onChange={onChange} min={min} max={max} step={step} unit={unit} label={label} />
+    </div>
   );
 }
 function Color({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
@@ -82,6 +103,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
   const [busy, setBusy] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [guideX, setGuideX] = useState<number | null>(null); // 끌 때 붙은 시작점 안내선
+  const [skipSlides, setSkipSlides] = useState<number[]>([]); // 위치·시작점 맞추기에서 뺄 장 (번호)
   const [fontReady, setFontReady] = useState(false);
   const [rendered, setRendered] = useState<Record<number, { url: string; hash: string; name: string }>>({});
   const [renderedHash, setRenderedHash] = useState<Record<number, string>>({});
@@ -178,8 +200,10 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
   /** 글자 시작점 맞추기: 이 장의 왼쪽 정렬 글자·선을 x 하나에 맞춤 (쪽 번호처럼 오른쪽·가운데 정렬은 그대로) */
   function alignStarts(x: number, allSlides = false) {
     const fix = (sc: Scene) => ({ ...sc, els: sc.els.map((e) => ((e.type === "text" && (e.align ?? "left") === "left") || e.type === "line") && !e.locked && !e.hidden ? { ...e, x } : e) });
-    commit(allSlides ? scenes.map(fix) : scenes.map((sc, i) => (i === cur ? fix(sc) : sc)));
-    setMsg({ ok: true, text: `${allSlides ? "모든 장" : "이 장"}의 왼쪽 정렬 글자·선 시작점을 가로 ${Math.round(x)}에 맞췄어요.` });
+    const on = (i: number) => i === cur || (allSlides && !skipSlides.includes(i));
+    commit(scenes.map((sc, i) => (on(i) ? fix(sc) : sc)));
+    const n = scenes.filter((_, i) => on(i)).length;
+    setMsg({ ok: true, text: `${allSlides ? `고른 ${n}장` : "이 장"}의 왼쪽 정렬 글자·선 시작점을 가로 ${Math.round(x)}에 맞췄어요.` });
   }
 
   /**
@@ -191,7 +215,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
     if (!src.length) { setMsg({ ok: false, text: "이름이 있는 요소(제목·본문 등)가 없어 맞출 게 없어요. 위치·크기 칸에서 요소를 고른 뒤 다시 눌러 주세요." }); return; }
     let changed = 0;
     const next = scenes.map((sc, i) => {
-      if (i === cur) return sc;
+      if (i === cur || skipSlides.includes(i)) return sc;
       return { ...sc, els: sc.els.map((e) => {
         const m = src.find((x) => x.name === e.name && x.type === e.type);
         if (!m || e.locked) return e;
@@ -199,9 +223,10 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
         return { ...e, x: m.x, y: m.y, w: m.w, h: m.h, rot: m.rot, ...(withStyle && e.type === "text" ? { size: m.size, align: m.align, lineHeight: m.lineHeight, letter: m.letter, weight: m.weight } : {}) };
       }) };
     });
-    if (!changed) { setMsg({ ok: false, text: "다른 장에 같은 이름의 요소가 없어요." }); return; }
+    if (!changed) { setMsg({ ok: false, text: skipSlides.length >= scenes.length - 1 ? "적용할 장을 하나 이상 골라 주세요." : "고른 장에 같은 이름의 요소가 없어요." }); return; }
     commit(next);
-    setMsg({ ok: true, text: `다른 장 요소 ${changed}개를 ${cur + 1}장과 같은 위치로 맞췄어요. 마음에 안 들면 ↶ 되돌리기.` });
+    const done = scenes.map((_, i) => i).filter((i) => i !== cur && !skipSlides.includes(i)).map((i) => i + 1);
+    setMsg({ ok: true, text: `${done.join("·")}장의 요소 ${changed}개를 ${cur + 1}장과 같은 ${withStyle ? "위치·글씨" : "위치"}로 맞췄어요. 마음에 안 들면 ↶ 되돌리기.` });
   }
 
   // ── 색 테마 (전체 장) ──
@@ -508,7 +533,8 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
               <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: "nowrap" }}>
                 <button className="btn btn-sm" onClick={() => (playing ? setPlaying(false) : play())}>{playing ? "■ 멈춤" : "▶ 재생"}</button>
                 <input type="range" min={0} max={scene.dur} step={0.05} value={time ?? scene.dur} onChange={(e) => { setPlaying(false); setTime(Number(e.target.value)); }} style={{ flex: 1, accentColor: "var(--accent)" }} aria-label="재생 위치" />
-                <span className="tiny muted" style={{ width: 84, textAlign: "right" }}>{(time ?? scene.dur).toFixed(1)}초 / {scene.dur}초</span>
+                <NumBox value={Math.round((time ?? scene.dur) * 10) / 10} min={0} max={scene.dur / 2} step={0.1} label="재생 위치(초)" w={52} onChange={(v) => { setPlaying(false); setTime(Math.min(scene.dur, v)); }} />
+                <span className="tiny muted">/ {scene.dur}초</span>
                 <button className="btn btn-sm btn-ghost" onClick={() => { setPlaying(false); setTime(null); }}>완성 모습</button>
               </div>
             </>
@@ -618,10 +644,20 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
           {tab === "pos" && (
             <div className="stack" style={{ gap: 6, marginBottom: 10, padding: 8, border: "1px dashed var(--accent)", borderRadius: 10 }}>
               <b className="small">📐 이 장 위치를 다른 장에도</b>
-              <span className="tiny muted">이 장을 다 맞춘 뒤 누르면, 다른 장의 같은 요소(제목·본문·강조 선·쪽 번호 등)가 같은 자리로 옮겨져요.</span>
+              <span className="tiny muted">이 장을 다 맞춘 뒤 누르면, 고른 장의 같은 요소(제목·본문·강조 선·쪽 번호 등)가 같은 자리로 옮겨져요.</span>
+              <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                <span className="tiny">적용할 장</span>
+                {scenes.map((_, i) => i === cur ? (
+                  <span key={i} className="tiny" style={{ padding: "2px 7px", borderRadius: 999, background: "var(--accent)", color: "var(--accent-ink)" }} title="지금 장 (기준)">{i + 1} 기준</span>
+                ) : (
+                  <button key={i} type="button" aria-pressed={!skipSlides.includes(i)} onClick={() => setSkipSlides((x) => (x.includes(i) ? x.filter((k) => k !== i) : [...x, i]))} className="tiny" style={{ padding: "2px 8px", borderRadius: 999, cursor: "pointer", border: "1px solid var(--accent)", background: skipSlides.includes(i) ? "var(--panel)" : "var(--accent-soft)", color: skipSlides.includes(i) ? "var(--muted)" : "var(--accent)", textDecoration: skipSlides.includes(i) ? "line-through" : undefined }}>{i + 1}</button>
+                ))}
+                <button type="button" className="btn btn-sm btn-ghost" style={{ padding: "0 6px", fontSize: 11 }} onClick={() => setSkipSlides([])}>전체</button>
+                <button type="button" className="btn btn-sm btn-ghost" style={{ padding: "0 6px", fontSize: 11 }} onClick={() => setSkipSlides(scenes.map((_, i) => i).filter((i) => i !== cur))}>모두 해제</button>
+              </div>
               <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
                 <button className="btn btn-sm btn-primary" onClick={() => copyLayout()}>모든 요소 위치 맞추기</button>
-                <button className="btn btn-sm" onClick={() => copyLayout(undefined, true)} title="글씨 크기·정렬·줄 간격까지">글씨 크기까지</button>
+                <button className="btn btn-sm" onClick={() => copyLayout(undefined, true)} title="글씨 크기·정렬·줄 간격·굵기까지">위치 + 글씨 맞추기</button>
                 {sels.length > 0 && <button className="btn btn-sm" onClick={() => copyLayout(sels)}>고른 {sels.length}개만</button>}
               </div>
             </div>
@@ -692,7 +728,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
               <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
                 <span className="small" style={{ width: 64 }}>시작점</span>
                 <button className="btn btn-sm" onClick={() => alignStarts(el.x)} title="이 장의 왼쪽 정렬 글자·선을 이 요소 시작점에 맞춰요">이 장 글자 시작점 맞추기</button>
-                <button className="btn btn-sm" onClick={() => alignStarts(el.x, true)} title="모든 장에 같은 시작점">모든 장도</button>
+                <button className="btn btn-sm" onClick={() => alignStarts(el.x, true)} title="위 '적용할 장'에서 고른 장에도 같은 시작점">고른 장에도</button>
               </div>
               <span className="tiny muted">끌 때 다른 글자 시작점에 가까우면 파란 점선이 뜨며 딱 붙어요 (Alt를 누르고 끌면 안 붙어요).</span>
               {(el.type === "rect" || el.type === "circle" || el.type === "line" || el.type === "sparkle") && <>
@@ -761,7 +797,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
 
           {tab === "text" && el && !multi && (el.type !== "text" ? <p className="small muted">글자 요소를 골라 주세요.</p> : (
             <div className="stack" style={{ gap: 8 }}>
-              <label className="small stack" style={{ gap: 4 }}>문구 (<code>==글자==</code> 는 형광펜)
+              <label className="small stack" style={{ gap: 4 }}><span>문구 <span className="tiny muted">(<code>==글자==</code> 처럼 감싸면 형광펜)</span></span>
                 <textarea className="textarea" style={{ minHeight: 90 }} value={el.text ?? ""} onChange={(e) => patchEl(el.id, { text: e.target.value, h: Math.max(el.h, fitTextHeight({ ...el, text: e.target.value })) }, false)} onBlur={() => { past.current.push(scenes); }} />
               </label>
               <Slider label="글씨 크기" value={el.size ?? 60} min={12} max={220} onChange={(v) => patchEl(el.id, { size: v, h: Math.max(el.h, fitTextHeight({ ...el, size: v })) }, false)} unit="px" />
