@@ -11,6 +11,9 @@
 - **🎞 모션 캐러셀** (`carousels/MotionPanel.tsx`, `motion-video.ts`, `render.ts`의 `renderMotionFrame`): 브라우저에서 카드별 MP4(WebCodecs H.264 + `mp4-muxer`, 1080×1350·30fps, 3/5/7초). 사진은 카드 안에서 확대/축소/좌우 이동, 글자는 제목→본문 순서로 떠오름. 서버·맥·AI 비용 없음. 미지원 브라우저는 MediaRecorder.
 - **🎬 카드 AI 영상** (`carousel-video.ts`, `carousel-video-types.ts`, `CardVideoBox.tsx`): 카드 사진 → Higgsfield Wan 2.6(5초·720p·약 $0.5, 비용 확인 후). `slide.video`(jobId·url·status) 저장, saveCarousel은 서버 쪽 video 상태를 jobId로 유지. 영상은 `/api/carousels/:id/video/:jobId`(같은 출처 프록시)로 모션 내보내기 배경에 씀. Higgsfield 결과 주소는 만료될 수 있음(만료 시 '영상 빼기' 후 재생성). 모션 글자 움직임은 기본 '고정'.
 - 캘린더 목록: 완료한 할 일은 아래 '✅ 완료' 칸(회색·가운데 줄), ↺ 되돌리기 = PUT /api/todos/:id {done:false}.
+- 캐러셀 사진은 `?k=사진주소해시`로 불러옴(번호로 캐시하면 지운 뒤 옛 사진이 보이는 버그가 있었음). 블로그에서 지워진 사진(404)은 '⚠️ 블로그에서 지워진 사진'으로 표시.
+- Render 배포 확인: `/api/health`의 `version`(RENDER_GIT_COMMIT 앞 7자리). Render 무료 빌드가 가끔 16분쯤 진행하다 실패함 → 새 커밋을 올리면 자동 재배포.
+- 맥 앱 지킴이: `~/Library/LaunchAgents/com.contentoffice.watchdog.plist`(1분마다 `~/.ai-content-office/watchdog.sh`, 포트 3000이 꺼져 있으면 `npm start`). `restart-app.sh`는 `~/.ai-content-office/restarting` 잠금 파일로 지킴이와 겹치지 않음.
 - ⚠️ 맥 재시작 빌드가 `.next/types`(옛 페이지 참조) 때문에 실패할 수 있음 → 페이지를 지운 뒤엔 `rm -rf .next/types` 후 재시작.
 - 글 편집기 본문은 높이 조절 가능한 스크롤 칸(`.editor-body`, localStorage `editor-body-height`).
 - 테스트: 격리 2 + 10 + 86 통과. ⚠️ UI 확인용 서버를 /tmp/co-test에서 띄웠으면 반드시 끄고 테스트(같은 PGlite 파일을 잡아 DB가 깨짐).
