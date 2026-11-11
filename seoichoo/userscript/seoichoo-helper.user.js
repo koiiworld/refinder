@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.8.0
+// @version      1.8.1
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -23,7 +23,7 @@
   "use strict";
 
   // ---------------------------------------------------------------- 공통 설정
-  const VERSION = "1.8.0";
+  const VERSION = "1.8.1";
   const DAILY_LIMIT = 100;      // 네이버 정책상 계정당 하루 서이추 최대
   const SESSION_LIMIT = 20;     // 20명마다 쉬어가기 알림
   const DEFAULT_COOLDOWN = 60;      // 신청 간격 최소(초)
@@ -403,7 +403,12 @@
     const nextBtn = el("button", { onclick: openNext, title: "한 명씩 직접 확인하며 보내기" }, "다음 신청창 열기");
     const skipBtn = el("button", { onclick: skipCurrent }, "건너뛰기");
     const searchBtn = el("button", { onclick: search }, "대상 찾기");
-    const minBtn = el("button", { onclick: () => panel.classList.toggle("min"), title: "접기/펴기" }, "–");
+    const minBtn = el("button", { onclick: () => setMin(!panel.classList.contains("min")), title: "접기/펴기" }, "–");
+    function setMin(on) {
+      panel.classList.toggle("min", on);
+      minBtn.textContent = on ? "+" : "–";
+      minBtn.title = on ? "펼치기" : "접기";
+    }
 
     const panel = el("div", { id: "sc-panel" },
       el("header", {}, el("span", {}, "서이추 도우미 ", el("small", { style: "color:#9ca3af;font-weight:400" }, "v" + VERSION)), minBtn),
@@ -434,6 +439,8 @@
       ),
     );
     document.body.append(panel);
+    setMin(true); // 페이지를 열면 접힌 상태로 시작 (자동 보내기를 이어서 할 때만 펼침)
+    panel.querySelector("header").addEventListener("dblclick", () => setMin(!panel.classList.contains("min")));
 
     // -------------------------------------------------------------- 탭 값 불러오기/저장
     function loadFields() {
@@ -985,6 +992,7 @@
         loadBatch();
         render();
       }
+      setMin(false);
       autoInfo.textContent = "자동 보내기가 중간에 끊겨서 잠시 후 이어서 보내요…";
       autoInfo.hidden = false;
       setTimeout(() => { if (!running) autoRun(true); }, 3000);
