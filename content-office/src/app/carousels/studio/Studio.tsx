@@ -81,6 +81,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
+  const [guideX, setGuideX] = useState<number | null>(null); // 끌 때 붙은 시작점 안내선
   const [fontReady, setFontReady] = useState(false);
   const [rendered, setRendered] = useState<Record<number, { url: string; hash: string; name: string }>>({});
   const [renderedHash, setRenderedHash] = useState<Record<number, string>>({});
@@ -174,6 +175,35 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
     patchScene((s) => { const i = s.els.findIndex((e) => e.id === id), j = i + dir; if (i < 0 || j < 0 || j >= s.els.length) return s; const els = s.els.slice(); [els[i], els[j]] = [els[j], els[i]]; return { ...s, els }; });
   }
 
+  /** 글자 시작점 맞추기: 이 장의 왼쪽 정렬 글자·선을 x 하나에 맞춤 (쪽 번호처럼 오른쪽·가운데 정렬은 그대로) */
+  function alignStarts(x: number, allSlides = false) {
+    const fix = (sc: Scene) => ({ ...sc, els: sc.els.map((e) => ((e.type === "text" && (e.align ?? "left") === "left") || e.type === "line") && !e.locked && !e.hidden ? { ...e, x } : e) });
+    commit(allSlides ? scenes.map(fix) : scenes.map((sc, i) => (i === cur ? fix(sc) : sc)));
+    setMsg({ ok: true, text: `${allSlides ? "모든 장" : "이 장"}의 왼쪽 정렬 글자·선 시작점을 가로 ${Math.round(x)}에 맞췄어요.` });
+  }
+
+  /**
+   * 이 장 위치를 다른 장에도: 이름이 같은 요소(제목·본문·강조 선·쪽 번호…)를 같은 자리·크기로
+   * onlyIds 가 있으면 그 요소들만, withStyle 이면 글씨 크기·정렬·줄 간격도
+   */
+  function copyLayout(onlyIds?: string[], withStyle = false) {
+    const src = scenes[cur].els.filter((e) => e.name && (!onlyIds || onlyIds.includes(e.id)));
+    if (!src.length) { setMsg({ ok: false, text: "이름이 있는 요소(제목·본문 등)가 없어 맞출 게 없어요. 위치·크기 칸에서 요소를 고른 뒤 다시 눌러 주세요." }); return; }
+    let changed = 0;
+    const next = scenes.map((sc, i) => {
+      if (i === cur) return sc;
+      return { ...sc, els: sc.els.map((e) => {
+        const m = src.find((x) => x.name === e.name && x.type === e.type);
+        if (!m || e.locked) return e;
+        changed++;
+        return { ...e, x: m.x, y: m.y, w: m.w, h: m.h, rot: m.rot, ...(withStyle && e.type === "text" ? { size: m.size, align: m.align, lineHeight: m.lineHeight, letter: m.letter, weight: m.weight } : {}) };
+      }) };
+    });
+    if (!changed) { setMsg({ ok: false, text: "다른 장에 같은 이름의 요소가 없어요." }); return; }
+    commit(next);
+    setMsg({ ok: true, text: `다른 장 요소 ${changed}개를 ${cur + 1}장과 같은 위치로 맞췄어요. 마음에 안 들면 ↶ 되돌리기.` });
+  }
+
   // ── 색 테마 (전체 장) ──
   function applyTheme(id: string) {
     const th = THEMES.find((x) => x.id === id);
@@ -264,7 +294,17 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
       if (!moved && Math.abs(dx) + Math.abs(dy) < 3) return;
       moved = true;
       if (mode === "move") {
-        setScenes((all) => all.map((s, i) => (i === cur ? { ...s, els: s.els.map((x) => (starts0[x.id] ? { ...x, x: Math.round(starts0[x.id].x + dx), y: Math.round(starts0[x.id].y + dy) } : x)) } : s)));
+        // 시작점 자석: 다른 요소의 왼쪽 끝(글자 시작점)·가운데·화면 여백에 8px 안이면 붙음 (Alt 누르면 끔)
+        let sdx = dx;
+        if (!ev.altKey) {
+          const others = scene.els.filter((x) => !group.includes(x.id) && !x.hidden && x.type !== "cursor");
+          const lefts = [...others.map((x) => x.x), 88, SW - 88];
+          const tol = 8 / k;
+          let best: number | null = null, bd = tol;
+          for (const id of group) { const st = starts0[id]; if (!st) continue; for (const L of lefts) { const d = Math.abs(st.x + dx - L); if (d < bd) { bd = d; best = L - st.x; } } }
+          if (best != null) { sdx = best; setGuideX(starts0[group[0]] ? starts0[group[0]].x + best : null); } else setGuideX(null);
+        }
+        setScenes((all) => all.map((s, i) => (i === cur ? { ...s, els: s.els.map((x) => (starts0[x.id] ? { ...x, x: Math.round(starts0[x.id].x + sdx), y: Math.round(starts0[x.id].y + dy) } : x)) } : s)));
         return;
       }
       const p = { w: Math.max(20, Math.round(o.w + dx)), h: Math.max(target.type === "line" ? 2 : 20, Math.round(o.h + dy)) };
@@ -272,6 +312,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
     };
     const up = () => {
       window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
+      setGuideX(null);
       if (moved) { past.current.push(before); future.current = []; setSaveState("dirty"); }
     };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
@@ -445,6 +486,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
             <>
               <div ref={stage} style={{ position: "relative", width: "100%", maxWidth: 560, margin: "0 auto", aspectRatio: `${SW} / ${SH}`, userSelect: "none", touchAction: "none" }} onPointerDown={() => { setSel(null); setEditing(null); }}>
                 <canvas ref={canvas} aria-label={`${cur + 1}장 미리보기`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", borderRadius: 6, boxShadow: "var(--shadow)" }} />
+                {guideX != null && <div style={{ position: "absolute", left: guideX * k, top: 0, bottom: 0, width: 0, borderLeft: "1.5px dashed var(--accent)", pointerEvents: "none", zIndex: 4 }} />}
                 {!playing && sel && (() => { const c0 = scene.els.find((x) => x.id === sel && x.type === "cursor"); return c0 ? (
                   <div key="target" onPointerDown={(ev) => dragTarget(ev, c0)} title="커서 도착점 (끌어서 옮기기)" style={{ position: "absolute", left: (c0.x2 ?? 540) * k - 18, top: (c0.y2 ?? 900) * k - 18, width: 36, height: 36, borderRadius: 18, border: "2px dashed var(--accent)", background: "rgba(51,85,255,0.12)", cursor: "move", zIndex: 3 }} />
                 ) : null; })()}
@@ -573,13 +615,24 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
             </div>
           )}
 
+          {tab === "pos" && (
+            <div className="stack" style={{ gap: 6, marginBottom: 10, padding: 8, border: "1px dashed var(--accent)", borderRadius: 10 }}>
+              <b className="small">📐 이 장 위치를 다른 장에도</b>
+              <span className="tiny muted">이 장을 다 맞춘 뒤 누르면, 다른 장의 같은 요소(제목·본문·강조 선·쪽 번호 등)가 같은 자리로 옮겨져요.</span>
+              <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                <button className="btn btn-sm btn-primary" onClick={() => copyLayout()}>모든 요소 위치 맞추기</button>
+                <button className="btn btn-sm" onClick={() => copyLayout(undefined, true)} title="글씨 크기·정렬·줄 간격까지">글씨 크기까지</button>
+                {sels.length > 0 && <button className="btn btn-sm" onClick={() => copyLayout(sels)}>고른 {sels.length}개만</button>}
+              </div>
+            </div>
+          )}
           {(tab === "pos" || tab === "text") && !el && <p className="small muted">미리보기에서 요소를 누르거나 위 &apos;요소 고르기&apos;에서 골라 주세요.</p>}
 
           {multi && (tab === "pos" || tab === "text") && (
             <div className="stack" style={{ gap: 8, marginBottom: 10, padding: 8, background: "var(--accent-soft)", borderRadius: 10 }}>
               <b className="small">{sels.length}개 함께 고름 · 아래 값은 모두에 적용돼요</b>
               <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                <button className="btn btn-sm" onClick={() => { const m = Math.min(...scene.els.filter((x) => sels.includes(x.id)).map((x) => x.x)); patchSel(() => ({ x: m })); }}>왼쪽 맞춤</button>
+                <button className="btn btn-sm" onClick={() => { const m = Math.min(...scene.els.filter((x) => sels.includes(x.id)).map((x) => x.x)); patchSel(() => ({ x: m })); }}>시작점(왼쪽) 맞춤</button>
                 <button className="btn btn-sm" onClick={() => patchSel((x) => ({ x: Math.round((SW - x.w) / 2) }))}>가로 가운데</button>
                 <button className="btn btn-sm" onClick={() => { const m = Math.max(...scene.els.filter((x) => sels.includes(x.id)).map((x) => x.x + x.w)); patchSel((x) => ({ x: m - x.w })); }}>오른쪽 맞춤</button>
                 <button className="btn btn-sm" onClick={() => { const m = Math.min(...scene.els.filter((x) => sels.includes(x.id)).map((x) => x.y)); patchSel(() => ({ y: m })); }}>위 맞춤</button>
@@ -636,6 +689,12 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
                 <button className="btn btn-sm" onClick={() => patchEl(el.id, { x: SW - 88 - el.w })}>오른쪽</button>
                 <button className="btn btn-sm" onClick={() => patchEl(el.id, { y: Math.round((SH - el.h) / 2) })}>세로 가운데</button>
               </div>
+              <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                <span className="small" style={{ width: 64 }}>시작점</span>
+                <button className="btn btn-sm" onClick={() => alignStarts(el.x)} title="이 장의 왼쪽 정렬 글자·선을 이 요소 시작점에 맞춰요">이 장 글자 시작점 맞추기</button>
+                <button className="btn btn-sm" onClick={() => alignStarts(el.x, true)} title="모든 장에 같은 시작점">모든 장도</button>
+              </div>
+              <span className="tiny muted">끌 때 다른 글자 시작점에 가까우면 파란 점선이 뜨며 딱 붙어요 (Alt를 누르고 끌면 안 붙어요).</span>
               {(el.type === "rect" || el.type === "circle" || el.type === "line" || el.type === "sparkle") && <>
                 <Color label="채우기" value={el.fill ?? "#ffffff"} onChange={(v) => patchEl(el.id, { fill: v })} />
                 {el.type !== "sparkle" && el.type !== "line" && <><Color label="테두리" value={el.stroke || "#3355ff"} onChange={(v) => patchEl(el.id, { stroke: v, strokeW: el.strokeW || 4 })} /><Slider label="테두리 두께" value={el.strokeW ?? 0} min={0} max={30} onChange={(v) => patchEl(el.id, { strokeW: v }, false)} /></>}
