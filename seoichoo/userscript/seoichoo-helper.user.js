@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.7.1
+// @version      1.7.2
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -23,6 +23,7 @@
   "use strict";
 
   // ---------------------------------------------------------------- 공통 설정
+  const VERSION = "1.7.2";
   const DAILY_LIMIT = 100;      // 네이버 정책상 계정당 하루 서이추 최대
   const SESSION_LIMIT = 20;     // 20명마다 쉬어가기 알림
   const DEFAULT_COOLDOWN = 60;      // 신청 간격 최소(초)
@@ -334,7 +335,7 @@
     };
 
     const css = `
-      #sc-panel{position:fixed;right:16px;bottom:16px;top:16px;width:400px;z-index:2147483647;
+      #sc-panel{position:fixed !important;right:16px;bottom:16px;top:16px !important;height:auto !important;max-height:none !important;width:400px;z-index:2147483647;
         display:flex;flex-direction:column;background:#fff;color:#111827;border:1px solid #d1d5db;border-radius:12px;
         box-shadow:0 10px 30px rgba(0,0,0,.18);font:13px/1.45 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif}
       #sc-panel *{box-sizing:border-box}
@@ -350,8 +351,9 @@
       #sc-panel .add{border:0;background:none;padding:4px 8px;color:#03a94d;font-weight:700}
       #sc-panel .body{padding:10px 12px;overflow:auto;display:flex;flex-direction:column;gap:8px;flex:1;min-height:0}
       #sc-panel .body > *{flex-shrink:0}
-      #sc-panel textarea{min-height:64px;resize:vertical}
-      #sc-panel.min{top:auto}
+      #sc-panel textarea{min-height:72px !important;height:auto;resize:vertical !important;overflow:auto !important;flex-shrink:0 !important}
+      #sc-panel .body > *{flex-shrink:0 !important}
+      #sc-panel.min{top:auto !important}
       #sc-panel textarea,#sc-panel input{width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:8px;font:inherit;color:inherit;background:#fff}
       #sc-panel button{padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;color:#111827;font:inherit;cursor:pointer;white-space:nowrap}
       #sc-panel .tabs button{border-radius:0}
@@ -403,7 +405,7 @@
     const minBtn = el("button", { onclick: () => panel.classList.toggle("min"), title: "접기/펴기" }, "–");
 
     const panel = el("div", { id: "sc-panel" },
-      el("header", {}, el("span", {}, "서이추 도우미"), minBtn),
+      el("header", {}, el("span", {}, "서이추 도우미 ", el("small", { style: "color:#9ca3af;font-weight:400" }, "v" + VERSION)), minBtn),
       tabs,
       el("div", { class: "body" },
         warn,
