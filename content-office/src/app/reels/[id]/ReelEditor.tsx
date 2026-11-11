@@ -1,5 +1,6 @@
 "use client";
 
+import { isTyping, keyIs, undoKey } from "@/components/shortcuts";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
@@ -159,10 +160,12 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
   // 단축키
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
-      if (e.key === "s" || e.key === "S") { e.preventDefault(); split(); }
+      if (isTyping(e)) return;
+      const u = undoKey(e);
+      if (u) { e.preventDefault(); (document.activeElement as HTMLElement | null)?.blur?.(); return u === "redo" ? redo() : undo(); }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.target as HTMLElement)?.tagName === "SELECT") return;
+      if (keyIs(e, "s")) { e.preventDefault(); split(); }
       else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); remove(); }
       else if (e.key === " ") { e.preventDefault(); toggle(); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); seek(t - (e.shiftKey ? 1 : 1 / fps)); }

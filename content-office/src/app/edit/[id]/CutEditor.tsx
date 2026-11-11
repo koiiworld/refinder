@@ -1,5 +1,6 @@
 "use client";
 
+import { isTyping, keyIs, undoKey } from "@/components/shortcuts";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
@@ -295,11 +296,13 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   // 단축키
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
+      if (isTyping(e)) return;
+      const u = undoKey(e);
+      if (u) { e.preventDefault(); (document.activeElement as HTMLElement | null)?.blur?.(); return u === "redo" ? redo() : undo(); }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (["INPUT", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
       if (e.key === " ") { e.preventDefault(); toggle(); }
-      if (e.key === "s" || e.key === "S") split();
+      if (keyIs(e, "s")) split();
       if (e.key === "Delete" || e.key === "Backspace") remove();
     };
     window.addEventListener("keydown", h);

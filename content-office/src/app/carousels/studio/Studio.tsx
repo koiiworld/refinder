@@ -1,4 +1,5 @@
 "use client";
+import { isTyping, keyIs, undoKey } from "@/components/shortcuts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/components/client-utils";
 import type { Carousel, Slide } from "@/lib/carousel";
@@ -169,8 +170,10 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
   // ── 키보드: Delete 삭제 · 방향키 이동 · Ctrl+Z ──
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
+      // 방향키·Delete 는 입력 칸(슬라이더 포함)에 있을 땐 그 칸이 씀. 되돌리기는 글자 칠 때만 빼고 어디서나
       const typing = /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement)?.tagName ?? "") || (e.target as HTMLElement)?.isContentEditable;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !typing) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+      const u = isTyping(e) ? null : undoKey(e);
+      if (u) { e.preventDefault(); (document.activeElement as HTMLElement | null)?.blur?.(); if (u === "redo") redo(); else undo(); return; }
       if (typing || !sels.length) return;
       if (e.key === "Escape") { setSels([]); return; }
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); patchScene((s) => ({ ...s, els: s.els.filter((x) => !sels.includes(x.id)) })); setSels([]); }
@@ -179,7 +182,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
       if (e.key === "ArrowRight") { e.preventDefault(); patchSel((x) => ({ x: x.x + d })); }
       if (e.key === "ArrowUp") { e.preventDefault(); patchSel((x) => ({ y: x.y - d })); }
       if (e.key === "ArrowDown") { e.preventDefault(); patchSel((x) => ({ y: x.y + d })); }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") { e.preventDefault(); setSels(scene.els.filter((x) => !x.locked && !x.hidden).map((x) => x.id)); }
+      if ((e.ctrlKey || e.metaKey) && keyIs(e, "a")) { e.preventDefault(); setSels(scene.els.filter((x) => !x.locked && !x.hidden).map((x) => x.id)); }
     };
     window.addEventListener("keydown", f);
     return () => window.removeEventListener("keydown", f);
