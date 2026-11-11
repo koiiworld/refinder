@@ -357,6 +357,12 @@ function messageText(kind: string, run: Run, r: Routine, missing: string[]) {
 
 /** 보낼 시각이 된 알림 보내기 (한 건씩 한 서버만 가져감) */
 export async function sendDue(limit = 10) {
+  // 이 서버에 텔레그램 키가 없으면 알림을 가져가지 않음 → 키가 있는 서버(Render 등)가 보냄
+  // (6시간 넘게 아무 서버도 못 보낸 것만 실패로 표시)
+  if (!telegramConnected()) {
+    await q("UPDATE routine_notifications SET status='failed', error=$1 WHERE status='pending' AND send_at < NOW() - interval '6 hours'", ["6시간 동안 텔레그램 키가 있는 서버가 없어 못 보냈어요 (설정에서 봇 토큰·채팅 ID)"]);
+    return;
+  }
   const due = await q<{ id: string }>("SELECT id FROM routine_notifications WHERE status='pending' AND send_at <= NOW() ORDER BY send_at LIMIT $1", [limit]);
   const policy = await getPolicy();
   for (const { id } of due) {

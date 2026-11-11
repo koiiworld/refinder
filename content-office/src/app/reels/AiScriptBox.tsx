@@ -28,7 +28,7 @@ export default function AiScriptBox({ defaultTopic = "", onScript }: { defaultTo
   }, [field]);
 
   const c = est?.counts;
-  const trendNote = c ? (c.videos + c.words + c.posts + c.hooks ? `저장된 트렌드: 유튜브 ${c.videos} · 블로그 단어 ${c.words} · 인기글 ${c.posts} · 분석한 릴스 훅 ${c.hooks}` : "최근 3일 저장된 트렌드가 없어요 — 트렌드 뷰어·블로그 인기글을 한 번 열면 반영돼요") : "";
+  const trendNote = `🔥 누르면 구글 트렌드 실시간 검색어·네이버 블로그 인기글·유튜브 급상승을 새로 불러와 반영해요${c && c.videos + c.words + c.posts + c.hooks ? ` (지금 저장된 것: 유튜브 ${c.videos} · 블로그 단어 ${c.words} · 인기글 ${c.posts} · 분석한 릴스 훅 ${c.hooks})` : ""}`;
   const step = est?.steps[0];
 
   async function run() {

@@ -62,6 +62,11 @@ export async function repurpose(input: { id?: string; title: string; text: strin
   if (source.length < 50) throw new Error("글 본문이 너무 짧아요. 글을 불러오거나 붙여넣어 주세요.");
   const title = String(input.title ?? "").trim().slice(0, 200) || source.slice(0, 40);
   const blog = input.blogId ? await getBlogForAi(input.blogId).catch(() => null) : null;
+  // 최신 트렌드 (구글 트렌드·블로그 인기글·유튜브 급상승) — 블로그 분야에 맞춰서
+  const cat = `${blog?.name ?? ""} ${(blog as { category?: string } | null)?.category ?? ""}`;
+  const field = /요리|레시피|키친|맛집|음식/.test(cat) ? "food" : /육아|아이|맘/.test(cat) ? "kids" : /IT|테크|노트|컴퓨터|AI/i.test(cat) ? "it" : /여행/.test(cat) ? "travel" : "all";
+  const { trendContext } = await import("./reel-script");
+  const trend = (await trendContext(field, { fresh: true }).catch(() => ({ text: "" }))).text.slice(0, 3500);
   const system = "너는 블로그 글을 여러 채널용 콘텐츠로 바꾸는 한국어 콘텐츠 에디터야. 원문에 없는 사실·숫자·가격은 지어내지 마. 블로그 말투를 살리되 채널에 맞게 짧고 읽기 쉽게. 답은 JSON만.";
   const prompt = `블로그: ${blog?.name ?? ""}
 제목: ${title}
@@ -69,7 +74,7 @@ export async function repurpose(input: { id?: string; title: string; text: strin
 [원문]
 ${source.slice(0, 7000)}
 
-아래 채널별 초안을 만들어 줘. 각 값은 그대로 복사해 붙여넣을 수 있는 완성 글(줄바꿈 포함)로.
+${trend ? `[요즘 트렌드 — 훅·첫 문장·말투·해시태그에만 참고. 원문에 없는 사실은 절대 넣지 마]\n${trend}\n\n` : ""}아래 채널별 초안을 만들어 줘. 각 값은 그대로 복사해 붙여넣을 수 있는 완성 글(줄바꿈 포함)로.
 ${pick.map((c) => `- "${c.id}": ${c.label} — ${c.hint}`).join("\n")}
 
 {${pick.map((c) => `"${c.id}": "..."`).join(", ")}} 형식으로 답해.`;

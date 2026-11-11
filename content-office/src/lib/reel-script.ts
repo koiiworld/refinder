@@ -4,7 +4,7 @@ import { extractJson, runStep } from "./ai/run";
 
 /**
  * 릴스 AI 대본
- * - 트렌드: 앱이 이미 모아 둔 자료만 씀 (유튜브 트렌드 탭·블로그 인기글 단어·릴스 분석 결과) — 새로 불러오지 않아 유튜브 할당량 안 씀
+ * - 트렌드: 쓰기 직전 구글 트렌드·네이버 블로그 인기글·유튜브 급상승 차트를 새로 불러오고, 저장된 트렌드 탭·릴스 분석 훅과 함께 넣음 (유튜브 검색은 안 씀)
  * - 모델: 설정 '단계별 AI' → 🎬 릴스 AI 대본 (기본 Claude Opus 5.5)
  */
 export const SCRIPT_FIELDS = [
@@ -31,9 +31,29 @@ export type ReelScript = {
 
 type Snap = { query: { tab?: string }; data: { videos?: { title: string; views?: number | null; perHour?: number; group?: string }[]; words?: { word: string; count: number }[]; posts?: { title: string; likes?: number }[] }; at: string };
 
-/** 프롬프트에 넣을 요즘 트렌드 (저장된 것만, 최근 3일) */
-export async function trendContext(fieldId = "all") {
+/**
+ * 대본 쓰기 직전 최신 트렌드 새로 불러오기 (무료·저렴한 것만, 실패해도 계속)
+ * - 네이버 블로그 인기글(무료, 1시간 캐시) · 유튜브 인기 급상승 차트(할당량 1, 30분 캐시) · 구글 트렌드 지금 뜨는 검색어(무료 RSS)
+ * - 유튜브 '검색'(할당량 100)은 쓰지 않음
+ */
+async function freshTrends(f: (typeof SCRIPT_FIELDS)[number]) {
+  const within = <T,>(p: Promise<T>, ms = 12_000) => Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
+  const { hotTab } = await import("./blog-hot");
+  const { trendTab } = await import("./trends");
+  const { googleTrends } = await import("./hot-report");
+  const [, , g] = await Promise.allSettled([
+    Promise.allSettled(f.hot.map((id) => within(hotTab(id)))),
+    within(trendTab("hot")),
+    within(googleTrends()),
+  ]);
+  const list = g.status === "fulfilled" && Array.isArray(g.value) ? g.value : [];
+  return list.slice(0, 15).map((t) => `${t.title}${t.traffic ? ` (${t.traffic})` : ""}${t.news?.[0]?.title ? ` — ${t.news[0].title}` : ""}`);
+}
+
+/** 프롬프트에 넣을 요즘 트렌드 (최근 3일 저장분, fresh 면 먼저 새로 불러옴) */
+export async function trendContext(fieldId = "all", opts: { fresh?: boolean } = {}) {
   const f = SCRIPT_FIELDS.find((x) => x.id === fieldId) ?? SCRIPT_FIELDS[0];
+  const now = opts.fresh ? await freshTrends(f).catch(() => [] as string[]) : [];
   const since = new Date(Date.now() - 3 * 86400_000).toISOString();
   const yt = await q<Snap>("SELECT query, data, collected_at AS at FROM research_snapshots WHERE source='trend_tab' AND collected_at > $1 AND query->>'tab' = ANY($2) ORDER BY collected_at DESC", [since, [...f.trend]]);
   const hot = await q<Snap>("SELECT query, data, collected_at AS at FROM research_snapshots WHERE source='blog_hot3' AND collected_at > $1 AND query->>'tab' = ANY($2) ORDER BY collected_at DESC", [since, [...f.hot]]);
@@ -67,11 +87,14 @@ export async function trendContext(fieldId = "all") {
     .map((s) => `"${s.analysis.hook!.text}"${s.analysis.hook?.score ? ` (${s.analysis.hook.score}점)` : ""}${s.analysis.whyWorks?.[0] ? ` — ${s.analysis.whyWorks[0]}` : ""}`);
 
   const parts: string[] = [];
+  const today = new Date().toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric", weekday: "short" });
+  parts.push(`[오늘 날짜] ${today} — 계절·시기에 맞는 표현을 써`);
+  if (now.length) parts.push(`[지금 한국에서 뜨는 검색어 (구글 트렌드, 방금 불러옴)]\n${now.map((x) => `- ${x}`).join("\n")}`);
   if (videos.length) parts.push(`[요즘 뜨는 유튜브 영상 제목]\n${[...new Set(videos)].slice(0, 25).map((x) => `- ${x}`).join("\n")}`);
   if (words.length) parts.push(`[네이버 블로그 인기글에 많이 나온 단어]\n${[...new Set(words)].slice(0, 25).join(", ")}`);
   if (posts.length) parts.push(`[네이버 블로그 인기글 제목]\n${[...new Set(posts)].slice(0, 12).map((x) => `- ${x}`).join("\n")}`);
   if (hooks.length) parts.push(`[내가 분석한 잘 된 릴스의 첫 문장(훅)]\n${hooks.map((x) => `- ${x}`).join("\n")}`);
-  return { text: parts.join("\n\n"), counts: { videos: videos.length, words: words.length, posts: posts.length, hooks: hooks.length } };
+  return { text: parts.join("\n\n"), counts: { videos: videos.length, words: words.length, posts: posts.length, hooks: hooks.length, now: now.length } };
 }
 
 const SYSTEM = `너는 한국 인스타그램 릴스·유튜브 쇼츠 대본 작가야. 요즘 트렌드를 읽고, 끝까지 보게 만들고 저장·공유되는 대본을 쓴다.
@@ -87,7 +110,8 @@ export async function writeReelScript(input: ReelScriptInput): Promise<ReelScrip
   const seconds = [15, 30, 45, 60].includes(Number(input.seconds)) ? Number(input.seconds) : 30;
   const topic = String(input.topic ?? "").trim().slice(0, 300);
   const tone = String(input.tone ?? "").trim().slice(0, 100);
-  const ctx = await trendContext(input.field);
+  const ctx = await trendContext(input.field, { fresh: true });
+  const noTrend = !Object.values(ctx.counts).some((n) => n > 0);
   const srcText = String(input.source?.text ?? "").trim().slice(0, 7000);
   const srcTitle = String(input.source?.title ?? "").trim().slice(0, 200);
   const srcBlock = srcText ? `[원본 블로그 글 — 이 글의 내용으로만 대본을 써. 글에 없는 사실·숫자·가격은 넣지 마. 트렌드는 훅·말투·구성에만 참고]\n제목: ${srcTitle}\n${srcText}\n\n` : "";
@@ -96,7 +120,7 @@ export async function writeReelScript(input: ReelScriptInput): Promise<ReelScrip
 주제: ${topic || srcTitle || "(없음 — 아래 트렌드에서 지금 가장 반응이 좋을 주제를 골라 줘)"}
 길이: 약 ${seconds}초 → 자막 ${lineCount - 2}~${lineCount + 2}줄
 ${tone ? `말투·분위기: ${tone}\n` : ""}
-${srcBlock}${ctx.text || "[트렌드 자료 없음] 저장된 트렌드가 아직 없어요. 한국 인스타그램에서 요즘 잘 되는 형식(전후 비교·실수 지적·꿀팁 N가지)을 바탕으로 써 줘."}
+${srcBlock}${ctx.text}${noTrend ? "\n\n[트렌드 자료 없음] 한국 인스타그램에서 요즘 잘 되는 형식(전후 비교·실수 지적·꿀팁 N가지)을 바탕으로 써 줘." : ""}
 
 [답 형식]
 {"title":"프로젝트 제목(20자 이내)","hook":"첫 줄과 같은 훅","lines":["자막1","자막2",...],"caption":"게시물 캡션 2~4줄","hashtags":["해시태그",...5개],"why":"이 대본이 지금 트렌드에 맞는 이유 한두 문장","trends":["참고한 트렌드 키워드 2~4개"]}`;

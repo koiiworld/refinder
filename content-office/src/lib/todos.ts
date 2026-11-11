@@ -165,6 +165,17 @@ export async function reschedule(todoId: string) {
 
 /** 작업: 예약된 알림 보내기 */
 export async function sendTodoNotification(notificationId: string) {
+  // 이 서버에 텔레그램 키가 없으면 건드리지 않고 키가 있는 서버(Render 등)에 넘김 — 2분 뒤 다시 대기열로
+  // (6시간 넘게 아무 서버도 못 보냈으면 그때 실패 처리)
+  if (!telegramConnected()) {
+    const old = await q1<{ id: string }>("UPDATE todo_notifications SET status='failed', error=$2 WHERE id=$1 AND status='pending' AND send_at < NOW() - interval '6 hours' RETURNING id", [notificationId, "6시간 동안 텔레그램 키가 있는 서버가 없어 못 보냈어요 (설정에서 봇 토큰·채팅 ID)"]);
+    if (old) return;
+    const still = await q1<{ id: string }>("SELECT id FROM todo_notifications WHERE id=$1 AND status='pending'", [notificationId]);
+    if (!still) return;
+    const { enqueue } = await import("./jobs");
+    await enqueue("todo_notify", { payload: { notificationId }, maxAttempts: 4, runAfter: new Date(Date.now() + 2 * 60_000) });
+    return;
+  }
   // 한 번만 가져감 (다른 서버·재시도가 같은 알림을 또 보내지 않게)
   const n = await q1<{ id: string; todo_id: string; send_at: string; attempts: number }>(
     "UPDATE todo_notifications SET status='sending', attempts=attempts+1 WHERE id=$1 AND status='pending' RETURNING id, todo_id, send_at, attempts",

@@ -1525,6 +1525,7 @@ test("📣 블로그 글 → 다른 채널 · 🔍 릴스 분석(받아쓰기·�
   assert.equal((await call("/api/repurpose", "POST", { action: "make", confirm: true, title: "김장", text: pasted, channels: [] })).status, 400, "채널 안 고름");
   let rp = (await call("/api/repurpose", "POST", { action: "make", confirm: true, title: "김장 양념 비율", text: pasted, blogId: "blog_algokitchen", channels: ["reel", "cards"] })).data;
   assert.match(rp.result.reel, /김장/);
+  { const p = await stepPrompt("여러 채널용 콘텐츠로 바꾸는"); assert.match(p, /\[요즘 트렌드[\s\S]*김장 배추값/, "채널 변환에도 최신 트렌드"); }
   assert.match(rp.result.cards, /1장: 김장 황금비율\n\n2장/, "배열로 와도 글로 합침");
   assert.ok(!rp.result.threads, "안 고른 채널은 안 만듦");
   rp = (await call("/api/repurpose", "POST", { action: "make", confirm: true, id: rp.id, title: "김장 양념 비율", text: pasted, channels: ["threads"] })).data;
@@ -2454,7 +2455,7 @@ test('✨ 릴스 AI 대본: 예상 비용(Claude Opus 5.5) → 확인해야 실�
  const r=await call('/api/reels/script','POST',{topic:'김장',field:'food',seconds:30,confirm:true});assert.equal(r.status,200,JSON.stringify(r.data));
  assert.equal(r.data.lines.length,5);assert.equal(r.data.lines[0],'김장 이렇게 하면 다 버려요');assert.deepEqual(r.data.hashtags,['#김장','#김장꿀팁']);assert.equal(r.data.model,'claude-opus-5-5');
  const sent=[...(await mockLog())].reverse().find(l=>typeof l.body?.system==='string'&&l.body.system.includes('쇼츠 대본 작가'));assert.ok(sent,'Claude로 보냄');assert.equal(sent.body.model,'claude-opus-5-5');
- const u=sent.body.messages[0].content;assert.match(u,/주제: 김장/);assert.match(u,/약 30초/);
+ const u=sent.body.messages[0].content;assert.match(u,/주제: 김장/);assert.match(u,/약 30초/);assert.match(u,/\[오늘 날짜\]/);assert.match(u,/구글 트렌드, 방금 불러옴\)\][\s\S]*김장 배추값/,'최신 트렌드 반영');
  const nr=await call('/api/reels','POST',{blank:true,title:r.data.title,script:r.data.lines.join('\n')});assert.equal(nr.status,200);
  const reel=(await call('/api/reels/'+nr.data.id)).data;assert.equal(reel.doc.texts.length,5);
  const page=await (await fetch(`${BASE}/reels`)).text();assert.ok(page.includes('AI로 대본 만들기'));
@@ -2478,7 +2479,7 @@ test('📣 채널 변환: Claude Opus 5.5 · 예상 비용 확인 없이는 실�
 });
 
 test('📝 릴스 AI 대본 · 블로그 글로: 블로그 목록 → 고른 글 내용만 쓰라고 프롬프트에 넣음', async()=>{
- const l=await call('/api/reels/sources');assert.equal(l.status,200,JSON.stringify(l.data));assert.ok(l.data.blogs.length>0);assert.ok(Array.isArray(l.data.posts));
+ const l=await call('/api/reels/sources');assert.equal(l.status,200,JSON.stringify(l.data));assert.ok(l.data.blogs.length>0);assert.ok(Array.isArray(l.data.posts));assert.ok(Array.isArray(l.data.published));assert.equal(typeof l.data.viewPeriods,'object');
  const r=await call('/api/reels/script','POST',{field:'food',seconds:15,source:{title:'닭한마리 집에서',text:'닭한마리 육수는 사골 팩으로 15분 만에 끓여요. 칼국수 사리는 마지막에 넣어요.',url:'https://blog.naver.com/x/1'},confirm:true});
  assert.equal(r.status,200,JSON.stringify(r.data));
  const sent=[...(await mockLog())].reverse().find(x=>typeof x.body?.system==='string'&&x.body.system.includes('쇼츠 대본 작가'));
