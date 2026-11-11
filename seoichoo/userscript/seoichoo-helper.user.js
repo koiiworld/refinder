@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.7.0
+// @version      1.7.1
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -13,6 +13,8 @@
 // @grant        GM_setClipboard
 // @grant        GM_addValueChangeListener
 // @grant        unsafeWindow
+// @grant        GM_xmlhttpRequest
+// @connect      blog.naver.com
 // @run-at       document-start
 // @noframes
 // ==/UserScript==
@@ -276,6 +278,18 @@
     let batchId = null;  // 지금 보고 있는 검색 묶음 id
     const MAX_BATCHES = 10;
     let cooldownUntil = 0;
+    // 1.7.0 에서 'MyBlog'를 아이디로 잘못 읽은 탭 바로잡기
+    {
+      const list = accounts();
+      let fixed = false;
+      for (const a of list) {
+        if (/^(MyBlog|PostList|PostView|BlogHome)$/i.test(a.naverId || "")) {
+          if (a.name === a.naverId) a.name = `계정 ${list.indexOf(a) + 1}`;
+          a.naverId = ""; fixed = true;
+        }
+      }
+      if (fixed) store.set("accounts", list);
+    }
     let loginId = detectLoginId();
 
     // 지금 로그인한 네이버 아이디와 연결된 탭이 있으면 그 탭을 연다
@@ -320,7 +334,7 @@
     };
 
     const css = `
-      #sc-panel{position:fixed;right:16px;bottom:16px;width:370px;max-height:86vh;z-index:2147483647;
+      #sc-panel{position:fixed;right:16px;bottom:16px;top:16px;width:400px;z-index:2147483647;
         display:flex;flex-direction:column;background:#fff;color:#111827;border:1px solid #d1d5db;border-radius:12px;
         box-shadow:0 10px 30px rgba(0,0,0,.18);font:13px/1.45 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif}
       #sc-panel *{box-sizing:border-box}
@@ -334,7 +348,10 @@
       #sc-panel .tab .x{border:0;background:none;padding:0 5px;color:#9ca3af;font-size:14px;line-height:1}
       #sc-panel .tab .x:hover{color:#b91c1c}
       #sc-panel .add{border:0;background:none;padding:4px 8px;color:#03a94d;font-weight:700}
-      #sc-panel .body{padding:10px 12px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+      #sc-panel .body{padding:10px 12px;overflow:auto;display:flex;flex-direction:column;gap:8px;flex:1;min-height:0}
+      #sc-panel .body > *{flex-shrink:0}
+      #sc-panel textarea{min-height:64px;resize:vertical}
+      #sc-panel.min{top:auto}
       #sc-panel textarea,#sc-panel input{width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:8px;font:inherit;color:inherit;background:#fff}
       #sc-panel button{padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;color:#111827;font:inherit;cursor:pointer;white-space:nowrap}
       #sc-panel .tabs button{border-radius:0}
@@ -343,7 +360,7 @@
       #sc-panel .row{display:flex;gap:6px;align-items:center}
       #sc-panel .muted{color:#6b7280;font-size:12px}
       #sc-panel .warn{background:#fef3c7;color:#92400e;border-radius:8px;padding:6px 8px;font-size:12px}
-      #sc-panel ul{list-style:none;margin:0;padding:0;border:1px solid #e5e7eb;border-radius:8px;min-height:90px;max-height:200px;overflow:auto;flex-shrink:0}
+      #sc-panel ul{list-style:none;margin:0;padding:0;border:1px solid #e5e7eb;border-radius:8px;min-height:160px;max-height:42vh;overflow:auto;flex-shrink:0}
       #sc-panel li{display:flex;gap:6px;align-items:center;padding:5px 8px;border-bottom:1px solid #f3f4f6}
       #sc-panel li:last-child{border-bottom:0}
       #sc-panel li .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -507,11 +524,32 @@
     }
 
     // 지금 로그인한 네이버 블로그 아이디 (페이지의 '내 블로그' 링크에서 읽음, 못 찾으면 빈 값)
+    // blog.naver.com/아이디 또는 ...?blogId=아이디 에서 아이디만 꺼낸다 (MyBlog.naver 같은 페이지 주소는 제외)
+    function blogIdFromUrl(u) {
+      const q = String(u).match(/[?&]blogId=([A-Za-z0-9_-]+)/);
+      if (q) return q[1];
+      const m = String(u).match(/blog\.naver\.com\/([A-Za-z0-9_-]+)(?=$|[/?#])/);
+      return m ? m[1] : "";
+    }
+    // '내 블로그' 링크가 MyBlog.naver 이면, 그 주소가 어디로 넘어가는지 보고 아이디를 알아낸다
+    function detectLoginIdAsync() {
+      try {
+        GM_xmlhttpRequest({
+          method: "GET",
+          url: "https://blog.naver.com/MyBlog.naver",
+          onload: (r) => {
+            const id = blogIdFromUrl(r.finalUrl || "") ||
+              ((String(r.responseText || "").match(/blogId\s*[=:]\s*['"]([A-Za-z0-9_-]+)['"]/) || [])[1] || "");
+            if (id && !loginId) { loginId = id; render(); }
+          },
+        });
+      } catch (e) { /* 못 알아내면 계정 확인 없이 동작 */ }
+    }
     function detectLoginId() {
       for (const a of document.querySelectorAll("a[href*='blog.naver.com/']")) {
         if (!/내\s*블로그/.test(a.textContent || "")) continue;
-        const m = a.href.match(/blog\.naver\.com\/(?:PostList\.naver\?blogId=)?([A-Za-z0-9_-]+)/);
-        if (m && !/\.naver$/i.test(m[1])) return m[1];
+        const id = blogIdFromUrl(a.href);
+        if (id) return id;
       }
       return "";
     }
@@ -875,5 +913,6 @@
     loadFields();
     renderTabs();
     render();
+    if (!loginId) detectLoginIdAsync();
   }
 })();
