@@ -426,7 +426,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
               <option value="">사진 없음</option>
               {c.images.map((im, n) => <option key={n} value={n}>사진 {n + 1}{im.alt ? ` · ${im.alt.slice(0, 20)}` : ""}</option>)}
             </select>
-            <CardVideoBox carouselId={c.id} index={i} slide={s} slides={slides} disabled={!!busy} onCarousel={mergeVideos} />
+            <CardVideoBox carouselId={c.id} index={i} slide={s} slides={slides} disabled={!!busy} onCarousel={mergeVideos} onZoom={() => setZoomIndex(i)} />
             <CarouselTextAI id={c.id} kind="slide" index={i} slides={slides} disabled={!!busy} onBusy={b=>setBusy(b?'text':'')} onApply={draft=>{setSlides(current=>current.map((slide,n)=>n===i?{...slide,headline:draft.headline??slide.headline,body:draft.body??slide.body}:slide));setDirty(true);}}/>
           </section>
         ))}
@@ -451,7 +451,7 @@ export default function CarouselEditor({ initial, recent = [], types = [] }: { i
         <p className="tiny muted" style={{ margin: 0 }}>첫 줄이 피드에서 보이는 후킹 문구예요. 해시태그는 요즘 3~5개만 붙이는 추세예요.</p>
       </section>
 
-      {zoomIndex!==null&&slides[zoomIndex]&&<CardZoom slides={slides} index={zoomIndex} img={slides[zoomIndex].image!=null?imgs[slides[zoomIndex].image!]??null:null} style={style} fontReady={fontReady} onIndex={setZoomIndex} onClose={()=>setZoomIndex(null)}/>}
+      {zoomIndex!==null&&slides[zoomIndex]&&<CardZoom carouselId={c.id} slides={slides} index={zoomIndex} img={slides[zoomIndex].image!=null?imgs[slides[zoomIndex].image!]??null:null} style={style} fontReady={fontReady} onIndex={setZoomIndex} onClose={()=>setZoomIndex(null)}/>}
       <div className="row">
         <button className="btn btn-ghost" onClick={remove}>🗑 이 캐러셀 지우기</button>
       </div>

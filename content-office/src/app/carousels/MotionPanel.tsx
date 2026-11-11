@@ -4,13 +4,14 @@ import type { CarouselStyle, Slide } from "@/lib/carousel";
 import { MOTION_EFFECTS, renderMotionFrame, renderSlide, type MotionEffect, type Pic } from "./render";
 import { makeMotionVideo } from "./motion-video";
 
-type Choice = MotionEffect | "auto";
+export type Choice = MotionEffect | "auto";
 const AUTO: MotionEffect[] = ["zoomIn", "panLeft", "zoomOut", "panRight"];
-const effectFor = (choice: Choice, i: number) => (choice === "auto" ? AUTO[i % AUTO.length] : choice);
-const KEY = "carousel-motion";
+export const effectFor = (choice: Choice, i: number) => (choice === "auto" ? AUTO[i % AUTO.length] : choice);
+export const MOTION_KEY = "carousel-motion";
+const KEY = MOTION_KEY;
 
 /** AI 영상 카드: 같은 주소로 받은 영상 (캔버스에 그릴 수 있게) */
-async function loadVideo(src: string) {
+export async function loadVideo(src: string) {
   const v = document.createElement("video");
   v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = src;
   await new Promise<void>((ok, no) => { v.onloadeddata = () => ok(); v.onerror = () => no(new Error("AI 영상을 불러오지 못했어요 (주소가 만료됐을 수 있어요 — 카드에서 '영상 빼기' 후 다시 만들어 주세요).")); });

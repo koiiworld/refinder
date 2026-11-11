@@ -8,7 +8,7 @@ import { CARD_MOTIONS } from "@/lib/carousel-video-types";
 const FAILED = ["failed", "nsfw", "canceled", "error"];
 
 /** 🎬 카드 사진 → AI 영상 (음식이 실제로 움직임: 끓기·김·면 들어올리기…) — 버튼·비용 확인 후에만 */
-export default function CardVideoBox({ carouselId, index, slide, slides, disabled, onCarousel }: { carouselId: string; index: number; slide: Slide; slides: Slide[]; disabled: boolean; onCarousel: (c: Carousel) => void }) {
+export default function CardVideoBox({ carouselId, index, slide, slides, disabled, onCarousel, onZoom }: { carouselId: string; index: number; slide: Slide; slides: Slide[]; disabled: boolean; onCarousel: (c: Carousel) => void; onZoom?: () => void }) {
   const v = slide.video;
   const [open, setOpen] = useState(false);
   const [motions, setMotions] = useState<string[]>(["boil", "steam"]);
@@ -41,7 +41,7 @@ export default function CardVideoBox({ carouselId, index, slide, slides, disable
       {v?.url ? (
         <>
           <div className="row between" style={{ gap: 6 }}><span className="small">🎬 AI 영상 · {v.prompt || "움직임"}</span><button className="btn btn-sm btn-ghost" disabled={disabled} onClick={() => void remove()}>영상 빼기</button></div>
-          <video src={`/api/carousels/${carouselId}/video/${v.jobId}`} muted loop autoPlay playsInline style={{ width: "100%", borderRadius: 6, background: "#000" }} onError={() => setErr("영상 주소가 만료됐을 수 있어요. '영상 빼기' 후 다시 만들어 주세요.")} />
+          <video src={`/api/carousels/${carouselId}/video/${v.jobId}`} muted loop autoPlay playsInline title="누르면 글자와 함께 크게 봐요" onClick={onZoom} style={{ width: "100%", borderRadius: 6, background: "#000", cursor: onZoom ? "zoom-in" : undefined }} onError={() => setErr("영상 주소가 만료됐을 수 있어요. '영상 빼기' 후 다시 만들어 주세요.")} />
           <span className="tiny muted">'🎞 모션 캐러셀'에서 영상을 만들면 이 영상 위에 글자를 얹어 내보내요.</span>
         </>
       ) : working ? (
