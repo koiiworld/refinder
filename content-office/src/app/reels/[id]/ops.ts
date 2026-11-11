@@ -1,5 +1,5 @@
 // 릴스 편집 문서 바꾸기 (화면 전용, 모두 새 문서를 돌려줌 → 되돌리기 쉬움)
-import { DEFAULT_TEXT_STYLE, sceneStarts, type ReelBg, type ReelDoc, type ReelScene, type ReelText, type ReelTextStyle } from "@/remotion/types";
+import { DEFAULT_TEXT_STYLE, sceneStarts, type ReelBg, type ReelDoc, type ReelOverlay, type ReelScene, type ReelText, type ReelTextStyle } from "@/remotion/types";
 
 export const nid = () => Math.random().toString(36).slice(2, 9);
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -96,5 +96,27 @@ export function patchText(doc: ReelDoc, id: string, patch: Partial<ReelText>): R
 }
 /** 글자 모양: 이 자막만 / 자막 전체 */
 export function styleTexts(doc: ReelDoc, ids: string[] | "all", patch: Partial<ReelTextStyle>): ReelDoc {
-  return { ...doc, texts: doc.texts.map((t) => (ids === "all" || ids.includes(t.id) ? { ...t, style: { ...t.style, ...patch } } : t)) };
+  // '자막 전체' 일괄 수정은 '자막 전체에 포함'을 끈 자막은 건너뜀
+  return { ...doc, texts: doc.texts.map((t) => ((ids === "all" ? !(t as ReelText & { skipAll?: boolean }).skipAll : ids.includes(t.id)) ? { ...t, style: { ...t.style, ...patch } } : t)) };
 }
+
+// ── 위에 얹기 ──
+export function addOverlay(doc: ReelDoc, videoId: string, t: number): { doc: ReelDoc; id: string } {
+  const id = nid();
+  const o: ReelOverlay = { id, videoId, start: r2(t), end: r2(Math.min(docDurationOf(doc), t + 3)), x: 240, y: 560, w: 600, h: 600, fit: "cover", radius: 36 };
+  if (o.end - o.start < 0.3) o.end = r2(o.start + 3);
+  return { doc: { ...doc, overlays: [...(doc.overlays ?? []), o] }, id };
+}
+export function patchOverlay(doc: ReelDoc, id: string, patch: Partial<ReelOverlay>): ReelDoc {
+  return { ...doc, overlays: (doc.overlays ?? []).map((o) => (o.id === id ? { ...o, ...patch } : o)) };
+}
+export function deleteOverlay(doc: ReelDoc, id: string): ReelDoc {
+  return { ...doc, overlays: (doc.overlays ?? []).filter((o) => o.id !== id) };
+}
+export function duplicateOverlay(doc: ReelDoc, id: string): ReelDoc {
+  const o = (doc.overlays ?? []).find((x) => x.id === id);
+  if (!o) return doc;
+  const len = o.end - o.start;
+  return { ...doc, overlays: [...(doc.overlays ?? []), { ...o, id: nid(), start: r2(o.end), end: r2(o.end + len) }] };
+}
+const docDurationOf = (doc: ReelDoc) => doc.scenes.reduce((a, s) => a + s.dur, 0);

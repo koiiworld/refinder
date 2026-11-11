@@ -274,7 +274,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
   },
   async reel_render(job) {
     const { runReelRender } = await import("./reels");
-    await runReelRender(String(job.payload.reelId));
+    await runReelRender(String(job.payload.reelId), job.payload.quality === "720" ? "720" : "1080");
   },
   async video_edit(job) {
     const { runVideoEdit } = await import("./videos");

@@ -1406,7 +1406,7 @@ test("✂️ 릴스 편집기: 영상 → 받아쓰기로 장면·자막 초안 
   assert.equal(saved.data.doc.texts[0].style.anim, "pop", "자막 등장 효과 저장");
   assert.equal((await call(`/api/reels/${r.data.id}`, "PUT", { doc: { scenes: "x" } })).status, 400);
   const page = (await (await fetch(`${BASE}/reels/${r.data.id}`)).text()).replace(/<!-- -->/g, "");
-  for (const w of ["가이드 (원본)", "편집 화면", "완성 영상", "내 파일", "글자", "장면", "배경", "자르기", "되돌리기", "내보내기"]) assert.ok(page.includes(w), w);
+  for (const w of ["편집 화면", "출력 미리보기", "가이드 박스", "내 파일", "글자", "장면", "배경", "위에 얹기", "자르기", "되돌리기", "갈아끼우기", "영상 뽑기", "720 초안"]) assert.ok(page.includes(w), w);
 
   // ④ 내보내기 (맥: Remotion)
   assert.equal((await call(`/api/reels/${r.data.id}/render`, "POST")).status, 200);

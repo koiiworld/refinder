@@ -35,3 +35,18 @@ if (!fs.existsSync(font) || fs.statSync(font).size < 100_000) {
     console.log("[setup-bin] 한글 글꼴 설치 실패 (영상 자막 없이 진행):", e.message);
   }
 }
+
+// 릴스 편집기 글꼴 고르기용 (무료 OFL 글꼴)
+for (const [file, src] of [["BlackHanSans-Regular.ttf", "blackhansans"], ["DoHyeon-Regular.ttf", "dohyeon"], ["Jua-Regular.ttf", "jua"]]) {
+  const f = path.join(dir, file);
+  if (fs.existsSync(f) && fs.statSync(f).size > 100_000) continue;
+  try {
+    const r = await fetch(`https://github.com/google/fonts/raw/main/ofl/${src}/${file}`, { redirect: "follow" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
+    console.log("[setup-bin] 글꼴 설치", file);
+  } catch (e) {
+    console.log("[setup-bin] 글꼴 설치 실패 (본고딕으로 대신):", file, e.message);
+  }
+}

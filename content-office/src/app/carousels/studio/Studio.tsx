@@ -67,7 +67,9 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
   const [c, setC] = useState(initial);
   const [scenes, setScenes] = useState<Scene[]>(() => initial.slides.map((s, i) => s.scene ?? sceneFromSlide(s, i, initial.slides.length, accentFallback, initial.style?.handle || "")));
   const [cur, setCur] = useState(0);
-  const [sel, setSel] = useState<string | null>(null);
+  const [sels, setSels] = useState<string[]>([]);
+  const sel = sels[sels.length - 1] ?? null;
+  const setSel = (id: string | null) => setSels(id ? [id] : []);
   const [tab, setTab] = useState<Tab>("pos");
   const [hideTop, setHideTop] = useState(false);
   const [view, setView] = useState<"preview" | "mp4">("preview");
@@ -104,6 +106,9 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
   }, [scenes]);
   const patchScene = (fn: (s: Scene) => Scene, record = true) => commit(scenes.map((s, i) => (i === cur ? fn(s) : s)), record);
   const patchEl = (id: string, p: Partial<El>, record = true) => patchScene((s) => ({ ...s, els: s.els.map((e) => (e.id === id ? { ...e, ...p } : e)) }), record);
+  /** 여러 개 고른 경우: 고른 요소 모두에 (fn이 요소마다 바꿀 값을 돌려줌) */
+  const patchSel = (fn: (e: El) => Partial<El>, record = true) => patchScene((s) => ({ ...s, els: s.els.map((e) => (sels.includes(e.id) ? { ...e, ...fn(e) } : e)) }), record);
+  const multi = sels.length > 1;
   const undo = () => { const p = past.current.pop(); if (!p) return; future.current.push(scenes); setScenes(p); setSaveState("dirty"); };
   const redo = () => { const f = future.current.pop(); if (!f) return; past.current.push(scenes); setScenes(f); setSaveState("dirty"); };
 
@@ -141,13 +146,15 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
     const f = (e: KeyboardEvent) => {
       const typing = /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement)?.tagName ?? "") || (e.target as HTMLElement)?.isContentEditable;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !typing) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-      if (typing || !el) return;
-      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeEl(el.id); }
+      if (typing || !sels.length) return;
+      if (e.key === "Escape") { setSels([]); return; }
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); patchScene((s) => ({ ...s, els: s.els.filter((x) => !sels.includes(x.id)) })); setSels([]); }
       const d = e.shiftKey ? 10 : 2;
-      if (e.key === "ArrowLeft") { e.preventDefault(); patchEl(el.id, { x: el.x - d }); }
-      if (e.key === "ArrowRight") { e.preventDefault(); patchEl(el.id, { x: el.x + d }); }
-      if (e.key === "ArrowUp") { e.preventDefault(); patchEl(el.id, { y: el.y - d }); }
-      if (e.key === "ArrowDown") { e.preventDefault(); patchEl(el.id, { y: el.y + d }); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); patchSel((x) => ({ x: x.x - d })); }
+      if (e.key === "ArrowRight") { e.preventDefault(); patchSel((x) => ({ x: x.x + d })); }
+      if (e.key === "ArrowUp") { e.preventDefault(); patchSel((x) => ({ y: x.y - d })); }
+      if (e.key === "ArrowDown") { e.preventDefault(); patchSel((x) => ({ y: x.y + d })); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") { e.preventDefault(); setSels(scene.els.filter((x) => !x.locked && !x.hidden).map((x) => x.id)); }
     };
     window.addEventListener("keydown", f);
     return () => window.removeEventListener("keydown", f);
@@ -188,9 +195,17 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
   // ── 미리보기에서 고르기·끌기·크기 ──
   const scale = () => stageW / SW;
   function startDrag(e: React.PointerEvent, target: El, mode: "move" | "resize") {
-    if (target.locked) { setSel(target.id); return; }
     e.preventDefault(); e.stopPropagation();
-    setSel(target.id); setPlaying(false); setTime(null);
+    // Ctrl(맥은 ⌘)·Shift + 누르기 = 여러 개 고르기 / 빼기
+    if (mode === "move" && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+      setSels((cur) => (cur.includes(target.id) ? cur.filter((x) => x !== target.id) : [...cur, target.id]));
+      return;
+    }
+    if (target.locked) { setSel(target.id); return; }
+    const group = mode === "move" && sels.includes(target.id) && sels.length > 1 ? sels : [target.id];
+    if (group.length === 1) setSel(target.id);
+    setPlaying(false); setTime(null);
+    const starts0 = Object.fromEntries(scene.els.filter((x) => group.includes(x.id) && !x.locked).map((x) => [x.id, { x: x.x, y: x.y }]));
     const k = scale(), sx = e.clientX, sy = e.clientY, o = { x: target.x, y: target.y, w: target.w, h: target.h };
     const before = scenes;
     let moved = false;
@@ -198,7 +213,11 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
       const dx = (ev.clientX - sx) / k, dy = (ev.clientY - sy) / k;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 3) return;
       moved = true;
-      const p = mode === "move" ? { x: Math.round(o.x + dx), y: Math.round(o.y + dy) } : { w: Math.max(20, Math.round(o.w + dx)), h: Math.max(target.type === "line" ? 2 : 20, Math.round(o.h + dy)) };
+      if (mode === "move") {
+        setScenes((all) => all.map((s, i) => (i === cur ? { ...s, els: s.els.map((x) => (starts0[x.id] ? { ...x, x: Math.round(starts0[x.id].x + dx), y: Math.round(starts0[x.id].y + dy) } : x)) } : s)));
+        return;
+      }
+      const p = { w: Math.max(20, Math.round(o.w + dx)), h: Math.max(target.type === "line" ? 2 : 20, Math.round(o.h + dy)) };
       setScenes((all) => all.map((s, i) => (i === cur ? { ...s, els: s.els.map((x) => (x.id === target.id ? { ...x, ...p } : x)) } : s)));
     };
     const up = () => {
@@ -291,7 +310,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
 
   if (!scene) return null;
   const k = stageW / SW;
-  const motionsFor = MOTIONS.filter((m) => m.for === "all" || (el && m.for.includes(el.type)));
+  const motionsFor = MOTIONS.filter((m) => m.for === "all" || !el || multi || m.for.includes(el.type));
   const setMotion = (p: Partial<Motion>) => el && patchEl(el.id, { motion: { ...el.motion, ...p } });
 
   return (
@@ -335,7 +354,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
           <div className="row" style={{ gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
             <button className={`btn btn-sm ${view === "preview" ? "btn-primary" : ""}`} onClick={() => setView("preview")}>미리보기</button>
             <button className={`btn btn-sm ${view === "mp4" ? "btn-primary" : ""}`} onClick={() => setView("mp4")}>뽑은 mp4</button>
-            <span className="tiny muted">요소를 누르면 골라져요. 글자는 더블클릭하면 바로 고쳐져요. 끌면 옮겨지고, 파란 모서리는 크기, Delete는 삭제예요.</span>
+            <span className="tiny muted">요소를 누르면 골라져요. 글자는 더블클릭하면 바로 고쳐져요. 끌면 옮겨지고, 파란 모서리는 크기, Delete는 삭제예요. Ctrl(⌘)+누르기로 여러 개를 함께 골라요.</span>
           </div>
           {view === "mp4" ? (
             rendered[cur] ? <video key={rendered[cur].url} src={rendered[cur].url} controls autoPlay loop muted playsInline style={{ width: "100%", maxWidth: 560, display: "block", margin: "0 auto", borderRadius: 8 }} />
@@ -347,10 +366,10 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
                 {!playing && scene.els.map((e) => !e.hidden && (
                   <div key={e.id} onPointerDown={(ev) => startDrag(ev, e, "move")} onDoubleClick={() => { if (e.type === "text" && !e.locked) { setEditing(e.id); setSel(e.id); } }}
                     title={`${e.name || TYPE_KO[e.type]}${e.locked ? " (잠김)" : ""}`}
-                    style={{ position: "absolute", left: e.x * k, top: e.y * k, width: e.w * k, height: e.h * k, transform: `rotate(${e.rot}deg)`, cursor: e.locked ? "default" : "move", outline: sel === e.id ? "2px solid var(--accent)" : "1px dashed transparent", outlineOffset: 1 }}
-                    onMouseEnter={(ev) => { if (sel !== e.id) (ev.currentTarget as HTMLDivElement).style.outline = "1px dashed var(--accent)"; }}
-                    onMouseLeave={(ev) => { if (sel !== e.id) (ev.currentTarget as HTMLDivElement).style.outline = "1px dashed transparent"; }}>
-                    {sel === e.id && !e.locked && <div onPointerDown={(ev) => startDrag(ev, e, "resize")} aria-label="크기 조절" style={{ position: "absolute", right: -7, bottom: -7, width: 14, height: 14, background: "var(--panel)", border: "2px solid var(--accent)", borderRadius: 3, cursor: "nwse-resize" }} />}
+                    style={{ position: "absolute", left: e.x * k, top: e.y * k, width: e.w * k, height: e.h * k, transform: `rotate(${e.rot}deg)`, cursor: e.locked ? "default" : "move", outline: sels.includes(e.id) ? "2px solid var(--accent)" : "1px dashed transparent", outlineOffset: 1 }}
+                    onMouseEnter={(ev) => { if (!sels.includes(e.id)) (ev.currentTarget as HTMLDivElement).style.outline = "1px dashed var(--accent)"; }}
+                    onMouseLeave={(ev) => { if (!sels.includes(e.id)) (ev.currentTarget as HTMLDivElement).style.outline = "1px dashed transparent"; }}>
+                    {sel === e.id && !multi && !e.locked && <div onPointerDown={(ev) => startDrag(ev, e, "resize")} aria-label="크기 조절" style={{ position: "absolute", right: -7, bottom: -7, width: 14, height: 14, background: "var(--panel)", border: "2px solid var(--accent)", borderRadius: 3, cursor: "nwse-resize" }} />}
                     {editing === e.id && e.type === "text" && (
                       <textarea autoFocus value={e.text ?? ""} onFocus={() => { past.current.push(scenes); future.current = []; }} onPointerDown={(ev) => ev.stopPropagation()} onChange={(ev) => { const text = ev.target.value; patchEl(e.id, { text, h: Math.max(e.h, fitTextHeight({ ...e, text })) }, false); }} onBlur={() => setEditing(null)}
                         onKeyDown={(ev) => { if (ev.key === "Escape") (ev.target as HTMLTextAreaElement).blur(); }}
@@ -455,9 +474,46 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
             </div>
           )}
 
-          {(tab === "pos" || tab === "text" || tab === "motion") && !el && <p className="small muted">미리보기에서 요소를 누르거나 위 &apos;요소 고르기&apos;에서 골라 주세요.</p>}
+          {(tab === "pos" || tab === "text") && !el && <p className="small muted">미리보기에서 요소를 누르거나 위 &apos;요소 고르기&apos;에서 골라 주세요.</p>}
 
-          {tab === "pos" && el && (
+          {multi && (tab === "pos" || tab === "text") && (
+            <div className="stack" style={{ gap: 8, marginBottom: 10, padding: 8, background: "var(--accent-soft)", borderRadius: 10 }}>
+              <b className="small">{sels.length}개 함께 고름 · 아래 값은 모두에 적용돼요</b>
+              <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                <button className="btn btn-sm" onClick={() => { const m = Math.min(...scene.els.filter((x) => sels.includes(x.id)).map((x) => x.x)); patchSel(() => ({ x: m })); }}>왼쪽 맞춤</button>
+                <button className="btn btn-sm" onClick={() => patchSel((x) => ({ x: Math.round((SW - x.w) / 2) }))}>가로 가운데</button>
+                <button className="btn btn-sm" onClick={() => { const m = Math.max(...scene.els.filter((x) => sels.includes(x.id)).map((x) => x.x + x.w)); patchSel((x) => ({ x: m - x.w })); }}>오른쪽 맞춤</button>
+                <button className="btn btn-sm" onClick={() => { const m = Math.min(...scene.els.filter((x) => sels.includes(x.id)).map((x) => x.y)); patchSel(() => ({ y: m })); }}>위 맞춤</button>
+              </div>
+              <div className="row" style={{ gap: 4 }}>
+                <button className="btn btn-sm" onClick={() => patchSel((x) => ({ y: x.y - 10 }))}>↑10</button>
+                <button className="btn btn-sm" onClick={() => patchSel((x) => ({ y: x.y + 10 }))}>↓10</button>
+                <button className="btn btn-sm" onClick={() => patchSel((x) => ({ x: x.x - 10 }))}>←10</button>
+                <button className="btn btn-sm" onClick={() => patchSel((x) => ({ x: x.x + 10 }))}>→10</button>
+              </div>
+              {scene.els.some((x) => sels.includes(x.id) && x.type === "text") && <>
+                <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                  <span className="small" style={{ width: 64 }}>글씨 크기</span>
+                  <button className="btn btn-sm" onClick={() => patchSel((x) => (x.type === "text" ? { size: Math.round((x.size ?? 60) * 0.9) } : {}))}>－10%</button>
+                  <button className="btn btn-sm" onClick={() => patchSel((x) => (x.type === "text" ? { size: Math.round((x.size ?? 60) * 1.1) } : {}))}>＋10%</button>
+                </div>
+                <Color label="글씨 색" value={scene.els.find((x) => sels.includes(x.id) && x.type === "text")?.color ?? "#16181d"} onChange={(v) => patchSel((x) => (x.type === "text" ? { color: v } : {}))} />
+                <div className="row" style={{ gap: 4 }}><span className="small" style={{ width: 64 }}>정렬</span>{(["left", "center", "right"] as const).map((a) => <button key={a} className="btn btn-sm" onClick={() => patchSel((x) => (x.type === "text" ? { align: a } : {}))}>{a === "left" ? "왼쪽" : a === "center" ? "가운데" : "오른쪽"}</button>)}</div>
+                <label className="small row" style={{ gap: 8 }}><span style={{ width: 64 }}>굵기</span>
+                  <select className="input" style={{ width: "auto" }} defaultValue="" onChange={(e) => e.target.value && patchSel((x) => (x.type === "text" ? { weight: Number(e.target.value) } : {}))}>
+                    <option value="">고르기</option>{[[400, "보통"], [500, "중간"], [700, "굵게"], [800, "아주 굵게"], [900, "가장 굵게"]].map(([w, l]) => <option key={w} value={w}>{l}</option>)}
+                  </select>
+                </label>
+              </>}
+              <Slider label="투명도" value={scene.els.find((x) => sels.includes(x.id))?.opacity ?? 1} min={0} max={1} step={0.05} onChange={(v) => patchSel(() => ({ opacity: v }), false)} />
+              <div className="row" style={{ gap: 4 }}>
+                <button className="btn btn-sm" onClick={() => patchSel((x) => ({ hidden: !x.hidden }))}>숨기기/보이기</button>
+                <button className="btn btn-sm" style={{ color: "var(--bad)" }} onClick={() => { patchScene((s) => ({ ...s, els: s.els.filter((x) => !sels.includes(x.id)) })); setSels([]); }}>모두 삭제</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => setSels([])}>고르기 풀기</button>
+              </div>
+            </div>
+          )}
+          {tab === "pos" && el && !multi && (
             <div className="stack" style={{ gap: 8 }}>
               <b className="small">{TYPE_KO[el.type]} · {el.name || ""}</b>
               <div className="row" style={{ gap: 6 }}>
@@ -514,7 +570,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
             </div>
           )}
 
-          {tab === "text" && el && (el.type !== "text" ? <p className="small muted">글자 요소를 골라 주세요.</p> : (
+          {tab === "text" && el && !multi && (el.type !== "text" ? <p className="small muted">글자 요소를 골라 주세요.</p> : (
             <div className="stack" style={{ gap: 8 }}>
               <label className="small stack" style={{ gap: 4 }}>문구 (<code>==글자==</code> 는 형광펜)
                 <textarea className="textarea" style={{ minHeight: 90 }} value={el.text ?? ""} onChange={(e) => patchEl(el.id, { text: e.target.value, h: Math.max(el.h, fitTextHeight({ ...el, text: e.target.value })) }, false)} onBlur={() => { past.current.push(scenes); }} />
@@ -537,20 +593,20 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
             </div>
           ))}
 
-          {tab === "motion" && el && (
+          {tab === "motion" && (
             <div className="stack" style={{ gap: 8 }}>
-              <p className="tiny muted" style={{ margin: 0 }}>{TYPE_KO[el.type]} · {el.name || ""}에 걸 모션을 누르세요. 아래 ▶ 재생으로 바로 확인돼요.</p>
+              <p className="tiny muted" style={{ margin: 0 }}>{el ? `${multi ? `${sels.length}개` : `${TYPE_KO[el.type]} · ${el.name || ""}`}에 걸 모션을 누르세요. 누르면 바로 재생돼요.` : "먼저 미리보기에서 요소를 누르고(여러 개는 Ctrl·⌘+누르기), 아래 모션 카드를 누르면 걸려요."}</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                 {motionsFor.map((m) => (
-                  <button key={m.id} type="button" onClick={() => { setMotion({ id: m.id, dur: el.motion.dur || 0.6 }); setTime(0); setPlaying(true); }} className="stack" style={{ gap: 2, padding: 8, textAlign: "left", borderRadius: 10, cursor: "pointer", border: el.motion.id === m.id ? "2px solid var(--accent)" : "1px solid var(--line)", background: el.motion.id === m.id ? "var(--accent-soft)" : "var(--panel)" }}>
+                  <button key={m.id} type="button" onClick={() => { if (!el) { setMsg({ ok: false, text: "모션을 걸 요소를 먼저 미리보기에서 눌러 주세요." }); return; } if (multi) patchSel((x) => (m.for === "all" || m.for.includes(x.type) ? { motion: { ...x.motion, id: m.id, dur: x.motion.dur || 0.6 } } : {})); else setMotion({ id: m.id, dur: el.motion.dur || 0.6 }); setTime(0); setPlaying(true); }} className="stack" style={{ gap: 2, padding: 8, textAlign: "left", borderRadius: 10, cursor: "pointer", border: el?.motion.id === m.id ? "2px solid var(--accent)" : "1px solid var(--line)", background: el?.motion.id === m.id ? "var(--accent-soft)" : "var(--panel)" }}>
                     <b className="small">{m.label}</b>
                     <span className="tiny muted">{m.en}</span>
                     <span className="tiny">{m.desc}</span>
                   </button>
                 ))}
               </div>
-              <Slider label="시작" value={el.motion.delay} min={0} max={Math.max(1, scene.dur)} step={0.1} onChange={(v) => setMotion({ delay: v })} unit="초" />
-              <Slider label="걸리는 시간" value={el.motion.dur} min={0.1} max={Math.max(1, scene.dur)} step={0.1} onChange={(v) => setMotion({ dur: v })} unit="초" />
+              {el && <><Slider label="시작" value={el.motion.delay} min={0} max={Math.max(1, scene.dur)} step={0.1} onChange={(v) => setMotion({ delay: v })} unit="초" />
+              <Slider label="걸리는 시간" value={el.motion.dur} min={0.1} max={Math.max(1, scene.dur)} step={0.1} onChange={(v) => setMotion({ dur: v })} unit="초" /></>}
             </div>
           )}
         </div>

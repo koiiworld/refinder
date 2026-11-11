@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, interpolate, OffthreadVideo, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { ReelBg, ReelProps, ReelText } from "./types";
-import { docDuration, sceneStarts } from "./types";
+import { docDuration, fontFamily, REEL_FONTS, sceneStarts } from "./types";
 
 /** 배경 */
 function Bg({ bg }: { bg: ReelBg }) {
@@ -66,7 +66,7 @@ export function TextLayer({ t }: { t: ReelText }) {
         width: s.width,
         transform: `translateY(-50%) rotate(${s.rotate}deg)`,
         textAlign: s.align,
-        fontFamily: "ReelFont, 'Noto Sans KR', sans-serif",
+        fontFamily: `${fontFamily(s.font)}, ReelFont, 'Noto Sans KR', sans-serif`,
         fontWeight: s.bold ? 800 : 500,
         fontSize: size,
         lineHeight: 1.25,
@@ -86,6 +86,7 @@ export function TextLayer({ t }: { t: ReelText }) {
           WebkitBoxDecorationBreak: "clone",
           WebkitTextStroke: s.stroke && !s.box ? `${Math.max(2, size * 0.06)}px ${s.stroke}` : undefined,
           paintOrder: "stroke fill",
+          textShadow: s.glow ? `0 0 ${size * 0.25}px ${s.glow}, 0 0 ${size * 0.5}px ${s.glow}` : undefined,
         }}
       >
         {a.text}
@@ -94,14 +95,14 @@ export function TextLayer({ t }: { t: ReelText }) {
   );
 }
 
-export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl }) => {
+export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
   const fps = doc.fps;
   const starts = sceneStarts(doc);
   const total = Math.round(docDuration(doc) * fps);
   const baseSrc = doc.baseVideoId ? srcs[doc.baseVideoId] : undefined;
   return (
     <AbsoluteFill style={{ background: "#000" }}>
-      {fontUrl && <style>{`@font-face { font-family: 'ReelFont'; src: url('${fontUrl}'); font-weight: 100 900; }`}</style>}
+      {fontUrl && <style>{`@font-face { font-family: 'ReelFont'; src: url('${fontUrl}'); font-weight: 100 900; }` + REEL_FONTS.map((f) => { const u = fontUrls?.[f.id] ?? (f.id === "noto" ? fontUrl : ""); return u ? `@font-face { font-family: '${fontFamily(f.id)}'; src: url('${u}'); font-weight: 100 900; }` : ""; }).join("")}</style>}
       {doc.scenes.map((s, i) => {
         const from = Math.round(starts[i] * fps);
         const dur = Math.max(1, Math.round(s.dur * fps));
@@ -122,6 +123,19 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl }) => {
               </AbsoluteFill>
             )}
             {doc.audio === "base" && baseSrc && <Audio src={baseSrc} startFrom={Math.round(s.audioFrom * fps)} />}
+          </Sequence>
+        );
+      })}
+      {(doc.overlays ?? []).map((o) => {
+        const from = Math.max(0, Math.round(o.start * fps));
+        const dur = Math.max(1, Math.min(total - from, Math.round((o.end - o.start) * fps)));
+        const src = srcs[o.videoId];
+        if (from >= total || !src) return null;
+        return (
+          <Sequence key={o.id} from={from} durationInFrames={dur} name="위에 얹기">
+            <div style={{ position: "absolute", left: o.x, top: o.y, width: o.w, height: o.h, borderRadius: o.radius, overflow: "hidden" }}>
+              <OffthreadVideo src={src} muted style={{ width: "100%", height: "100%", objectFit: o.fit }} />
+            </div>
           </Sequence>
         );
       })}

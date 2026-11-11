@@ -8,7 +8,7 @@ import { q, q1, newId, j } from "./db";
 import { enqueue } from "./jobs";
 import { addVideoFile, ffmpegPath, fitSize, getVideo, probe } from "./videos";
 import { getFile } from "./video-store";
-import { DEFAULT_TEXT_STYLE, type ReelDoc, type ReelScene, type ReelText } from "@/remotion/types";
+import { DEFAULT_TEXT_STYLE, REEL_FONTS, type ReelDoc, type ReelScene, type ReelText } from "@/remotion/types";
 
 /**
  * ✂️ 릴스 편집기 (맥 전용 처리)
@@ -72,6 +72,8 @@ export async function saveDoc(id: string, doc: ReelDoc, title?: string) {
     width: 1080, height: 1920, fps: 30, baseVideoId: cur.base_video_id, audio: doc.audio === "none" ? "none" : "base",
     scenes: doc.scenes.map((s) => ({ ...s, dur: Math.max(0.2, Math.min(600, Number(s.dur) || 1)), audioFrom: Math.max(0, Number(s.audioFrom) || 0), video: { videoId: s.video?.videoId || null, from: Math.max(0, Number(s.video?.from) || 0) } })),
     texts: doc.texts.map((t) => ({ ...t, text: String(t.text ?? "").slice(0, 300), start: Math.max(0, Number(t.start) || 0), end: Math.max(Number(t.start) + 0.1, Number(t.end) || 0), style: { ...DEFAULT_TEXT_STYLE, ...t.style } })),
+    overlays: (Array.isArray(doc.overlays) ? doc.overlays : []).slice(0, 100).filter((o) => o && typeof o.videoId === "string" && o.videoId).map((o) => ({ id: String(o.id || Math.random().toString(36).slice(2, 9)).slice(0, 20), videoId: String(o.videoId).slice(0, 60), start: Math.max(0, Number(o.start) || 0), end: Math.max((Number(o.start) || 0) + 0.1, Number(o.end) || 0), x: Number(o.x) || 0, y: Number(o.y) || 0, w: Math.max(20, Number(o.w) || 600), h: Math.max(20, Number(o.h) || 600), fit: o.fit === "contain" ? "contain" as const : "cover" as const, radius: Math.max(0, Math.min(400, Number(o.radius) || 0)) })),
+    memo: String(doc.memo ?? "").slice(0, 4000),
   };
   await setReel(id, { doc: clean, ...(title !== undefined ? { title: String(title).slice(0, 120) } : {}) });
   return clean;
@@ -185,13 +187,13 @@ export async function runReelAnalyze(reelId: string) {
 }
 
 /** 내보내기 요청 */
-export async function startReelRender(id: string) {
+export async function startReelRender(id: string, quality: "720" | "1080" = "1080") {
   const r = await getReel(id);
   if (!r) throw new Error("릴스를 찾을 수 없어요.");
   if (r.status === "rendering") throw new Error("이미 내보내는 중이에요.");
   if (!r.doc.scenes.length) throw new Error("장면이 없어요.");
-  await setReel(id, { status: "rendering", message: "내보내기 대기 중 (맥에서 만들어요)" });
-  await enqueue("reel_render", { payload: { reelId: id }, maxAttempts: 1 });
+  await setReel(id, { status: "rendering", message: `내보내기 대기 중 (맥에서 ${quality === "720" ? "720 초안으로 빠르게" : "1080으로"} 만들어요)` });
+  await enqueue("reel_render", { payload: { reelId: id, quality }, maxAttempts: 1 });
 }
 
 /** 내보낼 때만 잠깐 여는 파일 서버 (영상·글꼴을 Remotion에 넘김) */
@@ -219,24 +221,26 @@ export function fileServer(files: Record<string, string>) {
 }
 
 /** 작업 ④: 내보내기 (맥) */
-export async function runReelRender(reelId: string) {
+export async function runReelRender(reelId: string, quality: "720" | "1080" = "1080") {
   const reel = await getReel(reelId);
   if (!reel) return;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reel-render-"));
   let server: { base: string; close: () => void } | null = null;
   try {
     const doc = reel.doc;
-    const ids = Array.from(new Set([doc.baseVideoId, ...doc.scenes.map((s) => s.video.videoId)].filter(Boolean) as string[]));
+    const ids = Array.from(new Set([doc.baseVideoId, ...doc.scenes.map((s) => s.video.videoId), ...(doc.overlays ?? []).map((o) => o.videoId)].filter(Boolean) as string[]));
     await setReel(reelId, { message: "영상 파일 준비 중" });
     const files: Record<string, string> = {};
     for (const vid of ids) files[`${vid}.mp4`] = await videoToTemp(vid, dir);
     if (fs.existsSync(FONT_FILE())) files["font.ttf"] = FONT_FILE();
+    for (const f of REEL_FONTS) { const p = path.join(process.cwd(), "bin", f.file); if (fs.existsSync(p)) files[`font-${f.id}.ttf`] = p; }
     server = await fileServer(files);
     const srcs = Object.fromEntries(ids.map((vid) => [vid, `${server!.base}/${vid}.mp4`]));
     const out = path.join(dir, "reel.mp4");
     const job = {
       entry: path.join(process.cwd(), "src", "remotion", "index.tsx"),
-      props: { doc, srcs, fontUrl: files["font.ttf"] ? `${server.base}/font.ttf` : "" },
+      props: { doc, srcs, fontUrl: files["font.ttf"] ? `${server.base}/font.ttf` : "", fontUrls: Object.fromEntries(REEL_FONTS.filter((f) => files[`font-${f.id}.ttf`]).map((f) => [f.id, `${server!.base}/font-${f.id}.ttf`])) },
+      ...(quality === "720" ? { scale: 2 / 3 } : {}),
       out,
       cacheDir: path.join(HOME, ".ai-content-office", "remotion-cache"),
       ...(fs.existsSync(CHROME) ? { browser: CHROME } : {}),
