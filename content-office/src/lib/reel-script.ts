@@ -5,7 +5,7 @@ import { extractJson, runStep } from "./ai/run";
 /**
  * 릴스 AI 대본
  * - 트렌드: 앱이 이미 모아 둔 자료만 씀 (유튜브 트렌드 탭·블로그 인기글 단어·릴스 분석 결과) — 새로 불러오지 않아 유튜브 할당량 안 씀
- * - 모델: 설정 '단계별 AI' → 🎬 릴스 AI 대본 (기본 Claude 최상위 모델)
+ * - 모델: 설정 '단계별 AI' → 🎬 릴스 AI 대본 (기본 Claude Opus 5.5)
  */
 export const SCRIPT_FIELDS = [
   { id: "all", label: "전체 트렌드", trend: ["hot", "food", "kids", "it", "travel", "vlog", "ent"], hot: ["all"], study: "" },

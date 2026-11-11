@@ -2447,13 +2447,13 @@ test('✂️ 릴스 새 프로젝트(영상 없이): 대본 → 장면·자막 �
  assert.equal(out.width,720,'720 초안');assert.equal(out.height,1280);assert.ok(Math.abs(out.duration-3)<0.5,String(out.duration));
 });
 
-test('✨ 릴스 AI 대본: 예상 비용(Claude 최상위) → 확인해야 실행 → 자막 줄·캡션 · 편집기 화면에 버튼', async()=>{
+test('✨ 릴스 AI 대본: 예상 비용(Claude Opus 5.5) → 확인해야 실행 → 자막 줄·캡션 · 편집기 화면에 버튼', async()=>{
  const e=await call('/api/reels/script?field=food');assert.equal(e.status,200,JSON.stringify(e.data));
- assert.equal(e.data.steps[0].model,'claude-fable-5-2');assert.equal(e.data.steps[0].provider,'anthropic');assert.ok(e.data.total>0);assert.ok(e.data.fields.some(f=>f.id==='food'));assert.equal(typeof e.data.counts.videos,'number');
+ assert.equal(e.data.steps[0].model,'claude-opus-5-5');assert.equal(e.data.steps[0].provider,'anthropic');assert.ok(e.data.total>0);assert.ok(e.data.fields.some(f=>f.id==='food'));assert.equal(typeof e.data.counts.videos,'number');
  assert.equal((await call('/api/reels/script','POST',{topic:'김장'})).status,400,'확인 없이는 실행 안 함');
  const r=await call('/api/reels/script','POST',{topic:'김장',field:'food',seconds:30,confirm:true});assert.equal(r.status,200,JSON.stringify(r.data));
- assert.equal(r.data.lines.length,5);assert.equal(r.data.lines[0],'김장 이렇게 하면 다 버려요');assert.deepEqual(r.data.hashtags,['#김장','#김장꿀팁']);assert.equal(r.data.model,'claude-fable-5-2');
- const sent=[...(await mockLog())].reverse().find(l=>typeof l.body?.system==='string'&&l.body.system.includes('쇼츠 대본 작가'));assert.ok(sent,'Claude로 보냄');assert.equal(sent.body.model,'claude-fable-5-2');
+ assert.equal(r.data.lines.length,5);assert.equal(r.data.lines[0],'김장 이렇게 하면 다 버려요');assert.deepEqual(r.data.hashtags,['#김장','#김장꿀팁']);assert.equal(r.data.model,'claude-opus-5-5');
+ const sent=[...(await mockLog())].reverse().find(l=>typeof l.body?.system==='string'&&l.body.system.includes('쇼츠 대본 작가'));assert.ok(sent,'Claude로 보냄');assert.equal(sent.body.model,'claude-opus-5-5');
  const u=sent.body.messages[0].content;assert.match(u,/주제: 김장/);assert.match(u,/약 30초/);
  const nr=await call('/api/reels','POST',{blank:true,title:r.data.title,script:r.data.lines.join('\n')});assert.equal(nr.status,200);
  const reel=(await call('/api/reels/'+nr.data.id)).data;assert.equal(reel.doc.texts.length,5);

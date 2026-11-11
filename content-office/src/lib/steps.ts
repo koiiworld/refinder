@@ -15,7 +15,7 @@ export const STEP_AI_LABEL: Record<StepKey, string> = {
   imageprompt: "🖼 이미지 프롬프트 (영어 변환·수정·모델 추천, 무료 Gemini)",
   reelstudy: "🔍 릴스 분석 (무료 Gemini)",
   factcheck: "③-2 기획안 사실 확인 (네이버 검색 + 무료 Gemini)",
-  reelscript: "🎬 릴스 AI 대본 (트렌드 반영 · Claude 최상위)",
+  reelscript: "🎬 릴스 AI 대본 (트렌드 반영 · Claude)",
 };
 
 // 기본 배정: 사용자 표 기준 (ChatGPT/Gemini/Claude). 쓸 수 없으면 연결된 다른 AI로 자동 대체
@@ -30,7 +30,7 @@ export const DEFAULT_STEP_AI: Record<StepKey, { provider: "openai" | "anthropic"
   imageprompt: { provider: "google", model: "gemini-3.5-flash" }, // 무료 Gemini 키
   reelstudy: { provider: "google", model: "gemini-3.5-flash" }, // 무료 Gemini 키 (사진 함께)
   factcheck: { provider: "google", model: "gemini-3.5-flash" }, // 무료 Gemini 키 + 네이버 검색 결과
-  reelscript: { provider: "anthropic", model: "claude-fable-5-2" }, // Claude 최상위 모델
+  reelscript: { provider: "anthropic", model: "claude-opus-5-5" }, // 고품질 · Fable의 절반 가격
 };
 
 export const FALLBACK_MODELS = {
