@@ -1520,14 +1520,14 @@ test("📣 블로그 글 → 다른 채널 · 🔍 릴스 분석(받아쓰기·�
   // 이미 블로그에 올린 글: 주소로 불러오기 (모의 네이버 글)
   const fromUrl = await call("/api/repurpose", "POST", { action: "load", url: "http://localhost:4110/PostView.naver?blogId=algo_kitchen&logNo=1" });
   assert.ok(fromUrl.status === 200 || fromUrl.status === 400, "주소 불러오기 응답");
-  assert.equal((await call("/api/repurpose", "POST", { action: "make", title: "x", text: "짧음", channels: ["reel"] })).status, 400, "본문이 너무 짧음");
+  assert.equal((await call("/api/repurpose", "POST", { action: "make", confirm: true, title: "x", text: "짧음", channels: ["reel"] })).status, 400, "본문이 너무 짧음");
   const pasted = "김장 양념 황금비율을 정리했어요. 절임배추 20kg 기준으로 고춧가루, 젓갈, 마늘, 생강 비율을 알려 드려요. 처음 김장하는 분도 실패 없이 따라 할 수 있어요.";
-  assert.equal((await call("/api/repurpose", "POST", { action: "make", title: "김장", text: pasted, channels: [] })).status, 400, "채널 안 고름");
-  let rp = (await call("/api/repurpose", "POST", { action: "make", title: "김장 양념 비율", text: pasted, blogId: "blog_algokitchen", channels: ["reel", "cards"] })).data;
+  assert.equal((await call("/api/repurpose", "POST", { action: "make", confirm: true, title: "김장", text: pasted, channels: [] })).status, 400, "채널 안 고름");
+  let rp = (await call("/api/repurpose", "POST", { action: "make", confirm: true, title: "김장 양념 비율", text: pasted, blogId: "blog_algokitchen", channels: ["reel", "cards"] })).data;
   assert.match(rp.result.reel, /김장/);
   assert.match(rp.result.cards, /1장: 김장 황금비율\n\n2장/, "배열로 와도 글로 합침");
   assert.ok(!rp.result.threads, "안 고른 채널은 안 만듦");
-  rp = (await call("/api/repurpose", "POST", { action: "make", id: rp.id, title: "김장 양념 비율", text: pasted, channels: ["threads"] })).data;
+  rp = (await call("/api/repurpose", "POST", { action: "make", confirm: true, id: rp.id, title: "김장 양념 비율", text: pasted, channels: ["threads"] })).data;
   assert.ok(rp.result.reel && rp.result.threads, "같은 글에 채널 더하기");
   assert.equal((await call("/api/repurpose")).data[0].id, rp.id, "기록");
   const rpPage = (await (await fetch(`${BASE}/repurpose?post=${pid}`)).text()).replace(/<!-- -->/g, "");
@@ -2258,7 +2258,7 @@ test('🎬 영상 아이디어 문구·구성 다시 생성: 비용 확인 필�
 
 test('📱 채널 변환 카드뉴스 → 기존 7장 문구 그대로 제작 편집기로 연결, 중복 생성·추가 AI 호출 없음',async()=>{
  const text='직접캐러셀연결테스트 닭한마리 레시피를 준비합니다. 닭, 양파, 대파를 넣고 국물을 끓이는 과정을 소개합니다. '.repeat(3);
- const doc=(await call('/api/repurpose','POST',{action:'make',title:'닭한마리 레시피',text,blogId:'blog_algokitchen',channels:['cards']})).data;
+ const doc=(await call('/api/repurpose','POST',{action:'make',confirm:true,title:'닭한마리 레시피',text,blogId:'blog_algokitchen',channels:['cards']})).data;
  await call('/__reset','POST',undefined,MOCK);
  const made=await call('/api/repurpose/'+doc.id,'POST',{action:'carousel'});assert.equal(made.status,201,JSON.stringify(made.data));
  const c=(await call('/api/carousels/'+made.data.id)).data;assert.equal(c.slides.length,7);assert.equal(c.slides[0].headline,'닭한마리 집에서 만들기');assert.equal(c.slides[0].body,'소개');assert.equal(c.slides[3].body,'닭, 양파, 대파를 준비해 주세요.');assert.equal(c.slides[6].kind,'cta');assert.equal(c.blog_id,'blog_algokitchen');assert.equal(c.project_id,null);assert.equal(c.caption,'','캐러셀로 만들기는 카드 문구까지만');assert.deepEqual(c.hashtags,[]);
@@ -2458,4 +2458,29 @@ test('✨ 릴스 AI 대본: 예상 비용(Claude Opus 5.5) → 확인해야 실�
  const nr=await call('/api/reels','POST',{blank:true,title:r.data.title,script:r.data.lines.join('\n')});assert.equal(nr.status,200);
  const reel=(await call('/api/reels/'+nr.data.id)).data;assert.equal(reel.doc.texts.length,5);
  const page=await (await fetch(`${BASE}/reels`)).text();assert.ok(page.includes('AI로 대본 만들기'));
+});
+
+test('🔤 릴스 글꼴: 무료 한글 글꼴은 처음 쓸 때 받아 두고 다음엔 다시 안 받음', async()=>{
+ const before=(await mockLog()).filter(l=>String(l.path).startsWith('/fonts-css?')).length;
+ const r1=await fetch(`${BASE}/api/reels/font?f=gaegu&w=700`);assert.equal(r1.status,200);assert.equal(r1.headers.get('content-type'),'font/ttf');assert.equal((await r1.arrayBuffer()).byteLength,4096);
+ const r2=await fetch(`${BASE}/api/reels/font?f=gaegu&w=700`);assert.equal(r2.status,200);await r2.arrayBuffer();
+ const css=(await mockLog()).filter(l=>String(l.path).startsWith('/fonts-css?'));assert.equal(css.length-before,1,'두 번째는 저장된 파일');assert.match(css.at(-1).path,/family=Gaegu:wght@700/);
+ const w=await fetch(`${BASE}/api/reels/font?f=gaegu&w=300`);assert.equal(w.status,200);await w.arrayBuffer();
+ assert.match((await mockLog()).filter(l=>String(l.path).startsWith('/fonts-css?')).at(-1).path,/wght@400/,'없는 굵기는 있는 굵기로');
+});
+
+test('📣 채널 변환: Claude Opus 5.5 · 예상 비용 확인 없이는 실행 안 함 · 릴스 대본 → 릴스편집 (자막 줄 + 메모)', async()=>{
+ const e=await call('/api/repurpose','POST',{action:'estimate'});assert.equal(e.status,200);assert.equal(e.data.steps[0].model,'claude-opus-5-5');assert.ok(e.data.total>0);
+ const text='김장 양념은 고춧가루와 젓갈 비율이 중요해요. 절임배추는 물기를 충분히 빼야 양념이 잘 배요. 무채는 미리 버무려 두세요.';
+ assert.equal((await call('/api/repurpose','POST',{action:'make',title:'김장',text,channels:['reel']})).status,400,'확인 없이');
+ const r=await call('/api/reels','POST',{blank:true,title:'김장 릴스',script:'김장 실패 막는 법\n물기 빼기',memo:'장면 1\n화면: 배추\n자막: 김장 실패 막는 법'});assert.equal(r.status,200);
+ const reel=(await call('/api/reels/'+r.data.id)).data;assert.equal(reel.doc.texts.length,2);assert.match(reel.doc.memo,/화면: 배추/);
+});
+
+test('📝 릴스 AI 대본 · 블로그 글로: 블로그 목록 → 고른 글 내용만 쓰라고 프롬프트에 넣음', async()=>{
+ const l=await call('/api/reels/sources');assert.equal(l.status,200,JSON.stringify(l.data));assert.ok(l.data.blogs.length>0);assert.ok(Array.isArray(l.data.posts));
+ const r=await call('/api/reels/script','POST',{field:'food',seconds:15,source:{title:'닭한마리 집에서',text:'닭한마리 육수는 사골 팩으로 15분 만에 끓여요. 칼국수 사리는 마지막에 넣어요.',url:'https://blog.naver.com/x/1'},confirm:true});
+ assert.equal(r.status,200,JSON.stringify(r.data));
+ const sent=[...(await mockLog())].reverse().find(x=>typeof x.body?.system==='string'&&x.body.system.includes('쇼츠 대본 작가'));
+ const u=sent.body.messages[0].content;assert.match(u,/\[원본 블로그 글/);assert.match(u,/사골 팩으로 15분/);assert.match(u,/주제: 닭한마리 집에서/);
 });

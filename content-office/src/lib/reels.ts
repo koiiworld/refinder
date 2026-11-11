@@ -9,7 +9,8 @@ import { q, q1, newId, j } from "./db";
 import { enqueue } from "./jobs";
 import { addVideoFile, ffmpegPath, fitSize, getVideo, probe } from "./videos";
 import { getFile } from "./video-store";
-import { DEFAULT_TEXT_STYLE, REEL_FONTS, type ReelDoc, type ReelScene, type ReelText } from "@/remotion/types";
+import { DEFAULT_TEXT_STYLE, faceKey, fontFaces, type ReelDoc, type ReelScene, type ReelText } from "@/remotion/types";
+import { ensureFont } from "./reel-fonts";
 
 /**
  * ✂️ 릴스 편집기 (맥 전용 처리)
@@ -51,7 +52,7 @@ async function setReel(id: string, patch: Partial<Pick<ReelProject, "status" | "
  * 새 프로젝트 (영상 없이): 빈 편집기 또는 대본 붙여넣기 → 한 줄 = 장면 하나 + 자막 하나
  * 영상·사진·음악은 편집기 '내 파일'에서 올려서 메인에 넣거나 위에 얹음
  */
-export async function createBlankReel(input: { title?: string; script?: string; videoId?: string }) {
+export async function createBlankReel(input: { title?: string; script?: string; videoId?: string; memo?: string }) {
   const lines = String(input.script ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 60);
   const grads: [string, string][] = [["#ffd1e8", "#e9d5ff"], ["#e9d5ff", "#bfdbfe"], ["#fde68a", "#fbcfe8"], ["#bae6fd", "#ddd6fe"]];
   const scenes: ReelScene[] = [];
@@ -71,7 +72,7 @@ export async function createBlankReel(input: { title?: string; script?: string; 
     if (!lines.length) scenes.splice(0, scenes.length, vs); else scenes.unshift(vs);
   }
   const id = newId("reel_");
-  const doc: ReelDoc = { width: 1080, height: 1920, fps: 30, baseVideoId: v && v.status === "ready" ? v.id : null, audio: v ? "base" : "none", scenes, texts, overlays: [], photos: [], music: null };
+  const doc: ReelDoc = { width: 1080, height: 1920, fps: 30, baseVideoId: v && v.status === "ready" ? v.id : null, audio: v ? "base" : "none", scenes, texts, overlays: [], photos: [], music: null, ...(input.memo ? { memo: String(input.memo).slice(0, 4000) } : {}) };
   await q("INSERT INTO reel_projects (id, title, base_video_id, doc, status, message) VALUES ($1,$2,$3,$4,'ready','')", [id, String(input.title || lines[0] || v?.title || "새 릴스").slice(0, 120), doc.baseVideoId, j(doc)]);
   return id;
 }
@@ -283,7 +284,9 @@ export async function runReelRender(reelId: string, quality: "720" | "1080" = "1
     const files: Record<string, string> = {};
     for (const vid of ids) files[`${vid}.mp4`] = await videoToTemp(vid, dir);
     if (fs.existsSync(FONT_FILE())) files["font.ttf"] = FONT_FILE();
-    for (const f of REEL_FONTS) { const p = path.join(process.cwd(), "bin", f.file); if (fs.existsSync(p)) files[`font-${f.id}.ttf`] = p; }
+    // 쓰는 글꼴만 (처음 쓰는 글꼴은 이때 받아 둠)
+    const usedFonts = new Set(["noto", ...doc.texts.map((x) => x.style.font ?? "noto")]);
+    for (const { id, w } of fontFaces(usedFonts)) { const p = await ensureFont(id, w); if (p) files[`font-${faceKey(id, w)}.ttf`] = p; }
     for (const u of imgs) {
       const imgId = /img_[0-9a-f]+/.exec(u)![0];
       const row = await q1<{ mime: string; data: Buffer }>("SELECT mime, data FROM generated_images WHERE id=$1", [imgId]);
@@ -299,7 +302,7 @@ export async function runReelRender(reelId: string, quality: "720" | "1080" = "1
     const out = path.join(dir, "reel.mp4");
     const job = {
       entry: path.join(process.cwd(), "src", "remotion", "index.tsx"),
-      props: { doc, srcs, fontUrl: files["font.ttf"] ? `${server.base}/font.ttf` : "", fontUrls: Object.fromEntries(REEL_FONTS.filter((f) => files[`font-${f.id}.ttf`]).map((f) => [f.id, `${server!.base}/font-${f.id}.ttf`])) },
+      props: { doc, srcs, fontUrl: files["font.ttf"] ? `${server.base}/font.ttf` : "", fontUrls: Object.fromEntries(fontFaces(usedFonts).filter(({ id, w }) => files[`font-${faceKey(id, w)}.ttf`]).map(({ id, w }) => [faceKey(id, w), `${server!.base}/font-${faceKey(id, w)}.ttf`])) },
       ...(quality === "720" ? { scale: 2 / 3 } : {}),
       out,
       cacheDir: path.join(HOME, ".ai-content-office", "remotion-cache"),

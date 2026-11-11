@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { api } from "@/components/client-utils";
 import { Reel } from "@/remotion/Reel";
-import { docDuration, GUIDE_BOX, REEL_FONTS, sceneStarts, TEXT_PRESETS, type ReelBg, type ReelDoc, type ReelOverlay, type ReelText, type ReelTextStyle } from "@/remotion/types";
+import { docDuration, faceKey, fontFaces, fontFamily, GUIDE_BOX, REEL_FONTS, sceneStarts, TEXT_PRESETS, type ReelBg, type ReelDoc, type ReelOverlay, type ReelText, type ReelTextStyle } from "@/remotion/types";
 import * as op from "./ops";
 import AiScriptBox from "../AiScriptBox";
 
@@ -65,7 +65,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
     const ids = new Set<string>([doc.baseVideoId, ...doc.scenes.map((s) => s.video.videoId), ...(doc.overlays ?? []).map((o) => o.videoId)].filter(Boolean) as string[]);
     return Object.fromEntries(Array.from(ids).map((id) => [id, `/api/videos/${id}/file`]));
   }, [doc]);
-  const fontUrls = useMemo(() => Object.fromEntries(REEL_FONTS.map((f) => [f.id, `/api/reels/font?f=${f.id}`])), []);
+  const fontUrls = useMemo(() => Object.fromEntries(fontFaces().map(({ id, w }) => [faceKey(id, w), `/api/reels/font?f=${id}${w ? `&w=${w}` : ""}`])), []);
   const inputProps = useMemo(() => ({ doc, srcs, fontUrl: "/api/reels/font", fontUrls }), [doc, srcs, fontUrls]);
   const busy = info.status === "analyzing" || info.status === "rendering";
 
@@ -111,9 +111,13 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
   useEffect(() => {
     const p = player.current;
     if (!p) return;
-    const onFrame = (e: { detail: { frame: number } }) => setFrame(e.detail.frame);
+    const onFrame = (e: { detail: { frame: number } }) => {
+      setFrame(e.detail.frame);
+      // '이 장면만 재생': 장면 끝에서 멈춤
+      if (stopAt.current != null && e.detail.frame >= stopAt.current) { stopAt.current = null; p.pause(); }
+    };
     const onPlay = () => { setPlaying(true); out.current?.seekTo(p.getCurrentFrame()); out.current?.play(); };
-    const onPause = () => { setPlaying(false); out.current?.pause(); out.current?.seekTo(p.getCurrentFrame()); };
+    const onPause = () => { stopAt.current = null; setPlaying(false); out.current?.pause(); out.current?.seekTo(p.getCurrentFrame()); };
     p.addEventListener("frameupdate", onFrame);
     p.addEventListener("seeked", onFrame);
     p.addEventListener("play", onPlay);
@@ -124,6 +128,17 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
 
   const seek = (sec: number) => { const f = Math.max(0, Math.min(totalFrames - 1, Math.round(sec * fps))); player.current?.seekTo(f); setFrame(f); };
   const toggle = () => (player.current?.isPlaying() ? player.current.pause() : player.current?.play());
+  const stopAt = useRef<number | null>(null);
+  /** 지금 장면(고른 장면 또는 재생 위치의 장면)만 처음부터 끝까지 재생 */
+  const playScene = () => {
+    const sc = curScene;
+    if (!sc) return;
+    const i = doc.scenes.findIndex((x) => x.id === sc.id);
+    const a = Math.round(starts[i] * fps), b = Math.min(totalFrames - 1, Math.round((starts[i] + sc.dur) * fps) - 1);
+    player.current?.pause();
+    player.current?.seekTo(a); setFrame(a);
+    setTimeout(() => { stopAt.current = b; player.current?.play(); }, 50);
+  };
 
   const selScene = sel?.kind === "scene" ? doc.scenes.find((s) => s.id === sel.id) : undefined;
   const selText = sel?.kind === "text" ? (doc.texts.find((x) => x.id === sel.id) as XText | undefined) : undefined;
@@ -527,6 +542,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
             <button className="btn btn-sm" onClick={() => seek(t + 1)} aria-label="1초 앞으로">▶|</button>
             <span className="small mono">{fmt(t)} / {fmt(total)}</span>
             <button className="btn btn-sm btn-primary" onClick={() => { seek(0); setTimeout(() => player.current?.play(), 50); }}>▶ 미리보기</button>
+            <button className="btn btn-sm" disabled={!curScene} onClick={playScene} title="지금 고른 장면(또는 재생 위치의 장면)만 재생">▶ 이 장면만{curScene ? ` · ${curScene.label.slice(0, 8)}` : ""}</button>
             <label className="tiny row" style={{ gap: 4 }}><input type="checkbox" checked={side} onChange={(e) => setSide(e.target.checked)} /> 옆 미리보기</label>
             <label className="tiny row" style={{ gap: 4 }}><input type="checkbox" checked={showGuide} onChange={(e) => setShowGuide(e.target.checked)} /> 가이드 박스</label>
           </div>
@@ -648,6 +664,67 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
   );
 }
 
+const GLOWS: [string, string][] = [["#ff5fa2", "핑크"], ["#ff2d55", "빨강"], ["#ff9f0a", "주황"], ["#ffd60a", "노랑"], ["#30d158", "초록"], ["#64d2ff", "하늘"], ["#7b93ff", "파랑"], ["#bf5af2", "보라"], ["#ffffff", "흰빛"], ["#000000", "검은 그림자"]];
+
+/** 색 고르기 + HEX 직접 입력 (#fff, fff, #ffcc00 모두 됨) */
+function ColorField({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const [txt, setTxt] = useState(value.toUpperCase());
+  useEffect(() => { setTxt(value.toUpperCase()); }, [value]);
+  const commit = (v: string) => {
+    let h = v.trim().replace(/^#/, "");
+    if (/^[0-9a-f]{3}$/i.test(h)) h = h.split("").map((c) => c + c).join("");
+    if (/^[0-9a-f]{6}$/i.test(h)) onChange(`#${h.toLowerCase()}`);
+    else setTxt(value.toUpperCase());
+  };
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+      <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff"} onChange={(e) => onChange(e.target.value)} aria-label={`${label} 고르기`} />
+      <input className="input mono" style={{ width: 92, padding: "2px 6px" }} value={txt} onChange={(e) => { setTxt(e.target.value); if (/^#?([0-9a-f]{6})$/i.test(e.target.value.trim())) commit(e.target.value); }} onBlur={(e) => commit(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") commit((e.target as HTMLInputElement).value); }} placeholder="#FFFFFF" aria-label={`${label} HEX`} />
+    </div>
+  );
+}
+
+/** 글꼴 고르기: 열면 목록의 이름이 각 글꼴 모양으로 보임 (구글 폰트에서 이름 글자만 받아 가볍게) */
+function FontPicker({ value, onPick }: { value: string; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const box = useRef<HTMLDivElement>(null);
+  const cur = REEL_FONTS.find((f) => f.id === value) ?? REEL_FONTS[0];
+  useEffect(() => {
+    // 미리보기용 글꼴: 모든 글꼴 이름 글자만 담은 아주 작은 파일
+    if (document.getElementById("reel-font-preview")) return;
+    const text = Array.from(new Set(Array.from(REEL_FONTS.map((f) => f.label).join("") + "가나다라 AaBb123"))).join("");
+    const l = document.createElement("link");
+    l.id = "reel-font-preview"; l.rel = "stylesheet";
+    l.href = `https://fonts.googleapis.com/css2?${REEL_FONTS.map((f) => `family=${encodeURIComponent(f.family)}`).join("&")}&text=${encodeURIComponent(text)}&display=swap`;
+    document.head.appendChild(l);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    window.addEventListener("mousedown", h);
+    return () => window.removeEventListener("mousedown", h);
+  }, [open]);
+  const list = REEL_FONTS.filter((f) => !q.trim() || f.label.includes(q.trim()) || f.family.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div ref={box} style={{ position: "relative", flex: 1 }}>
+      <button type="button" className="input" style={{ textAlign: "left", fontFamily: `'${cur.family}', ${fontFamily(cur.id)}`, fontSize: 18, cursor: "pointer" }} onClick={() => setOpen((o) => !o)} aria-label="글꼴" aria-expanded={open}>{cur.label} ▾</button>
+      {open && (
+        <div className="reel-font-pop" role="listbox" style={{ position: "absolute", zIndex: 50, top: "100%", left: 0, right: 0, marginTop: 4, maxHeight: 360, overflowY: "auto", background: "var(--panel, #1f1e27)", border: "1px solid var(--border, #333)", borderRadius: 10, padding: 6, boxShadow: "0 10px 30px rgba(0,0,0,.45)" }}>
+          <input className="input" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`글꼴 ${REEL_FONTS.length}개 중 찾기`} aria-label="글꼴 찾기" style={{ marginBottom: 6 }} />
+          {list.map((f) => (
+            <button key={f.id} type="button" role="option" aria-selected={f.id === value} onClick={() => { onPick(f.id); setOpen(false); }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 8px", borderRadius: 8, border: 0, cursor: "pointer", background: f.id === value ? "var(--accent-soft)" : "transparent", color: "inherit", fontFamily: `'${f.family}', sans-serif`, fontSize: 20, lineHeight: 1.3 }}>
+              {f.label}
+            </button>
+          ))}
+          <p className="tiny muted" style={{ margin: "6px 4px 0", fontFamily: "inherit" }}>모두 무료(OFL) 글꼴이라 영상에 써도 돼요. 처음 고른 글꼴은 받는 데 몇 초 걸려요.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TextControls({ t, scopeAll, total, onScope, onText, onStyle }: { t: XText; scopeAll: boolean; total: number; onScope: (v: boolean) => void; onText: (p: Partial<XText>) => void; onStyle: (p: Partial<ReelTextStyle>) => void }) {
   const s = t.style;
   return (
@@ -657,14 +734,10 @@ function TextControls({ t, scopeAll, total, onScope, onText, onStyle }: { t: XTe
       <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
         {TEXT_PRESETS.map((p) => <button key={p.id} className="btn btn-sm" style={{ borderRadius: 999 }} onClick={() => onStyle(p.style)}>{p.label}</button>)}
       </div>
-      <label className="reel-row"><span>글꼴</span>
-        <select className="input" value={s.font ?? "noto"} onChange={(e) => onStyle({ font: e.target.value as ReelTextStyle["font"] })} style={{ fontFamily: `ReelFont-${s.font ?? "noto"}` }}>
-          {REEL_FONTS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-        </select>
-      </label>
+      <div className="reel-row"><span>글꼴</span><FontPicker value={s.font ?? "noto"} onPick={(font) => onStyle({ font })} /></div>
       <label className="reel-row"><span>크기</span><input type="range" min={24} max={180} value={s.size} onChange={(e) => onStyle({ size: Number(e.target.value) })} /><input className="input" type="number" style={{ width: 56, padding: "2px 4px" }} value={s.size} onChange={(e) => onStyle({ size: Number(e.target.value) })} /></label>
       <label className="reel-row"><span>굵게</span><button className={`btn btn-sm ${s.bold ? "btn-primary" : ""}`} onClick={() => onStyle({ bold: !s.bold })}>{s.bold ? "켬" : "끔"}</button></label>
-      <label className="reel-row"><span>글자색</span><input type="color" value={s.color} onChange={(e) => onStyle({ color: e.target.value })} /><span className="tiny mono">{s.color.toUpperCase()}</span></label>
+      <div className="reel-row"><span>글자색</span><ColorField value={s.color} onChange={(color) => onStyle({ color })} label="글자색" /></div>
       <div className="reel-row"><span>상자</span>
         <div className="reel-swatches small">
           <button className="sw none" onClick={() => onStyle({ box: "" })} aria-label="상자 없음">없음</button>
@@ -674,8 +747,15 @@ function TextControls({ t, scopeAll, total, onScope, onText, onStyle }: { t: XTe
       <div className="reel-row"><span>테두리</span>
         <div className="seg">{[["", "없음"], ["#000000", "검정"], ["#ffffff", "흰색"]].map(([v, l]) => <button key={l} className={s.stroke === v ? "on" : ""} onClick={() => onStyle({ stroke: v })}>{l}</button>)}</div>
       </div>
-      <div className="reel-row"><span>빛</span>
-        <div className="seg">{[["", "없음"], ["#ff5fa2", "핑크"], ["#7b93ff", "파랑"], ["#ffffff", "흰빛"]].map(([v, l]) => <button key={l} className={(s.glow ?? "") === v ? "on" : ""} onClick={() => onStyle({ glow: v })}>{l}</button>)}</div>
+      <div className="reel-row" style={{ alignItems: "flex-start" }}><span>빛</span>
+        <div className="stack" style={{ gap: 6, flex: 1 }}>
+          <div className="reel-swatches small">
+            <button className={`sw none${!s.glow ? " on" : ""}`} onClick={() => onStyle({ glow: "" })} aria-label="빛 없음">없음</button>
+            {GLOWS.map(([c, l]) => <button key={c} className={`sw${(s.glow ?? "").toLowerCase() === c ? " on" : ""}`} title={l} style={{ background: c, boxShadow: `0 0 10px ${c}` }} onClick={() => onStyle({ glow: c })} aria-label={`빛 ${l}`} />)}
+          </div>
+          <ColorField value={s.glow || "#ff5fa2"} onChange={(glow) => onStyle({ glow })} label="빛 색" />
+          {s.glow && <label className="row tiny" style={{ gap: 6 }}>세기<input type="range" min={0.3} max={3} step={0.1} value={s.glowSize ?? 1} onChange={(e) => onStyle({ glowSize: Number(e.target.value) })} style={{ flex: 1 }} /><input className="input" type="number" min={0.3} max={3} step={0.1} style={{ width: 56, padding: "2px 4px" }} value={s.glowSize ?? 1} onChange={(e) => onStyle({ glowSize: Math.min(3, Math.max(0.3, Number(e.target.value) || 1)) })} aria-label="빛 세기" /></label>}
+        </div>
       </div>
       <div className="reel-row"><span>한 줄 맞춤</span><button className={`btn btn-sm ${s.fit ? "btn-primary" : ""}`} onClick={() => onStyle({ fit: !s.fit })}>{s.fit ? "넘치면 줄여요" : "줄바꿈"}</button></div>
       <div className="reel-row"><span>정렬</span><div className="seg">{(["left", "center", "right"] as const).map((a) => <button key={a} className={s.align === a ? "on" : ""} onClick={() => onStyle({ align: a })}>{{ left: "왼쪽", center: "가운데", right: "오른쪽" }[a]}</button>)}</div></div>

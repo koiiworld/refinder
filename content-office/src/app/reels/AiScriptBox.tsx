@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/components/client-utils";
 import { fmtUsd } from "@/components/ui";
+import BlogSourcePicker, { type BlogSource } from "./BlogSourcePicker";
 
 type Est = { steps: { label: string; model: string; provider: string; usd: number | null }[]; total: number | null; counts: { videos: number; words: number; posts: number; hooks: number }; fields: { id: string; label: string }[] };
 export type AiScript = { title: string; hook: string; lines: string[]; caption: string; hashtags: string[]; why: string; trends: string[]; model: string; substitutedFor?: string };
@@ -17,6 +18,8 @@ export default function AiScriptBox({ defaultTopic = "", onScript }: { defaultTo
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [last, setLast] = useState<AiScript | null>(null);
+  const [mode, setMode] = useState<"trend" | "blog">("trend");
+  const [src, setSrc] = useState<BlogSource | null>(null);
 
   useEffect(() => {
     let off = false;
@@ -33,7 +36,7 @@ export default function AiScriptBox({ defaultTopic = "", onScript }: { defaultTo
     if (!confirm(`AI 대본을 만들까요?\n모델: ${step?.model ?? "?"}\n예상 비용: 약 ${cost}\n(실제 청구는 조금 다를 수 있어요)`)) return;
     setBusy(true); setErr("");
     try {
-      const r = await api<AiScript>("/api/reels/script", "POST", { topic, field, seconds, tone, confirm: true });
+      const r = await api<AiScript>("/api/reels/script", "POST", { topic, field, seconds, tone, source: src ?? undefined, confirm: true });
       setLast(r);
       onScript(r);
     } catch (e) { setErr((e as Error).message); }
@@ -43,7 +46,13 @@ export default function AiScriptBox({ defaultTopic = "", onScript }: { defaultTo
   return (
     <div className="stack" style={{ gap: 6, border: "1px dashed var(--accent)", borderRadius: 10, padding: 8 }}>
       <b className="small">✨ AI로 대본 만들기</b>
-      <input className="input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="주제 (비우면 요즘 트렌드에서 골라 줘요)" aria-label="AI 대본 주제" />
+      <div className="seg" role="tablist">
+        <button className={mode === "trend" ? "on" : ""} onClick={() => { setMode("trend"); setSrc(null); }}>🔥 주제·트렌드로</button>
+        <button className={mode === "blog" ? "on" : ""} onClick={() => setMode("blog")}>📝 내 블로그 글로</button>
+      </div>
+      {mode === "blog" && <BlogSourcePicker value={src} onPick={(s) => { setSrc(s); if (s && !topic.trim()) setTopic(s.title); }} />}
+      {mode === "blog" && <span className="tiny muted">고른 글 내용으로만 대본을 써요(글에 없는 사실은 안 넣어요). 트렌드는 훅·말투에만 참고해요.</span>}
+      <input className="input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder={mode === "blog" ? "강조할 점 (선택)" : "주제 (비우면 요즘 트렌드에서 골라 줘요)"} aria-label="AI 대본 주제" />
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         <select className="input" style={{ width: "auto" }} value={field} onChange={(e) => setField(e.target.value)} aria-label="트렌드 분야">
           {(est?.fields ?? [{ id: "all", label: "전체 트렌드" }]).map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
@@ -54,7 +63,7 @@ export default function AiScriptBox({ defaultTopic = "", onScript }: { defaultTo
         <input className="input" style={{ flex: 1, minWidth: 120 }} value={tone} onChange={(e) => setTone(e.target.value)} placeholder="말투 (선택, 예: 친구한테 말하듯)" aria-label="말투" />
       </div>
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void run()}>{busy ? <><span className="spinner" /> 쓰는 중… (1분쯤)</> : "✨ 대본 만들기"}</button>
+        <button className="btn btn-sm btn-primary" disabled={busy || (mode === "blog" && !src)} onClick={() => void run()}>{busy ? <><span className="spinner" /> 쓰는 중… (1분쯤)</> : "✨ 대본 만들기"}</button>
         <span className="tiny muted">{step ? `${step.model} · 약 ${est?.total != null ? fmtUsd(est.total) : "?"}` : ""}</span>
       </div>
       {trendNote && <span className="tiny muted">{trendNote}</span>}

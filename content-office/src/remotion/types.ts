@@ -34,17 +34,59 @@ export type ReelTextStyle = {
   anim?: "none" | "fade" | "pop" | "slide" | "bounce" | "type"; // 등장 효과 (모션그래픽)
   font?: ReelFontId; // 글꼴 (없으면 본고딕)
   glow?: string; // 글자 둘레 빛 색 ('' = 없음)
+  glowSize?: number; // 빛 세기 (0.3~3, 기본 1)
 };
 
-/** 글꼴 (모두 무료 OFL 글꼴, bin/ 에 들어 있음) */
-export const REEL_FONTS = [
-  { id: "noto", label: "본고딕", file: "NotoSansKR.ttf" },
-  { id: "blackhan", label: "검은고딕 (굵은 제목)", file: "BlackHanSans-Regular.ttf" },
-  { id: "dohyeon", label: "도현체", file: "DoHyeon-Regular.ttf" },
-  { id: "jua", label: "주아체 (둥근)", file: "Jua-Regular.ttf" },
-] as const;
-export type ReelFontId = (typeof REEL_FONTS)[number]["id"];
+/** 글꼴: 구글 폰트의 무료(OFL) 한글 글꼴 전부. file 이 있는 4개는 bin/ 에 미리 받아 둠, 나머지는 처음 쓸 때 bin/fonts/ 로 받음 */
+export type ReelFontDef = { id: string; label: string; family: string; file?: string; weights?: number[] };
+export const REEL_FONTS: ReelFontDef[] = [
+  { id: "noto", label: "본고딕", family: "Noto Sans KR", file: "NotoSansKR.ttf" },
+  { id: "blackhan", label: "검은고딕 (굵은 제목)", family: "Black Han Sans", file: "BlackHanSans-Regular.ttf" },
+  { id: "dohyeon", label: "도현체", family: "Do Hyeon", file: "DoHyeon-Regular.ttf" },
+  { id: "jua", label: "주아체 (둥근)", family: "Jua", file: "Jua-Regular.ttf" },
+  { id: "nanumgothic", label: "나눔고딕", family: "Nanum Gothic", weights: [400, 700] },
+  { id: "gothica1", label: "고딕 A1", family: "Gothic A1", weights: [400, 700] },
+  { id: "ibmplex", label: "IBM 플렉스 산스", family: "IBM Plex Sans KR", weights: [400, 700] },
+  { id: "astasans", label: "아스타 산스", family: "Asta Sans", weights: [400, 700] },
+  { id: "gowundodum", label: "고운돋움", family: "Gowun Dodum", weights: [400] },
+  { id: "sunflower", label: "해바라기", family: "Sunflower", weights: [500, 700] },
+  { id: "dongle", label: "동글 (큰 둥근)", family: "Dongle", weights: [400, 700] },
+  { id: "stylish", label: "스타일리시", family: "Stylish", weights: [400] },
+  { id: "orbit", label: "오르빗", family: "Orbit", weights: [400] },
+  { id: "gasoek", label: "가석 (아주 굵은)", family: "Gasoek One", weights: [400] },
+  { id: "notoserif", label: "본명조", family: "Noto Serif KR", weights: [400, 700] },
+  { id: "nanummyeongjo", label: "나눔명조", family: "Nanum Myeongjo", weights: [400, 700] },
+  { id: "gowunbatang", label: "고운바탕", family: "Gowun Batang", weights: [400, 700] },
+  { id: "songmyung", label: "송명", family: "Song Myung", weights: [400] },
+  { id: "hahmlet", label: "함렛", family: "Hahmlet", weights: [400, 700] },
+  { id: "diphylleia", label: "산하엽", family: "Diphylleia", weights: [400] },
+  { id: "grandiflora", label: "그랜디플로라", family: "Grandiflora One", weights: [400] },
+  { id: "nanumpen", label: "나눔손글씨 펜", family: "Nanum Pen Script", weights: [400] },
+  { id: "nanumbrush", label: "나눔손글씨 붓", family: "Nanum Brush Script", weights: [400] },
+  { id: "gaegu", label: "개구 (손글씨)", family: "Gaegu", weights: [400, 700] },
+  { id: "gamja", label: "감자꽃", family: "Gamja Flower", weights: [400] },
+  { id: "himelody", label: "하이멜로디", family: "Hi Melody", weights: [400] },
+  { id: "eastsea", label: "동해독도", family: "East Sea Dokdo", weights: [400] },
+  { id: "nanumcoding", label: "나눔고딕코딩", family: "Nanum Gothic Coding", weights: [400, 700] },
+  { id: "bagel", label: "베이글 (통통)", family: "Bagel Fat One", weights: [400] },
+  { id: "dokdo", label: "독도", family: "Dokdo", weights: [400] },
+  { id: "poorstory", label: "푸어스토리", family: "Poor Story", weights: [400] },
+  { id: "kirang", label: "기랑해랑", family: "Kirang Haerang", weights: [400] },
+  { id: "bwpicture", label: "흑백사진", family: "Black And White Picture", weights: [400] },
+  { id: "singleday", label: "싱글데이", family: "Single Day", weights: [400] },
+  { id: "cutefont", label: "귀여운체", family: "Cute Font", weights: [400] },
+  { id: "gugi", label: "구기", family: "Gugi", weights: [400] },
+  { id: "yeonsung", label: "연성", family: "Yeon Sung", weights: [400] },
+  { id: "moirai", label: "모이라이", family: "Moirai One", weights: [400] },
+];
+export type ReelFontId = string;
 export const fontFamily = (f?: string) => `ReelFont-${REEL_FONTS.some((x) => x.id === f) ? f : "noto"}`;
+/** 미리보기·내보내기에서 쓸 글꼴 파일 목록 (id, 굵기) — file 글꼴은 굵기 범위 하나 */
+export const fontFaces = (ids?: Iterable<string>) => {
+  const want = ids ? new Set(ids) : null;
+  return REEL_FONTS.filter((f) => !want || want.has(f.id)).flatMap((f) => (f.file ? [{ id: f.id, w: 0 }] : (f.weights ?? [400]).map((w) => ({ id: f.id, w }))));
+};
+export const faceKey = (id: string, w: number) => (w ? `${id}-${w}` : id);
 
 /** 글자 꾸미기 한 번에 (속성 칸 위 버튼들) */
 export const TEXT_PRESETS: { id: string; label: string; style: Partial<ReelTextStyle> }[] = [

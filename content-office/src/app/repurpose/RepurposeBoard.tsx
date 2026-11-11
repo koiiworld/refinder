@@ -5,6 +5,18 @@ import { useEffect, useState } from "react";
 import { api, useToast } from "@/components/client-utils";
 import { fmtDate } from "@/components/ui";
 import FileToMarkdown from "@/components/FileToMarkdown";
+import { fmtUsd } from "@/components/ui";
+
+/** 릴스 대본(장면·화면·대사·자막)에서 자막 줄만 뽑기 — 자막이 없으면 대사, 그것도 없으면 일반 줄 */
+function reelLines(script: string) {
+  const rows = script.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const pick = (k: string) => rows.map((l) => new RegExp(`^${k}\\s*[:：]\\s*(.+)$`).exec(l)?.[1]?.trim()).filter((x): x is string => !!x);
+  const subs = pick("자막");
+  if (subs.length) return subs;
+  const says = pick("대사");
+  if (says.length) return says;
+  return rows.filter((l) => !/^(장면|씬|scene)\s*\d+|^(화면|대사|자막|0~?\d+초)\s*[:：]?$/i.test(l)).map((l) => l.replace(/^\d+~?\d*초\s*[:：]\s*/, ""));
+}
 
 type Ch = { id: string; label: string; hint: string };
 type Doc = { id: string; blog_id: string | null; project_id: string | null; title: string; source_url: string; source_text: string; result: Record<string, string>; updated_at: string };
@@ -22,6 +34,16 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
   initialUrl: string;
 }) {
   const router=useRouter();
+  /** 릴스 대본 → 릴스편집 새 프로젝트 (자막 줄 = 장면 + 글자, 대본 전체는 메모 탭에) */
+  async function toReels(script: string) {
+    const lines = reelLines(script);
+    if (!lines.length) { setErr("대본에서 자막을 찾지 못했어요."); return; }
+    setBusy("reels"); setErr("");
+    try {
+      const made = await api<{ id: string }>("/api/reels", "POST", { blank: true, title: src?.title || lines[0], script: lines.join("\n"), memo: script });
+      router.push(`/reels/${made.id}`);
+    } catch (e) { setErr((e as Error).message); setBusy(""); }
+  }
   async function openCarousel(){if(!docId)return;setBusy("carousel");setErr("");try{const made=await api<{id:string}>(`/api/repurpose/${docId}`,"POST",{action:"carousel"});router.push(`/carousels/${made.id}`);}catch(e){setErr((e as Error).message);setBusy("");}}
   const [tab, setTab] = useState<Tab>(initialPost ? "app" : initialUrl ? "url" : initialConvert ? "paste" : "published");
   const [blog, setBlog] = useState(blogs[0]?.id ?? "");
@@ -70,7 +92,9 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
     setBusy("make");
     setErr("");
     try {
-      const d = await api<Doc>("/api/repurpose", "POST", { action: "make", id: docId ?? undefined, title: src.title, text: src.text, blogId: src.blogId, postId: src.postId, url: src.url, channels: pick });
+      const est = await api<{ total: number | null; steps: { model: string }[] }>("/api/repurpose", "POST", { action: "estimate" });
+      if (!confirm(`${pick.length}개 채널 초안을 만들까요?\n모델: ${est.steps[0]?.model ?? "?"}\n예상 비용: 약 ${est.total != null ? fmtUsd(est.total) : "알 수 없음"}\n(실제 청구는 조금 다를 수 있어요)`)) { setBusy(""); return; }
+      const d = await api<Doc>("/api/repurpose", "POST", { action: "make", confirm: true, id: docId ?? undefined, title: src.title, text: src.text, blogId: src.blogId, postId: src.postId, url: src.url, channels: pick });
       setDocId(d.id);
       setResult(d.result);
       setHistory([d, ...history.filter((h) => h.id !== d.id)]);
@@ -156,14 +180,14 @@ export default function RepurposeBoard({ blogs, published, appPosts, channels, h
             ))}
           </div>
           <button className="btn btn-primary btn-sm" style={{ alignSelf: "flex-start" }} disabled={!!busy || !pick.length || src.text.trim().length < 50} onClick={make}>{busy === "make" ? <><span className="spinner" /> 만드는 중… (20~60초)</> : `📣 ${pick.length}개 채널 초안 만들기`}</button>
-          <span className="tiny muted">고른 채널만 AI 1번으로 만들어요 (저렴한 모델). 원문에 없는 사실은 넣지 않아요. 같은 글에 채널을 더 고르면 결과에 추가돼요.</span>
+          <span className="tiny muted">고른 채널만 AI 1번으로 만들어요 (Claude Opus 5.5 · 누르면 예상 비용을 먼저 보여 줘요). 원문에 없는 사실은 넣지 않아요. 같은 글에 채널을 더 고르면 결과에 추가돼요.</span>
           {done.map((c) => (
             <details key={c.id} className="card card-pad" open={done.length <= 2}>
               <summary className="small strong" style={{ cursor: "pointer" }}>{c.label}</summary>
               <pre className="repurpose-text">{result[c.id]}</pre>
               <div className="row" style={{ gap: 6 }}>
                 <button className="btn btn-sm" onClick={() => copy(result[c.id], c.label)}>복사</button>
-                {c.id === "reel" && <a className="btn btn-sm" href={`/studio?prompt=${encodeURIComponent(result[c.id].slice(0, 1500))}`}>🎬 영상 스튜디오로</a>}
+                {c.id === "reel" && <button className="btn btn-sm" disabled={!!busy} onClick={() => void toReels(result[c.id])}>{busy === "reels" ? "릴스편집 여는 중…" : "🎬 릴스편집으로"}</button>}
                 {c.id === "cards" && <button className="btn btn-sm" disabled={!!busy||!docId} onClick={openCarousel}>{busy==="carousel"?"캐러셀 여는 중…":"📱 캐러셀로 만들기"}</button>}
               </div>
             </details>

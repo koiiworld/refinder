@@ -16,7 +16,7 @@ export const SCRIPT_FIELDS = [
   { id: "life", label: "☕ 생활·정보", trend: ["hot", "vlog"], hot: ["life", "review", "health", "money"], study: "생활정보" },
 ] as const;
 
-export type ReelScriptInput = { topic?: string; field?: string; seconds?: number; tone?: string };
+export type ReelScriptInput = { topic?: string; field?: string; seconds?: number; tone?: string; source?: { title?: string; text?: string; url?: string } };
 export type ReelScript = {
   title: string;
   hook: string;
@@ -88,12 +88,15 @@ export async function writeReelScript(input: ReelScriptInput): Promise<ReelScrip
   const topic = String(input.topic ?? "").trim().slice(0, 300);
   const tone = String(input.tone ?? "").trim().slice(0, 100);
   const ctx = await trendContext(input.field);
+  const srcText = String(input.source?.text ?? "").trim().slice(0, 7000);
+  const srcTitle = String(input.source?.title ?? "").trim().slice(0, 200);
+  const srcBlock = srcText ? `[원본 블로그 글 — 이 글의 내용으로만 대본을 써. 글에 없는 사실·숫자·가격은 넣지 마. 트렌드는 훅·말투·구성에만 참고]\n제목: ${srcTitle}\n${srcText}\n\n` : "";
   const lineCount = Math.round(seconds / 2.5);
   const prompt = `[만들 릴스]
-주제: ${topic || "(없음 — 아래 트렌드에서 지금 가장 반응이 좋을 주제를 골라 줘)"}
+주제: ${topic || srcTitle || "(없음 — 아래 트렌드에서 지금 가장 반응이 좋을 주제를 골라 줘)"}
 길이: 약 ${seconds}초 → 자막 ${lineCount - 2}~${lineCount + 2}줄
 ${tone ? `말투·분위기: ${tone}\n` : ""}
-${ctx.text || "[트렌드 자료 없음] 저장된 트렌드가 아직 없어요. 한국 인스타그램에서 요즘 잘 되는 형식(전후 비교·실수 지적·꿀팁 N가지)을 바탕으로 써 줘."}
+${srcBlock}${ctx.text || "[트렌드 자료 없음] 저장된 트렌드가 아직 없어요. 한국 인스타그램에서 요즘 잘 되는 형식(전후 비교·실수 지적·꿀팁 N가지)을 바탕으로 써 줘."}
 
 [답 형식]
 {"title":"프로젝트 제목(20자 이내)","hook":"첫 줄과 같은 훅","lines":["자막1","자막2",...],"caption":"게시물 캡션 2~4줄","hashtags":["해시태그",...5개],"why":"이 대본이 지금 트렌드에 맞는 이유 한두 문장","trends":["참고한 트렌드 키워드 2~4개"]}`;

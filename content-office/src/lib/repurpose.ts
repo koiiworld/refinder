@@ -73,7 +73,7 @@ ${source.slice(0, 7000)}
 ${pick.map((c) => `- "${c.id}": ${c.label} — ${c.hint}`).join("\n")}
 
 {${pick.map((c) => `"${c.id}": "..."`).join(", ")}} 형식으로 답해.`;
-  const res = await runStep({ step: "carousel", purpose: "repurpose", blog, projectId: input.postId ?? null, system, prompt, json: true, maxTokens: 6000 });
+  const res = await runStep({ step: "repurpose", purpose: "repurpose", blog, projectId: input.postId ?? null, system, prompt, json: true, maxTokens: 6000 });
   const raw = extractJson<Record<string, unknown>>(res.text);
   const cur = input.id ? await getRepurposeDoc(input.id) : null;
   const result: RepurposeResult = { ...(cur?.result ?? {}) };

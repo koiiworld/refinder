@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Img, interpolate, OffthreadVideo, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { ReelBg, ReelProps, ReelText } from "./types";
-import { docDuration, fontFamily, REEL_FONTS, sceneStarts } from "./types";
+import { docDuration, faceKey, fontFaces, fontFamily, sceneStarts } from "./types";
 
 /** 배경 */
 function Bg({ bg }: { bg: ReelBg }) {
@@ -99,13 +99,20 @@ export function TextLayer({ t }: { t: ReelText }) {
           WebkitBoxDecorationBreak: "clone",
           WebkitTextStroke: s.stroke && !s.box ? `${Math.max(2, size * 0.06)}px ${s.stroke}` : undefined,
           paintOrder: "stroke fill",
-          textShadow: s.glow ? `0 0 ${size * 0.25}px ${s.glow}, 0 0 ${size * 0.5}px ${s.glow}` : undefined,
+          textShadow: s.glow ? glowShadow(s.glow, size, s.glowSize ?? 1) : undefined,
         }}
       >
         {a.text}
       </span>
     </div>
   );
+}
+
+/** 글자 빛: 세기(0.3~3)에 따라 번짐 크기·겹 수 */
+function glowShadow(c: string, size: number, g: number) {
+  const k = Math.min(3, Math.max(0.3, g));
+  const layers = [0.15, 0.3, 0.6].slice(0, k >= 1.5 ? 3 : 2);
+  return layers.map((r) => `0 0 ${Math.round(size * r * k)}px ${c}`).join(", ");
 }
 
 export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
@@ -115,7 +122,7 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
   const baseSrc = doc.baseVideoId ? srcs[doc.baseVideoId] : undefined;
   return (
     <AbsoluteFill style={{ background: "#000" }}>
-      {fontUrl && <style>{`@font-face { font-family: 'ReelFont'; src: url('${fontUrl}'); font-weight: 100 900; }` + REEL_FONTS.map((f) => { const u = fontUrls?.[f.id] ?? (f.id === "noto" ? fontUrl : ""); return u ? `@font-face { font-family: '${fontFamily(f.id)}'; src: url('${u}'); font-weight: 100 900; }` : ""; }).join("")}</style>}
+      {fontUrl && <style>{`@font-face { font-family: 'ReelFont'; src: url('${fontUrl}'); font-weight: 100 900; }` + fontFaces().map(({ id, w }) => { const u = fontUrls?.[faceKey(id, w)] ?? (id === "noto" ? fontUrl : ""); return u ? `@font-face { font-family: '${fontFamily(id)}'; src: url('${u}'); font-weight: ${w || "100 900"}; }` : ""; }).join("")}</style>}
       {doc.scenes.map((s, i) => {
         const from = Math.round(starts[i] * fps);
         const dur = Math.max(1, Math.round(s.dur * fps));

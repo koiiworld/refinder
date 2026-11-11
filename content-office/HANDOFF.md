@@ -235,3 +235,10 @@ zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테�
 - 단계 `reelscript` 기본 Anthropic `claude-opus-5-5` ($4/$20, 설정 단계별 AI에서 변경 가능). 예상 비용 키 `reel_script`
 - API `/api/reels/script` GET(예상 비용·트렌드 수) / POST(confirm:true 필수)
 - UI `src/app/reels/AiScriptBox.tsx`: 새 프로젝트 폼 + 편집기 글자 탭 대본 상자
+
+## 릴스 글자·채널변환 연결 (2026-11-12)
+- 글꼴: `REEL_FONTS`(src/remotion/types.ts) = 구글 폰트 무료 한글 38종. 4종은 bin/, 나머지는 `src/lib/reel-fonts.ts` ensureFont 가 처음 쓸 때 bin/fonts/<id>-<굵기>.ttf 로 받음 (테스트는 GOOGLE_FONTS_CSS_URL·REEL_FONT_DIR 로 모의). 글꼴 팝업 미리보기는 구글 폰트 css2 `text=` 부분 글꼴
+- 글자색·빛 색 HEX 입력(ColorField), 빛 10색 + 세기(glowSize), ▶ 이 장면만 재생(stopAt)
+- 단축키: `src/components/shortcuts.ts` (e.code 기준, 한글 입력에서도 Ctrl/Cmd+Z, Shift/Ctrl+Y)
+- 채널변환: 단계 `repurpose` (기본 Opus 5.5), make 는 confirm:true 필수(action:'estimate' 로 예상 비용). 릴스 대본 → '🎬 릴스편집으로' (자막 줄 → 장면·글자, 대본 전체 → 메모)
+- 릴스 AI 대본 '📝 내 블로그 글로': `/api/reels/sources` 최근 글 + 캐러셀 검색·새로고침 API 재사용, repurpose load 로 본문

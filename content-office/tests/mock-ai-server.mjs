@@ -140,6 +140,8 @@ http
       });
     }
     // 한국 공휴일 달력(ICS) — 선거일 포함
+    if (url.pathname === "/fonts-css") { log.push({ path: url.pathname + url.search }); res.writeHead(200, { "content-type": "text/css" }); return res.end(`@font-face { font-family: 'X'; src: url(http://localhost:${PORT}/fontfile/x.ttf) format('truetype'); }`); }
+    if (url.pathname === "/fontfile/x.ttf") { res.writeHead(200, { "content-type": "font/ttf" }); return res.end(Buffer.alloc(4096, 7)); }
     if (url.pathname === "/kr-holidays.ics") {
       const y = new Date().getUTCFullYear();
       const m = String(new Date().getUTCMonth() + 1).padStart(2, "0");
