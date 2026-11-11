@@ -8,6 +8,7 @@ import type { StepKey } from "./steps";
  */
 const TOKENS: Record<string, { step: StepKey; label: string; input: number; output: number }> = {
   carousel_caption:{step:"carousel",label:"캐러셀 캡션·해시태그 다시 생성",input:3500,output:1600},
+  reel_script:{step:"reelscript",label:"🎬 릴스 AI 대본 (트렌드 반영)",input:4500,output:5000},
   ig_reel:{step:"carousel",label:"📱 릴스 대본",input:4000,output:2500},
   ig_reply:{step:"carousel",label:"📱 댓글 답글",input:5000,output:4000},
   ig_profile:{step:"carousel",label:"📱 프로필 점수 (캡처 포함)",input:6000,output:2500},

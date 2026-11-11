@@ -7,6 +7,7 @@ import { api } from "@/components/client-utils";
 import { Reel } from "@/remotion/Reel";
 import { docDuration, GUIDE_BOX, REEL_FONTS, sceneStarts, TEXT_PRESETS, type ReelBg, type ReelDoc, type ReelOverlay, type ReelText, type ReelTextStyle } from "@/remotion/types";
 import * as op from "./ops";
+import AiScriptBox from "../AiScriptBox";
 
 /**
  * ✂️ 릴스 편집기
@@ -422,7 +423,8 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
               <div className="stack" style={{ gap: 4 }}>
                 <button className="btn btn-sm" onClick={newText} style={{ alignSelf: "flex-start", marginBottom: 4 }}>+ 글자 추가 (지금 위치)</button>
                 <details style={{ marginBottom: 6 }}>
-                  <summary className="small"><b>📝 대본 붙여넣기 → 글자 한 번에</b></summary>
+                  <summary className="small"><b>📝 대본 붙여넣기 · ✨ AI 대본 → 글자 한 번에</b></summary>
+                  <div style={{ marginTop: 6 }}><AiScriptBox defaultTopic={title} onScript={(r) => setScriptText(r.lines.join("\n"))} /></div>
                   <textarea className="textarea" style={{ minHeight: 110, marginTop: 6 }} value={scriptText} onChange={(e) => setScriptText(e.target.value)} placeholder={"한 줄에 자막 하나\n줄 수가 장면 수와 같으면 장면마다 하나씩,\n아니면 글자 길이대로 차례로 나눠요"} />
                   <div className="row" style={{ gap: 4, marginTop: 4 }}>
                     <button className="btn btn-sm btn-primary" disabled={!scriptText.trim()} onClick={() => scriptToTexts(true)}>기존 글자 바꾸기</button>

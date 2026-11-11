@@ -229,3 +229,9 @@ zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테�
 - [ ] 챈뽕노트 '오류' 글 4~5개(크레딧 충전 전 실패) — 사용자가 정리(휴지통) 또는 다시 실행.
 - [ ] 진행 중이던 글: 알고키친 수제 초콜릿 글 — 재료에 **몰드(틀)** 누락. 사용자가 '수정 요청사항' 칸으로 직접 요청 예정.
 - 참고: 검수(Claude Sonnet)가 글 1편 비용의 절반 이상. 비용 표는 토큰×단가 추정치.
+
+## 릴스 AI 대본 (2026-11-11)
+- `src/lib/reel-script.ts`: 저장된 트렌드(research_snapshots trend_tab·blog_hot3 최근 3일, study_reels 훅)만 읽어 프롬프트에 넣음 — 새로 불러오지 않음(유튜브 할당량 X)
+- 단계 `reelscript` 기본 Anthropic `claude-fable-5-2` ($8/$40, 설정 단계별 AI에서 변경 가능). 예상 비용 키 `reel_script`
+- API `/api/reels/script` GET(예상 비용·트렌드 수) / POST(confirm:true 필수)
+- UI `src/app/reels/AiScriptBox.tsx`: 새 프로젝트 폼 + 편집기 글자 탭 대본 상자
