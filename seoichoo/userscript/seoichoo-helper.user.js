@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.7.2
+// @version      1.7.3
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -23,7 +23,7 @@
   "use strict";
 
   // ---------------------------------------------------------------- 공통 설정
-  const VERSION = "1.7.2";
+  const VERSION = "1.7.3";
   const DAILY_LIMIT = 100;      // 네이버 정책상 계정당 하루 서이추 최대
   const SESSION_LIMIT = 20;     // 20명마다 쉬어가기 알림
   const DEFAULT_COOLDOWN = 60;      // 신청 간격 최소(초)
@@ -390,6 +390,7 @@
     const autoInfo = el("div", { class: "muted", hidden: "" });
     const selInfo = el("span", { class: "muted", style: "flex:1" });
     let running = false, stopReq = false;
+    let popup = null; // 자동 보내기가 연 신청 창 (끝나면 닫는다)
     const autoBtn = el("button", { class: "pri", onclick: () => (running ? (stopReq = true) : autoRun()) }, "체크한 사람 자동 보내기");
     const warn = el("div", { class: "warn", hidden: "" });
     const info = el("div", { class: "muted" });
@@ -863,7 +864,7 @@
           const since = Date.now();
           store.set("current", { acc: runAcc, blogId: c.blogId, nick: c.nick, message: chosen, auto: true });
           if (statusOf(c.blogId) === "") record(runAcc, c.blogId, "opened");
-          const w = window.open(`https://m.blog.naver.com/BuddyAddForm.naver?blogId=${encodeURIComponent(c.blogId)}`,
+          const w = popup = window.open(`https://m.blog.naver.com/BuddyAddForm.naver?blogId=${encodeURIComponent(c.blogId)}`,
             POPUP_NAME, "width=460,height=760");
           if (!w) { note("팝업이 차단됐어요. 주소창 오른쪽에서 팝업을 허용한 뒤 다시 시작하세요."); break; }
           autoBtn.textContent = `■ 멈추기 · ${c.nick || c.blogId}님에게 보내는 중`;
@@ -904,6 +905,12 @@
         if (stopReq) note("자동 보내기를 멈췄어요.");
       } finally {
         running = false; stopReq = false;
+        // 자동 보내기가 끝나면 신청 창을 닫는다 (마지막 결과가 기록될 시간을 조금 준 뒤)
+        if (popup) {
+          const p = popup;
+          popup = null;
+          setTimeout(() => { try { if (!p.closed) p.close(); } catch (e) { /* ignore */ } }, 1500);
+        }
         const cur = store.get("current", {});
         if (cur.auto) store.set("current", Object.assign(cur, { auto: false }));
         autoBtn.textContent = "체크한 사람 자동 보내기";
