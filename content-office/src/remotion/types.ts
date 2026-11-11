@@ -15,6 +15,8 @@ export type ReelScene = {
   video: { videoId: string | null; from: number }; // null = 바탕 영상
   fit: "cover" | "contain";
   bg: ReelBg;
+  image?: string | null; // 사진 장면 (/api/img/…) — 영상 대신 사진을 화면에
+  kenburns?: boolean; // 사진 천천히 확대
 };
 
 export type ReelTextStyle = {
@@ -55,7 +57,7 @@ export const TEXT_PRESETS: { id: string; label: string; style: Partial<ReelTextS
 ];
 
 /** 위에 얹기: 메인 화면 위에 정해진 시간 동안 얹는 영상·사진 (영상공장 파일) */
-export type ReelOverlay = { id: string; start: number; end: number; videoId: string; x: number; y: number; w: number; h: number; fit: "cover" | "contain"; radius: number };
+export type ReelOverlay = { id: string; start: number; end: number; videoId?: string; image?: string; x: number; y: number; w: number; h: number; fit: "cover" | "contain"; radius: number };
 /** 가이드 박스: 이 안에 글자·얹기를 두면 인스타 화면 가림(위·아래)을 피해요 */
 export const GUIDE_BOX = { x: 60, y: 250, w: 960, h: 1420 };
 
@@ -71,6 +73,8 @@ export type ReelDoc = {
   texts: ReelText[];
   overlays?: ReelOverlay[];
   memo?: string; // 수정 메모 (영상엔 안 나옴)
+  photos?: string[]; // 이 릴스에 올린 사진들 (/api/img/…)
+  music?: { videoId: string; from: number; volume: number } | null; // 소리 트랙 (올린 음악)
 };
 
 export type ReelProps = { doc: ReelDoc; srcs: Record<string, string>; fontUrl: string; fontUrls?: Partial<Record<ReelFontId, string>> };

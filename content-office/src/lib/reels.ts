@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import { q, q1, newId, j } from "./db";
 import { enqueue } from "./jobs";
 import { addVideoFile, ffmpegPath, fitSize, getVideo, probe } from "./videos";
@@ -46,6 +47,51 @@ async function setReel(id: string, patch: Partial<Pick<ReelProject, "status" | "
   await q(`UPDATE reel_projects SET ${sets}, updated_at=NOW() WHERE id=$1`, [id, ...keys.map((k) => (k === "doc" || k === "guide" ? j(patch[k]) : patch[k]))]);
 }
 
+/**
+ * 새 프로젝트 (영상 없이): 빈 편집기 또는 대본 붙여넣기 → 한 줄 = 장면 하나 + 자막 하나
+ * 영상·사진·음악은 편집기 '내 파일'에서 올려서 메인에 넣거나 위에 얹음
+ */
+export async function createBlankReel(input: { title?: string; script?: string; videoId?: string }) {
+  const lines = String(input.script ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 60);
+  const grads: [string, string][] = [["#ffd1e8", "#e9d5ff"], ["#e9d5ff", "#bfdbfe"], ["#fde68a", "#fbcfe8"], ["#bae6fd", "#ddd6fe"]];
+  const scenes: ReelScene[] = [];
+  const texts: ReelText[] = [];
+  let t = 0;
+  (lines.length ? lines : [""]).forEach((line, i) => {
+    const dur = line ? Math.max(1.8, Math.min(6, r2(Array.from(line).length * 0.16 + 0.8))) : 5;
+    scenes.push({ id: sid(), label: line.slice(0, 30) || "장면 1", dur, audioFrom: 0, video: { videoId: null, from: 0 }, fit: "cover", bg: { type: "gradient", colors: grads[i % grads.length], angle: 160 }, image: null, kenburns: true });
+    if (line) texts.push({ id: sid(), start: r2(t), end: r2(t + dur), text: line, style: { ...DEFAULT_TEXT_STYLE, y: 960, size: 76, color: "#ffffff", stroke: "", glow: "#ff5fa2", font: "dohyeon" } });
+    t += dur;
+  });
+  // 영상에서 시작: 그 영상을 메인 첫 조각으로 (소리 포함)
+  const v = input.videoId ? await getVideo(input.videoId) : null;
+  if (v && v.status === "ready") {
+    const vd = Math.max(1, Math.min(180, Number(v.duration) || 10));
+    const vs: ReelScene = { id: sid(), label: v.title.slice(0, 30) || "영상", dur: r2(vd), audioFrom: 0, video: { videoId: v.id, from: 0 }, fit: "cover", bg: { type: "none" }, image: null };
+    if (!lines.length) scenes.splice(0, scenes.length, vs); else scenes.unshift(vs);
+  }
+  const id = newId("reel_");
+  const doc: ReelDoc = { width: 1080, height: 1920, fps: 30, baseVideoId: v && v.status === "ready" ? v.id : null, audio: v ? "base" : "none", scenes, texts, overlays: [], photos: [], music: null };
+  await q("INSERT INTO reel_projects (id, title, base_video_id, doc, status, message) VALUES ($1,$2,$3,$4,'ready','')", [id, String(input.title || lines[0] || v?.title || "새 릴스").slice(0, 120), doc.baseVideoId, j(doc)]);
+  return id;
+}
+
+/** 이 릴스에 사진 올리기 → /api/img 주소 (사진 목록에도 추가) */
+export async function addReelPhoto(id: string, dataUrl: string) {
+  const r = await getReel(id);
+  if (!r) throw new Error("릴스를 찾을 수 없어요.");
+  const m = /^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/.exec(dataUrl);
+  if (!m) throw new Error("PNG·JPG·WEBP 사진만 올릴 수 있어요.");
+  const data = Buffer.from(m[2], "base64");
+  if (data.length > 12 * 1024 * 1024) throw new Error("사진이 너무 커요 (12MB 이하).");
+  const imgId = `img_${crypto.randomBytes(12).toString("hex")}`;
+  await q("INSERT INTO generated_images (id, project_id, provider, model, mime, data, prompt) VALUES ($1,NULL,'upload','reel',$2,$3,'')", [imgId, m[1], data]);
+  const url = `/api/img/${imgId}.jpg`;
+  const doc = { ...r.doc, photos: [...(r.doc.photos ?? []), url].slice(-200) };
+  await setReel(id, { doc });
+  return url;
+}
+
 /** 영상공장 영상 하나로 릴스 편집 시작 → 맥이 초안을 만듦 */
 export async function createReel(videoId: string) {
   const v = await getVideo(videoId);
@@ -70,9 +116,11 @@ export async function saveDoc(id: string, doc: ReelDoc, title?: string) {
   if (doc.scenes.length > 300 || doc.texts.length > 500) throw new Error("장면·자막이 너무 많아요.");
   const clean: ReelDoc = {
     width: 1080, height: 1920, fps: 30, baseVideoId: cur.base_video_id, audio: doc.audio === "none" ? "none" : "base",
-    scenes: doc.scenes.map((s) => ({ ...s, dur: Math.max(0.2, Math.min(600, Number(s.dur) || 1)), audioFrom: Math.max(0, Number(s.audioFrom) || 0), video: { videoId: s.video?.videoId || null, from: Math.max(0, Number(s.video?.from) || 0) } })),
+    scenes: doc.scenes.map((s) => ({ ...s, image: typeof s.image === "string" && /^\/api\/img\/img_[0-9a-f]+\.jpg$/.test(s.image) ? s.image : null, dur: Math.max(0.2, Math.min(600, Number(s.dur) || 1)), audioFrom: Math.max(0, Number(s.audioFrom) || 0), video: { videoId: s.video?.videoId || null, from: Math.max(0, Number(s.video?.from) || 0) } })),
     texts: doc.texts.map((t) => ({ ...t, text: String(t.text ?? "").slice(0, 300), start: Math.max(0, Number(t.start) || 0), end: Math.max(Number(t.start) + 0.1, Number(t.end) || 0), style: { ...DEFAULT_TEXT_STYLE, ...t.style } })),
-    overlays: (Array.isArray(doc.overlays) ? doc.overlays : []).slice(0, 100).filter((o) => o && typeof o.videoId === "string" && o.videoId).map((o) => ({ id: String(o.id || Math.random().toString(36).slice(2, 9)).slice(0, 20), videoId: String(o.videoId).slice(0, 60), start: Math.max(0, Number(o.start) || 0), end: Math.max((Number(o.start) || 0) + 0.1, Number(o.end) || 0), x: Number(o.x) || 0, y: Number(o.y) || 0, w: Math.max(20, Number(o.w) || 600), h: Math.max(20, Number(o.h) || 600), fit: o.fit === "contain" ? "contain" as const : "cover" as const, radius: Math.max(0, Math.min(400, Number(o.radius) || 0)) })),
+    overlays: (Array.isArray(doc.overlays) ? doc.overlays : []).slice(0, 100).filter((o) => o && ((typeof o.videoId === "string" && o.videoId) || (typeof o.image === "string" && /^\/api\/img\/img_[0-9a-f]+\.jpg$/.test(o.image)))).map((o) => ({ id: String(o.id || Math.random().toString(36).slice(2, 9)).slice(0, 20), ...(o.image ? { image: String(o.image) } : { videoId: String(o.videoId).slice(0, 60) }), start: Math.max(0, Number(o.start) || 0), end: Math.max((Number(o.start) || 0) + 0.1, Number(o.end) || 0), x: Number(o.x) || 0, y: Number(o.y) || 0, w: Math.max(20, Number(o.w) || 600), h: Math.max(20, Number(o.h) || 600), fit: o.fit === "contain" ? "contain" as const : "cover" as const, radius: Math.max(0, Math.min(400, Number(o.radius) || 0)) })),
+    photos: (Array.isArray(doc.photos) ? doc.photos : []).map(String).filter((u) => /^\/api\/img\/img_[0-9a-f]+\.jpg$/.test(u)).slice(0, 200),
+    music: doc.music && typeof doc.music.videoId === "string" && doc.music.videoId ? { videoId: doc.music.videoId.slice(0, 60), from: Math.max(0, Number(doc.music.from) || 0), volume: Math.max(0, Math.min(1, Number(doc.music.volume ?? 0.8))) } : null,
     memo: String(doc.memo ?? "").slice(0, 4000),
   };
   await setReel(id, { doc: clean, ...(title !== undefined ? { title: String(title).slice(0, 120) } : {}) });
@@ -228,14 +276,26 @@ export async function runReelRender(reelId: string, quality: "720" | "1080" = "1
   let server: { base: string; close: () => void } | null = null;
   try {
     const doc = reel.doc;
-    const ids = Array.from(new Set([doc.baseVideoId, ...doc.scenes.map((s) => s.video.videoId), ...(doc.overlays ?? []).map((o) => o.videoId)].filter(Boolean) as string[]));
+    const ids = Array.from(new Set([doc.baseVideoId, ...doc.scenes.map((s) => s.video.videoId), ...(doc.overlays ?? []).map((o) => o.videoId), doc.music?.videoId].filter(Boolean) as string[]));
+    // 사진 장면·사진 얹기: DB 사진을 임시 파일로
+    const imgs = Array.from(new Set([...doc.scenes.map((s) => s.image), ...(doc.overlays ?? []).map((o) => o.image)].filter((u): u is string => !!u && /^\/api\/img\/img_[0-9a-f]+\.jpg$/.test(u))));
     await setReel(reelId, { message: "영상 파일 준비 중" });
     const files: Record<string, string> = {};
     for (const vid of ids) files[`${vid}.mp4`] = await videoToTemp(vid, dir);
     if (fs.existsSync(FONT_FILE())) files["font.ttf"] = FONT_FILE();
     for (const f of REEL_FONTS) { const p = path.join(process.cwd(), "bin", f.file); if (fs.existsSync(p)) files[`font-${f.id}.ttf`] = p; }
+    for (const u of imgs) {
+      const imgId = /img_[0-9a-f]+/.exec(u)![0];
+      const row = await q1<{ mime: string; data: Buffer }>("SELECT mime, data FROM generated_images WHERE id=$1", [imgId]);
+      if (!row) continue;
+      const ext = row.mime.includes("png") ? "png" : row.mime.includes("webp") ? "webp" : "jpg";
+      const f = path.join(dir, `${imgId}.${ext}`);
+      fs.writeFileSync(f, Buffer.from(row.data));
+      files[`${imgId}.${ext}`] = f;
+    }
     server = await fileServer(files);
-    const srcs = Object.fromEntries(ids.map((vid) => [vid, `${server!.base}/${vid}.mp4`]));
+    const srcs: Record<string, string> = Object.fromEntries(ids.map((vid) => [vid, `${server!.base}/${vid}.mp4`]));
+    for (const u of imgs) { const imgId = /img_[0-9a-f]+/.exec(u)![0]; const k = Object.keys(files).find((x) => x.startsWith(imgId + ".")); if (k) srcs[u] = `${server.base}/${k}`; }
     const out = path.join(dir, "reel.mp4");
     const job = {
       entry: path.join(process.cwd(), "src", "remotion", "index.tsx"),

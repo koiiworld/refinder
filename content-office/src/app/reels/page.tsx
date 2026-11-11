@@ -1,6 +1,6 @@
 import TrashableList from "@/components/TrashableList";
 import { listReels } from "@/lib/reels";
-import { listVideos } from "@/lib/videos";
+import { getVideo } from "@/lib/videos";
 import { fmtDate } from "@/components/ui";
 import NewReel from "./NewReel";
 
@@ -10,18 +10,18 @@ const STATUS: Record<string, string> = { analyzing: "초안 만드는 중", read
 
 export default async function ReelsPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
   const sp = await searchParams;
-  const [reels, videos] = await Promise.all([listReels(), listVideos()]);
-  const ready = videos.filter((v) => v.status === "ready").map((v) => ({ id: v.id, title: v.title, duration: v.duration, thumb: !!v.thumb_path, kind: v.kind }));
+  const reels = await listReels();
+  const fv = sp.from ? await getVideo(sp.from).catch(() => null) : null;
   return (
     <div className="page">
       <div className="page-head">
         <div>
           <h1>✂️ 릴스 편집</h1>
-          <p className="sub">영상 하나를 고르면 맥이 말을 받아써서 문장마다 장면·자막으로 나눠 줘요. 그다음 캡컷처럼 자막·배경·장면을 고치고 내보내세요. (받아쓰기·내보내기는 맥에서, 무료)</p>
+          <p className="sub">새 프로젝트를 열고 영상·사진·음악을 올려 메인에 이어 붙이고, 글자·위에 얹기·소리를 타임라인에서 고친 뒤 &apos;영상 뽑기&apos;를 눌러요. (영상 뽑기는 맥에서 만들어요)</p>
         </div>
       </div>
       <div className="stack" style={{ gap: 16 }}>
-        <NewReel videos={ready} defaultId={sp.from} />
+        <NewReel fromVideo={fv ? { id: fv.id, title: fv.title } : null} />
         <TrashableList
           title="만든 릴스"
           items={reels.map((r) => ({

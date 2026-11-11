@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, interpolate, OffthreadVideo, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Img, interpolate, OffthreadVideo, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { ReelBg, ReelProps, ReelText } from "./types";
 import { docDuration, fontFamily, REEL_FONTS, sceneStarts } from "./types";
 
@@ -18,6 +18,19 @@ function Bg({ bg }: { bg: ReelBg }) {
     );
   }
   return <AbsoluteFill style={{ background: "#000" }} />;
+}
+
+/** 사진 장면: 화면 가득(또는 카드) + 천천히 확대 */
+function Photo({ src, fit, kenburns, card, dur }: { src: string; fit: "cover" | "contain"; kenburns?: boolean; card: boolean; dur: number }) {
+  const frame = useCurrentFrame();
+  const z = kenburns === false ? 1 : interpolate(frame, [0, Math.max(1, dur)], [1, 1.12], { extrapolateRight: "clamp" });
+  return (
+    <AbsoluteFill style={card ? { padding: "12% 8%", justifyContent: "center", alignItems: "center" } : undefined}>
+      <div style={{ width: "100%", height: "100%", overflow: "hidden", borderRadius: card ? 36 : 0 }}>
+        <Img src={src} style={{ width: "100%", height: "100%", objectFit: card ? "contain" : fit, transform: `scale(${z})` }} />
+      </div>
+    </AbsoluteFill>
+  );
 }
 
 /** 한 줄 맞춤: 대충 글자 폭을 계산해 넘치면 글자 크기를 줄임 (한글 1em, 영문·숫자 0.58em) */
@@ -112,7 +125,8 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
         return (
           <Sequence key={s.id} from={from} durationInFrames={dur} name={s.label || `장면 ${i + 1}`}>
             <Bg bg={s.bg} />
-            {src && (
+            {s.image && <Photo src={srcs[s.image] ?? s.image} fit={s.fit} kenburns={s.kenburns} card={card} dur={dur} />}
+            {!s.image && src && (
               <AbsoluteFill style={card ? { padding: "12% 8%", justifyContent: "center", alignItems: "center" } : undefined}>
                 <OffthreadVideo
                   src={src}
@@ -129,16 +143,17 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
       {(doc.overlays ?? []).map((o) => {
         const from = Math.max(0, Math.round(o.start * fps));
         const dur = Math.max(1, Math.min(total - from, Math.round((o.end - o.start) * fps)));
-        const src = srcs[o.videoId];
+        const src = o.image ? srcs[o.image] ?? o.image : o.videoId ? srcs[o.videoId] : undefined;
         if (from >= total || !src) return null;
         return (
           <Sequence key={o.id} from={from} durationInFrames={dur} name="위에 얹기">
             <div style={{ position: "absolute", left: o.x, top: o.y, width: o.w, height: o.h, borderRadius: o.radius, overflow: "hidden" }}>
-              <OffthreadVideo src={src} muted style={{ width: "100%", height: "100%", objectFit: o.fit }} />
+              {o.image ? <Img src={src} style={{ width: "100%", height: "100%", objectFit: o.fit }} /> : <OffthreadVideo src={src} muted style={{ width: "100%", height: "100%", objectFit: o.fit }} />}
             </div>
           </Sequence>
         );
       })}
+      {doc.music?.videoId && srcs[doc.music.videoId] && <Audio src={srcs[doc.music.videoId]} startFrom={Math.round((doc.music.from || 0) * fps)} volume={doc.music.volume ?? 0.8} />}
       {doc.texts.map((t) => {
         const from = Math.max(0, Math.round(t.start * fps));
         const dur = Math.max(1, Math.min(total - from, Math.round((t.end - t.start) * fps)));

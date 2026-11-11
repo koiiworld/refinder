@@ -41,7 +41,8 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
   const [playing, setPlaying] = useState(false);
   const [save, setSave] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [files, setFiles] = useState(initialFiles);
-  const [pickFile, setPickFile] = useState<string | null>(null);
+  const [pickFile, setPickFile] = useState<string | null>(null); // 영상공장 파일 id 또는 사진 주소(/api/img/…)
+  const [scriptText, setScriptText] = useState("");
   const [upload, setUpload] = useState<{ pct: number; name: string } | null>(null);
   const [pps, setPps] = useState(40);
   const [snap, setSnap] = useState(true);
@@ -181,7 +182,18 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
     } catch (e) { setErr((e as Error).message); }
   }
 
+  async function uploadPhoto(f: File) {
+    setUpload({ pct: 30, name: f.name });
+    try {
+      const dataUrl = await new Promise<string>((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = no; r.readAsDataURL(f); });
+      const r = await api<{ url: string }>(`/api/reels/${info.id}/photo`, "POST", { dataUrl });
+      setDoc((d) => ({ ...d, photos: [...(d.photos ?? []), r.url] }));
+      setPickFile(r.url);
+    } catch (e) { setErr((e as Error).message); }
+    setUpload(null);
+  }
   function uploadFile(f: File) {
+    if (f.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(f.name)) { void uploadPhoto(f); return; }
     const fd = new FormData();
     fd.append("file", f);
     const x = new XMLHttpRequest();
@@ -201,6 +213,43 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
     x.onerror = () => { setUpload(null); setErr("올리기 중 연결이 끊겼어요."); };
     x.send(fd);
   }
+  const isPhoto = (k: string | null) => !!k && k.startsWith("/api/img/");
+  const fileOf = (k: string | null) => files.find((f) => f.id === k);
+  const isAudio = (k: string | null) => { const f = fileOf(k); return !!f && (f.title.startsWith("🎵") || f.kind === "audio"); };
+  /** 메인 끝에 넣기: 사진 = 3초 장면, 영상 = 영상 길이(최대 15초) 장면 */
+  function appendMain(k: string) {
+    const f = fileOf(k);
+    const dur = isPhoto(k) ? 3 : Math.max(1, Math.min(15, f?.duration ?? 5));
+    const label = isPhoto(k) ? "사진" : (f?.title ?? "영상").slice(0, 20);
+    setDoc((d) => ({ ...d, scenes: [...d.scenes, { id: op.nid(), label, dur, audioFrom: 0, video: { videoId: isPhoto(k) ? null : k, from: 0 }, fit: "cover", bg: { type: "none" }, image: isPhoto(k) ? k : null, kenburns: true }] }));
+  }
+  function replaceScene(k: string) {
+    if (!curScene) return;
+    setDoc((d) => op.patchScenes(d, [curScene.id], () => (isPhoto(k) ? { image: k, video: { videoId: null, from: 0 } } : { image: null, video: { videoId: k, from: 0 } })));
+  }
+  function overlayIt(k: string) {
+    const r = op.addOverlay(doc, isPhoto(k) ? "" : k, t);
+    const d2 = isPhoto(k) ? op.patchOverlay(r.doc, r.id, { videoId: undefined, image: k }) : r.doc;
+    setDoc(d2); setSel({ kind: "overlay", id: r.id }); setRtab("props");
+  }
+  /** 대본 붙여넣기 → 글자 한 번에 (줄 수 = 장면 수면 장면마다, 아니면 글자 길이대로 차례로) */
+  function scriptToTexts(replace: boolean) {
+    const lines = scriptText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return;
+    const base = (replace ? undefined : doc.texts[doc.texts.length - 1]?.style) ?? doc.texts[0]?.style ?? { ...op.defaultStyle(), y: 960 };
+    let ranges: [number, number][];
+    if (lines.length === doc.scenes.length) ranges = doc.scenes.map((s, i) => [starts[i], starts[i] + s.dur]);
+    else {
+      const w = lines.map((l) => Math.max(4, Array.from(l).length));
+      const sum = w.reduce((a, b) => a + b, 0);
+      let a = 0;
+      ranges = w.map((x) => { const b = a + (total * x) / sum; const r: [number, number] = [a, b]; a = b; return r; });
+    }
+    const made: ReelText[] = lines.map((l, i) => ({ id: op.nid(), start: Math.round(ranges[i][0] * 100) / 100, end: Math.round(ranges[i][1] * 100) / 100, text: l, style: { ...base } }));
+    setDoc((d) => ({ ...d, texts: replace ? made : [...d.texts, ...made] }));
+    setScriptText("");
+  }
+
   // 붙여넣기(Ctrl+V)로 파일 올리기
   useEffect(() => {
     const h = (e: ClipboardEvent) => { if (ltab !== "files") return; const f = e.clipboardData?.files?.[0]; if (f) { e.preventDefault(); uploadFile(f); } };
@@ -292,7 +341,14 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
   const trackBlock = (a: number, b: number) => ({ left: 64 + a * pps, width: Math.max(4, (b - a) * pps - 2) });
 
   return (
-    <div className="stack reel" style={{ gap: 10 }}>
+    <div className="stack reel reel-dark" style={{ gap: 10 }}>
+      <style>{`.reel-dark { --bg:#141418; --panel:#1e1e24; --panel-2:#26262d; --text:#ececf1; --muted:#9a9aa8; --line:#34343d; --accent:#e8578f; --accent-ink:#ffffff; --accent-soft:#3b2531; --shadow:none; color: var(--text); background: var(--bg); padding: 10px; border-radius: 14px; }
+        .reel-dark .input, .reel-dark .textarea, .reel-dark select { background: var(--panel-2); color: var(--text); border-color: var(--line); }
+        .reel-dark .btn { background: var(--panel-2); color: var(--text); border-color: var(--line); }
+        .reel-dark .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .reel-dark .btn-ghost { background: transparent; }
+        .reel-dark .card { background: var(--panel); border-color: var(--line); }
+        .reel-dark input[type=range] { accent-color: var(--accent); }`}</style>
       {/* 위 막대 */}
       <div className="card row between" style={{ gap: 8, padding: "8px 12px", flexWrap: "wrap" }}>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -332,6 +388,16 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
                 </label>
                 {upload && <div className="tiny">올리는 중 {upload.pct}% · {upload.name}</div>}
                 <span className="tiny muted">올린 파일은 원본 그대로 써요. 파일을 고른 뒤 아래 버튼으로 쓰세요.</span>
+                {!!(doc.photos ?? []).length && <b className="tiny">이 릴스 사진</b>}
+                <div className="reel-files">
+                  {(doc.photos ?? []).map((u) => (
+                    <button key={u} className={`reel-file${pickFile === u ? " on" : ""}`} onClick={() => setPickFile(u)} title="사진">
+                      <img src={u} alt="" />
+                      <span className="tiny ellipsis">사진</span>
+                    </button>
+                  ))}
+                </div>
+                <b className="tiny">영상·음악 (영상공장)</b>
                 <div className="reel-files">
                   {files.map((f) => (
                     <button key={f.id} className={`reel-file${pickFile === f.id ? " on" : ""}`} onClick={() => setPickFile(f.id)} title={f.title}>
@@ -342,8 +408,11 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
                 </div>
                 {pickFile && (
                   <div className="stack" style={{ gap: 4 }}>
-                    <button className="btn btn-sm" disabled={!curScene} onClick={() => curScene && setDoc((d) => op.patchScenes(d, [curScene.id], () => ({ video: { videoId: pickFile, from: 0 } })))}>⇄ {curScene ? `'${curScene.label.slice(0, 10)}' 장면을 이 파일로` : "장면을 먼저 고르세요"}</button>
-                    <button className="btn btn-sm" onClick={() => { const r = op.addOverlay(doc, pickFile, t); setDoc(r.doc); setSel({ kind: "overlay", id: r.id }); setRtab("props"); }}>⬆ 지금 위치에 위에 얹기 (3초)</button>
+                    <span className="tiny muted">고른 것: {isPhoto(pickFile) ? "사진" : fileOf(pickFile)?.title ?? ""}</span>
+                    {!isAudio(pickFile) && <button className="btn btn-sm btn-primary" onClick={() => appendMain(pickFile)}>＋ 메인 끝에 넣기</button>}
+                    {!isAudio(pickFile) && <button className="btn btn-sm" disabled={!curScene} onClick={() => replaceScene(pickFile)}>⇄ {curScene ? `'${curScene.label.slice(0, 10)}' 장면을 이걸로` : "장면을 먼저 고르세요"}</button>}
+                    {!isAudio(pickFile) && <button className="btn btn-sm" onClick={() => overlayIt(pickFile)}>⬆ 지금 위치에 위에 얹기 (3초)</button>}
+                    {!isPhoto(pickFile) && <button className="btn btn-sm" onClick={() => setDoc((d) => ({ ...d, music: { videoId: pickFile, from: 0, volume: 0.8 } }))}>🎵 소리 트랙으로 쓰기</button>}
                   </div>
                 )}
               </div>
@@ -352,6 +421,14 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
             {ltab === "text" && (
               <div className="stack" style={{ gap: 4 }}>
                 <button className="btn btn-sm" onClick={newText} style={{ alignSelf: "flex-start", marginBottom: 4 }}>+ 글자 추가 (지금 위치)</button>
+                <details style={{ marginBottom: 6 }}>
+                  <summary className="small"><b>📝 대본 붙여넣기 → 글자 한 번에</b></summary>
+                  <textarea className="textarea" style={{ minHeight: 110, marginTop: 6 }} value={scriptText} onChange={(e) => setScriptText(e.target.value)} placeholder={"한 줄에 자막 하나\n줄 수가 장면 수와 같으면 장면마다 하나씩,\n아니면 글자 길이대로 차례로 나눠요"} />
+                  <div className="row" style={{ gap: 4, marginTop: 4 }}>
+                    <button className="btn btn-sm btn-primary" disabled={!scriptText.trim()} onClick={() => scriptToTexts(true)}>기존 글자 바꾸기</button>
+                    <button className="btn btn-sm" disabled={!scriptText.trim()} onClick={() => scriptToTexts(false)}>뒤에 더하기</button>
+                  </div>
+                </details>
                 {sortedTexts.map((x) => (
                   <div key={x.id} className="row" style={{ gap: 4, flexWrap: "nowrap", background: sel?.id === x.id ? "var(--accent-soft)" : undefined, borderRadius: 8, padding: 2 }}>
                     <button className="btn btn-sm btn-ghost mono" style={{ width: 62, padding: "0 2px", fontSize: 11 }} onClick={() => { setSel({ kind: "text", id: x.id }); setRtab("props"); seek(x.start + 0.01); }}>{fmt(x.start)}</button>
@@ -364,11 +441,12 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
 
             {ltab === "scene" && (
               <div className="stack" style={{ gap: 6 }}>
-                <label className="row small" style={{ gap: 6 }}><input type="checkbox" checked={doc.audio === "base"} onChange={(e) => setDoc((d) => ({ ...d, audio: e.target.checked ? "base" : "none" }))} /> 원래 영상의 소리(목소리) 쓰기</label>
+                {doc.baseVideoId && <label className="row small" style={{ gap: 6 }}><input type="checkbox" checked={doc.audio === "base"} onChange={(e) => setDoc((d) => ({ ...d, audio: e.target.checked ? "base" : "none" }))} /> 원래 영상의 소리(목소리) 쓰기</label>}
+                <span className="tiny muted">장면 = 메인 트랙 조각이에요. 내 파일에서 영상·사진을 &apos;메인 끝에 넣기&apos;로 이어 붙여요.</span>
                 {doc.scenes.map((s, i) => (
                   <div key={s.id} className={`reel-scene${sel?.id === s.id ? " on" : ""}`} onClick={() => { setSel({ kind: "scene", id: s.id }); seek(starts[i] + 0.01); }}>
                     <span className="small"><b style={{ color: "var(--accent)" }}>{String(i + 1).padStart(2, "0")}</b> <b>{s.label}</b></span>
-                    <span className="tiny muted">{fmt(starts[i])} · {s.dur.toFixed(1)}초{s.video.videoId ? " · 내 영상" : ""}{s.bg.type !== "none" ? " · 배경" : ""}</span>
+                    <span className="tiny muted">{fmt(starts[i])} · {s.dur.toFixed(1)}초{s.image ? " · 사진" : s.video.videoId ? " · 내 영상" : ""}{s.bg.type !== "none" ? " · 배경" : ""}</span>
                     <div className="row" style={{ gap: 4, marginTop: 4 }}>
                       <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); setSel({ kind: "scene", id: s.id }); setLtab("files"); }}>⇄ 내 영상으로</button>
                       {sel?.id === s.id && s.video.videoId && <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); setDoc((d) => op.patchScenes(d, [s.id], () => ({ video: { videoId: null, from: 0 } }))); }}>원래 영상</button>}
@@ -533,7 +611,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
               {(doc.overlays ?? []).map((o) => (
                 <div key={o.id} className={`reel-block text${sel?.id === o.id ? " on" : ""}`} style={{ ...trackBlock(o.start, o.end), background: "#0ea5e9" }} onPointerDown={(e) => tlDown(e, "ov-move", o.id, o.start, o.end)}>
                   <i className="h l" onPointerDown={(e) => tlDown(e, "ov-start", o.id, o.start, o.end)} />
-                  <span className="ellipsis">⬆ {files.find((f) => f.id === o.videoId)?.title ?? "얹은 영상"}</span>
+                  <span className="ellipsis">⬆ {o.image ? "🖼 사진" : files.find((f) => f.id === o.videoId)?.title ?? "얹은 영상"}</span>
                   <i className="h r" onPointerDown={(e) => tlDown(e, "ov-end", o.id, o.start, o.end)} />
                 </div>
               ))}
@@ -548,7 +626,12 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
               ))}
             </div>
             <div className="reel-track audio"><span className="reel-tname">소리</span>
-              <span className="tiny muted" style={{ position: "absolute", left: 72, top: 8 }}>{doc.audio === "base" ? "원래 영상 소리 (메인 장면 안 파형)" : "소리 끔 — 인스타에서 음악을 붙이세요"}</span>
+              {doc.music ? (
+                <div className="reel-block text" style={{ left: 64, width: Math.max(40, total * pps - 2), background: "#16a34a" }} title="소리 트랙">
+                  <span className="ellipsis">🎵 {fileOf(doc.music.videoId)?.title ?? "음악"} · 볼륨 {Math.round(doc.music.volume * 100)}%</span>
+                  <button className="btn btn-sm btn-ghost" style={{ padding: "0 4px", color: "#fff" }} onClick={() => setDoc((d) => ({ ...d, music: null }))} aria-label="소리 빼기">×</button>
+                </div>
+              ) : <span className="tiny muted" style={{ position: "absolute", left: 72, top: 8 }}>{doc.audio === "base" && doc.baseVideoId ? "원래 영상 소리 (메인 장면 안 파형)" : "내 파일에서 음악을 골라 '소리 트랙으로 쓰기'"}</span>}
             </div>
             <div className="reel-playhead" style={{ left: 64 + t * pps }} />
           </div>

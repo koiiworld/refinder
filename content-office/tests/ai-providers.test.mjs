@@ -2424,3 +2424,25 @@ test('🎬 캐러셀 카드 사진 → AI 영상: 비용 확인 필수 · 움직
  assert((await call('/api/carousels/'+t.id)).data.slides[0].video.url,'저장해도 서버 영상 상태 유지');
  r=await call(`/api/carousels/${t.id}`,'POST',{action:'card_video_remove',index:0});assert.equal(r.status,200);assert.equal(r.data.slides[0].video,undefined);
 });
+
+test('✂️ 릴스 새 프로젝트(영상 없이): 대본 → 장면·자막 · 사진 장면·사진 얹기·소리 트랙 저장 · 720 초안으로 맥에서 영상 뽑기', async()=>{
+ const r=await call('/api/reels','POST',{blank:true,title:'대본릴스시험',script:'첫 줄 자막\n둘째 줄 자막'});assert.equal(r.status,200,JSON.stringify(r.data));
+ let reel=(await call('/api/reels/'+r.data.id)).data;
+ assert.equal(reel.status,'ready');assert.equal(reel.doc.scenes.length,2);assert.equal(reel.doc.texts.length,2);assert.equal(reel.doc.texts[1].text,'둘째 줄 자막');assert.equal(reel.doc.baseVideoId,null);
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+ const ph=await call(`/api/reels/${r.data.id}/photo`,'POST',{dataUrl:png});assert.equal(ph.status,200,JSON.stringify(ph.data));assert.match(ph.data.url,/^\/api\/img\/img_[0-9a-f]+\.jpg$/);
+ assert.equal((await call(`/api/reels/${r.data.id}/photo`,'POST',{dataUrl:'data:text/plain;base64,aGk='})).status,400);
+ const doc=structuredClone(reel.doc);
+ doc.scenes[0].image=ph.data.url;doc.scenes[0].kenburns=true;
+ doc.overlays=[{id:'o1',image:ph.data.url,start:0.2,end:1.2,x:300,y:400,w:400,h:400,fit:'cover',radius:30},{id:'bad',image:'https://evil.example/x.png',start:0,end:1,x:0,y:0,w:10,h:10}];
+ doc.photos=[ph.data.url];doc.scenes.forEach(s=>s.dur=1.5);doc.texts[0].end=1.5;doc.texts[1].start=1.5;doc.texts[1].end=3;
+ const sv=await call('/api/reels/'+r.data.id,'PUT',{doc,title:'대본릴스시험'});assert.equal(sv.status,200,JSON.stringify(sv.data));
+ reel=(await call('/api/reels/'+r.data.id)).data;
+ assert.equal(reel.doc.scenes[0].image,ph.data.url);assert.equal(reel.doc.overlays.length,1,'외부 주소 사진은 버림');assert.equal(reel.doc.overlays[0].image,ph.data.url);
+ const page=await (await fetch(`${BASE}/reels`)).text();assert(page.includes('새 프로젝트'));
+ assert.equal((await call(`/api/reels/${r.data.id}/render`,'POST',{quality:'720'})).status,200);
+ for(let i=0;i<480;i++){reel=(await call('/api/reels/'+r.data.id)).data;if(reel.status!=='rendering')break;await new Promise(x=>setTimeout(x,1000));}
+ assert.equal(reel.status,'ready',reel.message);assert.ok(reel.output_video_id);
+ const out=(await call('/api/videos')).data.videos.find(v=>v.id===reel.output_video_id);
+ assert.equal(out.width,720,'720 초안');assert.equal(out.height,1280);assert.ok(Math.abs(out.duration-3)<0.5,String(out.duration));
+});

@@ -120,3 +120,6 @@ export function duplicateOverlay(doc: ReelDoc, id: string): ReelDoc {
   return { ...doc, overlays: [...(doc.overlays ?? []), { ...o, id: nid(), start: r2(o.end), end: r2(o.end + len) }] };
 }
 const docDurationOf = (doc: ReelDoc) => doc.scenes.reduce((a, s) => a + s.dur, 0);
+
+/** 기본 자막 모양 */
+export const defaultStyle = (): ReelTextStyle => ({ ...DEFAULT_TEXT_STYLE });
