@@ -1,5 +1,6 @@
 // 🎞 캐러셀 편집 툴: 한 장을 시간 t(초)에 맞춰 그림 — 미리보기와 MP4 뽑기가 같은 함수를 씀
 import { SH, SW, type El, type Scene } from "@/lib/carousel-scene";
+import { drawCursor, drawMockup } from "./mockups";
 
 export const FONT = `"Noto Sans KR", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
 const clamp = (x: number) => Math.min(1, Math.max(0, x));
@@ -33,12 +34,14 @@ function drawPic(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number
 
 /** ==글자== 형광펜 표시를 빼고, 표시된 글자 위치를 함께 돌려줌 */
 function parseMarks(text: string) {
-  let out = "";
+  // 이모지처럼 두 칸짜리 글자가 반으로 갈라지지 않게 글자 단위(코드포인트)로
+  const src = Array.from(text);
+  const out: string[] = [];
   const marked: boolean[] = [];
   let on = false;
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === "=" && text[i + 1] === "=") { on = !on; i++; continue; }
-    out += text[i];
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] === "=" && src[i + 1] === "=") { on = !on; i++; continue; }
+    out.push(src[i]);
     marked.push(on);
   }
   return { text: out, marked };
@@ -79,7 +82,9 @@ export function layoutText(ctx: CanvasRenderingContext2D, el: El) {
 }
 
 function motionState(el: El, t: number, dur: number) {
-  const m = el.motion ?? { id: "none", delay: 0, dur: 0 };
+  const m0 = el.motion ?? { id: "none", delay: 0, dur: 0 };
+  // 목업은 motion.dur 가 안쪽 움직임 길이 → 등장은 0.5초로
+  const m = el.type === "mockup" ? { ...m0, dur: Math.min(0.5, m0.dur || 0.5) } : m0;
   const p = m.dur > 0 ? clamp((t - m.delay) / m.dur) : t >= m.delay ? 1 : 0;
   const s = { alpha: 1, dx: 0, dy: 0, scale: 1, rot: 0, p, id: m.id, zoom: 1, pan: 0 };
   const e = easeOut(p);
@@ -202,6 +207,7 @@ export function drawScene(canvas: HTMLCanvasElement, scene: Scene, t: number | n
   drawBackground(ctx, scene, t ?? 0, imgs);
   for (const el of scene.els) {
     if (el.hidden) continue;
+    if (el.type === "cursor") { ctx.save(); ctx.globalAlpha = el.opacity; drawCursor(ctx, el, t); ctx.restore(); continue; }
     const st = t == null ? { alpha: 1, dx: 0, dy: 0, scale: 1, rot: 0, p: 1, id: el.motion?.id ?? "none", zoom: 1, pan: 0 } : motionState(el, time, scene.dur);
     if (t == null && ["float", "pulse", "twinkle", "shake"].includes(st.id)) st.id = "none";
     if (st.alpha <= 0.001 && el.type !== "text") continue;
@@ -228,6 +234,7 @@ export function drawScene(canvas: HTMLCanvasElement, scene: Scene, t: number | n
       ctx.beginPath(); ctx.ellipse(cx, cy, el.w / 2, el.h / 2, 0, 0, Math.PI * 2); ctx.fillStyle = el.fill || "#ffffff"; ctx.fill();
       if (el.stroke && el.strokeW) { ctx.strokeStyle = el.stroke; ctx.lineWidth = el.strokeW; ctx.stroke(); }
     } else if (el.type === "sparkle") { ctx.fillStyle = el.fill || "#ffd84d"; sparkle(ctx, cx, cy, Math.min(el.w, el.h) / 2); }
+    else if (el.type === "mockup") drawMockup(ctx, el, time);
     ctx.restore();
   }
 }

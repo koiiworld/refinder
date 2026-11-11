@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/components/client-utils";
 import type { Carousel, Slide } from "@/lib/carousel";
-import { MOTIONS, SH, SW, baseEl, sceneFromSlide, type El, type ElType, type Motion, type Scene } from "@/lib/carousel-scene";
+import { MOCKUPS, MOTIONS, SH, SW, THEMES, baseEl, sceneFromSlide, type El, type ElType, type MockVariant, type Motion, type Scene } from "@/lib/carousel-scene";
 import { drawScene, layoutText } from "./scene-render";
 import { makeMotionVideo } from "../motion-video";
 import BlogPostPicker from "../BlogPostPicker";
@@ -18,7 +18,9 @@ import { formatHashtags, hashtagTokens } from "@/lib/caption-styles";
 const imgKey = (url: string) => { let h = 5381; for (let i = 0; i < url.length; i++) h = ((h * 33) ^ url.charCodeAt(i)) >>> 0; return h.toString(36); };
 const TABS = [["note", "수정 메모"], ["bg", "배경·스타일"], ["pos", "위치·크기"], ["text", "글씨"], ["motion", "모션 사전"]] as const;
 type Tab = (typeof TABS)[number][0];
-const TYPE_KO: Record<ElType, string> = { text: "글자", image: "사진", rect: "네모", circle: "동그라미", line: "선", sparkle: "반짝이" };
+const TYPE_KO: Record<ElType, string> = { text: "글자", image: "사진", rect: "네모", circle: "동그라미", line: "선", sparkle: "반짝이", mockup: "목업", cursor: "커서" };
+const MAX_BYTES = 7.5 * 1024 * 1024; // 인스타 폰 미리보기 8MB 제한 아래로
+const bitrateFor = (sec: number) => Math.max(1_200_000, Math.min(8_000_000, Math.floor((MAX_BYTES * 8) / Math.max(1, sec) * 0.92)));
 const SWATCH = ["#ffffff", "#f5f6f8", "#16181d", "#3355ff", "#eaeeff", "#7b93ff", "#ffd84d", "#ff6b6b", "#ffe3e3", "#138a4b", "#e3f6ec", "#a15c00", "#fff3dc"];
 const hashScene = (sc: Scene, urls: string[]) => imgKey(JSON.stringify(sc) + urls.join("|"));
 
@@ -161,19 +163,67 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
   });
 
   // ── 요소 추가·삭제 ──
-  function addEl(type: ElType) {
-    const e = baseEl(type, accent, type === "image" ? { image: c.images.length ? 0 : 0 } : {});
+  function addEl(type: ElType, variant?: MockVariant) {
+    const e = baseEl(type, accent, type === "image" ? { image: 0 } : type === "mockup" ? { variant: variant ?? "browser", ...(variant === "notify" ? { h: 180, y: 260 } : variant === "search" ? { h: 520 } : variant === "progress" ? { x: 290, w: 500, h: 520 } : variant === "phone" ? { x: 300, w: 480, h: 860, y: 420 } : {}) } : {});
     if (type === "image" && !c.images.length) { setMsg({ ok: false, text: "먼저 '배경·스타일' 칸에서 블로그 글 사진을 가져오거나 사진을 올려 주세요." }); setTab("bg"); return; }
     patchScene((s) => ({ ...s, els: [...s.els, e] }));
-    setSel(e.id); setTab(type === "text" ? "text" : "pos"); setTime(null);
+    setSel(e.id); setTab(type === "text" ? "text" : "pos"); if (type === "mockup" || type === "cursor") { setTime(0); setPlaying(true); } else setTime(null);
   }
   function removeEl(id: string) { patchScene((s) => ({ ...s, els: s.els.filter((e) => e.id !== id) })); setSel(null); }
   function moveLayer(id: string, dir: 1 | -1) {
     patchScene((s) => { const i = s.els.findIndex((e) => e.id === id), j = i + dir; if (i < 0 || j < 0 || j >= s.els.length) return s; const els = s.els.slice(); [els[i], els[j]] = [els[j], els[i]]; return { ...s, els }; });
   }
 
+  // ── 색 테마 (전체 장) ──
+  function applyTheme(id: string) {
+    const th = THEMES.find((x) => x.id === id);
+    if (!th) return;
+    commit(scenes.map((sc) => {
+      const photo = sc.bg.image != null;
+      return {
+        ...sc,
+        bg: photo ? sc.bg : { ...sc.bg, color: th.bg, color2: th.bg2, glow: !th.dark && sc.bg.glow },
+        els: sc.els.map((e) => {
+          if (e.type === "text") return photo ? { ...e, mark: th.accent } : { ...e, color: (e.weight ?? 700) >= 800 ? th.ink : th.sub, mark: th.accent };
+          if (e.type === "line" || e.type === "sparkle") return { ...e, fill: photo ? e.fill : th.accent };
+          if (e.type === "rect") return { ...e, fill: th.card, stroke: th.accent };
+          if (e.type === "mockup") return { ...e, fill: th.card, stroke: th.accent, color: th.ink, mark: th.skel };
+          if (e.type === "cursor") return { ...e, fill: th.dark ? "#ffffff" : "#16181d", stroke: th.dark ? "#16181d" : "#ffffff" };
+          return e;
+        }),
+      };
+    }));
+    setMsg({ ok: true, text: `'${th.label}' 테마를 모든 장에 입혔어요. 마음에 안 들면 되돌리기.` });
+  }
+  /** 장마다 목업 하나씩 (표지·이미 목업 있는 장은 건너뜀) — 본문을 항목으로 */
+  function autoMockups() {
+    const order: MockVariant[] = ["checklist", "browser", "toggle", "chat", "search", "progress", "phone", "notify"];
+    const th = { card: "#ffffff", acc: accent, ink: "#16181d", skel: "#e3e6eb" };
+    let k = 0, added = 0;
+    const next = scenes.map((sc, i) => {
+      if (i === 0 || sc.els.some((e) => e.type === "mockup")) return sc;
+      const body = sc.els.find((e) => e.name === "본문");
+      const title = sc.els.find((e) => e.name === "제목");
+      const items = (body?.text ?? "").replace(/==/g, "").split(/[,·\n]|(?:\s-\s)/).map((x) => x.trim()).filter((x) => x.length > 1).slice(0, 4);
+      const v = order[k++ % order.length];
+      const top = Math.min(1100, Math.max(560, (title ? title.y + title.h : 600) + 40));
+      const h = Math.max(320, 1220 - top);
+      const mk = baseEl("mockup", accent, { variant: v, x: v === "phone" ? 300 : 120, w: v === "phone" ? 480 : v === "progress" ? 500 : 840, y: top, h, items: items.length ? items : ["", "", ""], skel: !items.length, fill: th.card, stroke: th.acc, color: th.ink, mark: th.skel, ...(v === "progress" ? { x: 290 } : {}) });
+      const extra: El[] = [mk];
+      if (v === "browser" || v === "toggle" || v === "checklist") extra.push(baseEl("cursor", accent, { x: 900, y: 1300, x2: mk.x + mk.w * 0.7, y2: mk.y + mk.h * 0.55, motion: { id: "none", delay: 1.0, dur: 0.9 } }));
+      // 본문 글자는 목업과 겹치면 숨김 (목업 안 항목으로 들어감)
+      const els = sc.els.map((e) => (e === body && items.length ? { ...e, hidden: true } : e));
+      added++;
+      return { ...sc, els: [...els, ...extra] };
+    });
+    if (!added) { setMsg({ ok: true, text: "넣을 장이 없어요. (표지와 이미 목업이 있는 장은 건너뛰어요)" }); return; }
+    commit(next);
+    setMsg({ ok: true, text: `${added}장에 목업을 하나씩 넣었어요. 본문 글은 목업 안 항목으로 들어갔어요. 장을 눌러 확인해 보세요.` });
+  }
+
   // ── 장 추가·복제·삭제·순서 ──
   function addSlide(copy = false) {
+    if (scenes.length >= 10 && !confirm("10장을 넘기면 끝까지 보는 사람이 줄어요. 마지막 장은 팔로우 유도로 두고 9장 안에서 정리하는 걸 추천해요. 그래도 추가할까요?")) return;
     const sc: Scene = copy ? JSON.parse(JSON.stringify(scene)) : { v: 1, bg: { color: "#ffffff", pattern: "grid", glow: true }, els: [baseEl("text", accent, { name: "제목", y: 520, size: 80, weight: 900, text: "새 장 제목" })], dur: 5 };
     if (copy) sc.els = sc.els.map((e) => ({ ...e, id: baseEl(e.type, accent).id }));
     const next = [...scenes.slice(0, cur + 1), sc, ...scenes.slice(cur + 1)];
@@ -224,6 +274,14 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
       window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
       if (moved) { past.current.push(before); future.current = []; setSaveState("dirty"); }
     };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  }
+  /** 커서 도착점 끌기 */
+  function dragTarget(e: React.PointerEvent, target: El) {
+    e.preventDefault(); e.stopPropagation();
+    const k = scale(), sx = e.clientX, sy = e.clientY, o = { x: target.x2 ?? 540, y: target.y2 ?? 900 }, before = scenes;
+    const mv = (ev: PointerEvent) => setScenes((all) => all.map((s, i) => (i === cur ? { ...s, els: s.els.map((x) => (x.id === target.id ? { ...x, x2: Math.round(o.x + (ev.clientX - sx) / k), y2: Math.round(o.y + (ev.clientY - sy) / k) } : x)) } : s)));
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); past.current.push(before); future.current = []; setSaveState("dirty"); };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   }
   /** 글자 상자 높이를 글자에 맞춤 */
@@ -279,7 +337,7 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
       const out = { ...rendered }, hs = { ...renderedHash };
       for (const [n, i] of which.entries()) {
         const sc = scenes[i];
-        const { blob, ext } = await makeMotionVideo((cv, t) => drawScene(cv, sc, t * sc.dur, imgs), sc.dur, (p) => setMsg({ ok: true, text: `🎞 ${i + 1}장 영상 만드는 중… (${n + 1}/${which.length}) ${Math.round(p * 100)}%` }));
+        const { blob, ext } = await makeMotionVideo((cv, t) => drawScene(cv, sc, t * sc.dur, imgs), sc.dur, (p) => setMsg({ ok: true, text: `🎞 ${i + 1}장 영상 만드는 중… (${n + 1}/${which.length}) ${Math.round(p * 100)}%` }), bitrateFor(sc.dur));
         const name = `carousel-${String(i + 1).padStart(2, "0")}.${ext}`;
         if (out[i]?.url) URL.revokeObjectURL(out[i].url);
         out[i] = { url: URL.createObjectURL(blob), hash: hashes[i], name };
@@ -292,6 +350,28 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
       setMsg({ ok: true, text: `${which.length}장을 MP4로 뽑아 내려받았어요. 인스타 새 게시물에서 번호 순서대로 고르면 돼요.` });
       setView("mp4");
     } catch (e) { setMsg({ ok: false, text: `영상을 만들지 못했어요: ${(e as Error).message}` }); }
+    setBusy("");
+  }
+  /** 통합본: 모든 장을 이어 붙인 MP4 하나 (8MB 아래로 화질 자동 조절) */
+  async function renderAll() {
+    setBusy("render"); setMsg(null); setPlaying(false);
+    if (saveState !== "saved") await save();
+    try {
+      await document.fonts?.ready;
+      const total = scenes.reduce((a, s) => a + s.dur, 0);
+      const starts0 = scenes.map((_, i) => scenes.slice(0, i).reduce((a, s) => a + s.dur, 0));
+      const { blob, ext } = await makeMotionVideo((cv, p) => {
+        const gt = p * total;
+        let i = starts0.findIndex((st, k) => gt >= st && gt < st + scenes[k].dur);
+        if (i < 0) i = scenes.length - 1;
+        drawScene(cv, scenes[i], Math.min(scenes[i].dur, gt - starts0[i]), imgs);
+      }, total, (p) => setMsg({ ok: true, text: `🎞 통합본 만드는 중… ${Math.round(p * 100)}%` }), bitrateFor(total));
+      const name = `carousel-all.${ext}`;
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      const mb = blob.size / 1024 / 1024;
+      setMsg({ ok: mb <= 8, text: `통합본(${scenes.length}장 · ${total}초 · ${mb.toFixed(1)}MB)을 내려받았어요.${mb > 8 ? " 8MB가 넘어서 폰 미리보기가 안 열릴 수 있어요. 장 길이를 줄여 주세요." : " 인스타엔 이 파일 하나만 올리면 돼요."}` });
+    } catch (e) { setMsg({ ok: false, text: `통합본을 만들지 못했어요: ${(e as Error).message}` }); }
     setBusy("");
   }
   async function savePngs() {
@@ -326,7 +406,9 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
         </div>
         <div className="row" style={{ gap: 6 }}>
           <button className="btn btn-sm" disabled={!!busy} onClick={() => void savePngs()}>{busy === "png" ? <span className="spinner" /> : "🖼 사진(PNG)으로 저장"}</button>
-          <button className="btn btn-sm" disabled={!!busy} onClick={() => void render(scenes.map((_, i) => i))}>전체 MP4</button>
+          <button className="btn btn-sm" disabled={!!busy} onClick={() => autoMockups()} title="표지를 뺀 장마다 목업 하나씩">🧩 장마다 목업 넣기</button>
+          <button className="btn btn-sm" disabled={!!busy} onClick={() => void render(scenes.map((_, i) => i))}>장별 MP4 전체</button>
+          <button className="btn btn-sm" disabled={!!busy} onClick={() => void renderAll()} title="모든 장을 이어 붙인 영상 하나 (8MB 아래)">🎞 통합본 MP4</button>
           <button className="btn btn-sm btn-primary" disabled={!!busy} onClick={() => void render(changed)}>{busy === "render" ? <span className="spinner" /> : `고친 장만 MP4 (${changed.length}장)`}</button>
         </div>
       </div>
@@ -363,6 +445,9 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
             <>
               <div ref={stage} style={{ position: "relative", width: "100%", maxWidth: 560, margin: "0 auto", aspectRatio: `${SW} / ${SH}`, userSelect: "none", touchAction: "none" }} onPointerDown={() => { setSel(null); setEditing(null); }}>
                 <canvas ref={canvas} aria-label={`${cur + 1}장 미리보기`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", borderRadius: 6, boxShadow: "var(--shadow)" }} />
+                {!playing && sel && (() => { const c0 = scene.els.find((x) => x.id === sel && x.type === "cursor"); return c0 ? (
+                  <div key="target" onPointerDown={(ev) => dragTarget(ev, c0)} title="커서 도착점 (끌어서 옮기기)" style={{ position: "absolute", left: (c0.x2 ?? 540) * k - 18, top: (c0.y2 ?? 900) * k - 18, width: 36, height: 36, borderRadius: 18, border: "2px dashed var(--accent)", background: "rgba(51,85,255,0.12)", cursor: "move", zIndex: 3 }} />
+                ) : null; })()}
                 {!playing && scene.els.map((e) => !e.hidden && (
                   <div key={e.id} onPointerDown={(ev) => startDrag(ev, e, "move")} onDoubleClick={() => { if (e.type === "text" && !e.locked) { setEditing(e.id); setSel(e.id); } }}
                     title={`${e.name || TYPE_KO[e.type]}${e.locked ? " (잠김)" : ""}`}
@@ -397,7 +482,11 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
                 {scene.els.map((e, i) => <option key={e.id} value={e.id}>{i + 1}. {TYPE_KO[e.type]} · {e.name || (e.type === "text" ? (e.text ?? "").replace(/==/g, "").slice(0, 16) : "")}{e.hidden ? " (숨김)" : ""}{e.locked ? " 🔒" : ""}</option>)}
               </select>
               <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                {(["text", "image", "rect", "circle", "line", "sparkle"] as ElType[]).map((t) => <button key={t} className="btn btn-sm" onClick={() => addEl(t)}>+ {TYPE_KO[t]}</button>)}
+                {(["text", "image", "rect", "circle", "line", "sparkle", "cursor"] as ElType[]).map((t) => <button key={t} className="btn btn-sm" onClick={() => addEl(t)}>+ {TYPE_KO[t]}</button>)}
+                <select className="input" style={{ width: "auto", padding: "2px 6px", fontSize: 12, fontWeight: 600 }} value="" onChange={(e) => { if (e.target.value) addEl("mockup", e.target.value as MockVariant); }} aria-label="목업 넣기">
+                  <option value="">+ 목업 ▾</option>
+                  {MOCKUPS.map((m) => <option key={m.id} value={m.id}>{m.label} — {m.desc}</option>)}
+                </select>
               </div>
               <p className="tiny muted" style={{ margin: 0 }}>미리보기에서 요소를 누르거나 위 목록에서 고르면, 위치·크기·문구·모션을 바로 고칠 수 있어요.</p>
             </div>
@@ -417,6 +506,16 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
 
           {tab === "bg" && (
             <div className="stack" style={{ gap: 8 }}>
+              <b className="small">색 테마 (모든 장에 한 번에)</b>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                {THEMES.map((th) => (
+                  <button key={th.id} type="button" onClick={() => applyTheme(th.id)} style={{ padding: 6, borderRadius: 8, border: "1px solid var(--line)", background: th.bg, color: th.ink, cursor: "pointer", textAlign: "left" }}>
+                    <span style={{ display: "flex", gap: 3, marginBottom: 3 }}>{[th.card, th.accent, th.skel].map((c2) => <i key={c2} style={{ width: 12, height: 12, borderRadius: 6, background: c2, border: "1px solid rgba(0,0,0,0.1)" }} />)}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>{th.label}</span>
+                  </button>
+                ))}
+              </div>
+              <hr style={{ border: 0, borderTop: "1px solid var(--line)", width: "100%" }} />
               <Color label="배경색" value={scene.bg.color} onChange={(v) => patchScene((s) => ({ ...s, bg: { ...s.bg, color: v } }))} />
               <label className="small row" style={{ gap: 6 }}><input type="checkbox" checked={!!scene.bg.color2} onChange={(e) => patchScene((s) => ({ ...s, bg: { ...s.bg, color2: e.target.checked ? "#eaeeff" : undefined } }))} /> 그라데이션</label>
               {scene.bg.color2 && <Color label="아래 색" value={scene.bg.color2} onChange={(v) => patchScene((s) => ({ ...s, bg: { ...s.bg, color2: v } }))} />}
@@ -546,6 +645,37 @@ export default function Studio({ initial, recent = [] }: { initial: Carousel; re
                 <Slider label="모서리" value={el.radius ?? 0} min={0} max={400} onChange={(v) => patchEl(el.id, { radius: v }, false)} />
                 <div className="row" style={{ gap: 4 }}><span className="small" style={{ width: 64 }}>맞춤</span><button className={`btn btn-sm ${el.fit !== "contain" ? "btn-primary" : ""}`} onClick={() => patchEl(el.id, { fit: "cover" })}>꽉 채우기</button><button className={`btn btn-sm ${el.fit === "contain" ? "btn-primary" : ""}`} onClick={() => patchEl(el.id, { fit: "contain" })}>전체 보이기</button></div>
                 <p className="tiny muted" style={{ margin: 0 }}>사진 바꾸기: &apos;배경·스타일&apos; 칸에서 사진을 누르세요.</p>
+              </>}
+              {el.type === "mockup" && <>
+                <b className="small">🧩 목업</b>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                  {MOCKUPS.map((m) => <button key={m.id} className={`btn btn-sm ${el.variant === m.id ? "btn-primary" : ""}`} onClick={() => { patchEl(el.id, { variant: m.id }); setTime(0); setPlaying(true); }}>{m.label}</button>)}
+                </div>
+                <label className="small stack" style={{ gap: 2 }}>제목 (비우면 회색 막대)<input className="input" value={el.title ?? ""} onChange={(e) => patchEl(el.id, { title: e.target.value }, false)} placeholder={el.variant === "browser" ? "주소창에 보일 글 예) blog.naver.com" : "예) 오늘 할 일"} /></label>
+                <label className="small stack" style={{ gap: 2 }}>항목 (한 줄에 하나, 빈 줄 = 회색 막대)<textarea className="textarea" style={{ minHeight: 90 }} value={(el.items ?? []).join("\n")} onChange={(e) => patchEl(el.id, { items: e.target.value.split("\n").slice(0, 8) }, false)} /></label>
+                <label className="small row" style={{ gap: 6 }}><input type="checkbox" checked={!!el.skel} onChange={(e) => patchEl(el.id, { skel: e.target.checked })} /> 글자 대신 회색 막대로 자리만 (더 진짜 화면 같아요)</label>
+                <Color label="카드 색" value={el.fill ?? "#ffffff"} onChange={(v) => patchEl(el.id, { fill: v })} />
+                <Color label="강조 색" value={el.stroke ?? accent} onChange={(v) => patchEl(el.id, { stroke: v })} />
+                <Color label="글자 색" value={el.color ?? "#16181d"} onChange={(v) => patchEl(el.id, { color: v })} />
+                <Color label="막대 색" value={el.mark ?? "#e3e6eb"} onChange={(v) => patchEl(el.id, { mark: v })} />
+                <Slider label="모서리" value={el.radius ?? 28} min={0} max={80} onChange={(v) => patchEl(el.id, { radius: v }, false)} />
+                <Slider label="시작" value={el.motion.delay} min={0} max={Math.max(1, scene.dur)} step={0.1} onChange={(v) => patchEl(el.id, { motion: { ...el.motion, delay: v } }, false)} unit="초" />
+                <Slider label="움직임 길이" value={el.motion.dur} min={0.5} max={Math.max(1, scene.dur)} step={0.1} onChange={(v) => patchEl(el.id, { motion: { ...el.motion, dur: v } }, false)} unit="초" />
+                <button className="btn btn-sm" onClick={() => { setTime(0); setPlaying(true); }}>▶ 움직임 보기</button>
+              </>}
+              {el.type === "cursor" && <>
+                <b className="small">🖱️ 커서 (출발 → 도착에서 클릭)</b>
+                <span className="tiny muted">미리보기에서 커서를 끌면 출발점, 점선 동그라미를 끌면 도착점이 바뀌어요.</span>
+                <div className="row" style={{ gap: 6 }}>
+                  <Num label="도착 가로" value={el.x2 ?? 540} onChange={(v) => patchEl(el.id, { x2: v })} />
+                  <Num label="도착 세로" value={el.y2 ?? 900} onChange={(v) => patchEl(el.id, { y2: v })} />
+                </div>
+                <label className="small row" style={{ gap: 6 }}><input type="checkbox" checked={el.click !== false} onChange={(e) => patchEl(el.id, { click: e.target.checked })} /> 도착하면 클릭 (퍼지는 원)</label>
+                <Slider label="커서 크기" value={el.w} min={30} max={140} onChange={(v) => patchEl(el.id, { w: v, h: v }, false)} />
+                <Slider label="출발 시간" value={el.motion.delay} min={0} max={Math.max(1, scene.dur)} step={0.1} onChange={(v) => patchEl(el.id, { motion: { ...el.motion, delay: v } }, false)} unit="초" />
+                <Slider label="이동 시간" value={el.motion.dur} min={0.2} max={4} step={0.1} onChange={(v) => patchEl(el.id, { motion: { ...el.motion, dur: v } }, false)} unit="초" />
+                <Color label="커서 색" value={el.fill ?? "#16181d"} onChange={(v) => patchEl(el.id, { fill: v })} />
+                <button className="btn btn-sm" onClick={() => { setTime(Math.max(0, el.motion.delay - 0.2)); setPlaying(true); }}>▶ 움직임 보기</button>
               </>}
               <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
                 <button className="btn btn-sm" onClick={() => patchEl(el.id, { hidden: !el.hidden })}>{el.hidden ? "보이기" : "숨기기"}</button>

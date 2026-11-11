@@ -7,10 +7,10 @@ import { SH as H, SW as W } from "@/lib/carousel-scene";
 export const FPS = 30;
 type Draw = (canvas: HTMLCanvasElement, t: number) => void | Promise<void>;
 
-async function pickCodec() {
+async function pickCodec(bitrate = 8_000_000) {
   if (typeof VideoEncoder === "undefined") return null;
   for (const codec of ["avc1.640028", "avc1.4d0028", "avc1.42003e", "avc1.42002a"]) {
-    const cfg: VideoEncoderConfig = { codec, width: W, height: H, bitrate: 8_000_000, framerate: FPS };
+    const cfg: VideoEncoderConfig = { codec, width: W, height: H, bitrate, framerate: FPS };
     try {
       if ((await VideoEncoder.isConfigSupported(cfg)).supported) return cfg;
     } catch {}
@@ -45,7 +45,7 @@ async function encodeWebCodecs(cfg: VideoEncoderConfig, draw: Draw, seconds: num
   return { blob: new Blob([target.buffer], { type: "video/mp4" }), ext: "mp4" };
 }
 
-async function encodeRecorder(draw: Draw, seconds: number, onProgress?: (p: number) => void) {
+async function encodeRecorder(draw: Draw, seconds: number, onProgress?: (p: number) => void, bitrate = 8_000_000) {
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -53,7 +53,7 @@ async function encodeRecorder(draw: Draw, seconds: number, onProgress?: (p: numb
   const type = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
   await draw(canvas, 0);
   const stream = canvas.captureStream(FPS);
-  const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 8_000_000 } : undefined);
+  const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: bitrate } : undefined);
   const parts: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
   const done = new Promise<void>((ok) => (rec.onstop = () => ok()));
@@ -77,7 +77,8 @@ async function encodeRecorder(draw: Draw, seconds: number, onProgress?: (p: numb
 }
 
 /** 그리기 함수(t: 0~1)로 seconds초 영상 만들기 */
-export async function makeMotionVideo(draw: Draw, seconds: number, onProgress?: (p: number) => void) {
-  const cfg = await pickCodec();
-  return cfg ? encodeWebCodecs(cfg, draw, seconds, onProgress) : encodeRecorder(draw, seconds, onProgress);
+/** bitrate: 초당 비트. 기본 8Mbps — 인스타 폰 미리보기 8MB 제한에 맞추려면 낮춰서 씀 */
+export async function makeMotionVideo(draw: Draw, seconds: number, onProgress?: (p: number) => void, bitrate = 8_000_000) {
+  const cfg = await pickCodec(bitrate);
+  return cfg ? encodeWebCodecs(cfg, draw, seconds, onProgress) : encodeRecorder(draw, seconds, onProgress, bitrate);
 }

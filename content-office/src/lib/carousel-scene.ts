@@ -6,7 +6,9 @@
 export const SW = 1080;
 export const SH = 1350;
 
-export type ElType = "text" | "image" | "rect" | "circle" | "line" | "sparkle";
+export type ElType = "text" | "image" | "rect" | "circle" | "line" | "sparkle" | "mockup" | "cursor";
+/** 목업 종류: 장마다 하나씩 넣으면 "진짜 화면"처럼 보여요 */
+export type MockVariant = "browser" | "phone" | "checklist" | "toggle" | "chat" | "search" | "progress" | "notify";
 export type MotionId =
   | "none" | "fade" | "rise" | "slideLeft" | "slideRight" | "zoomIn" | "pop" | "drop"
   | "typewriter" | "karaoke" | "bounceChars" | "strike" | "highlight" | "underline"
@@ -41,6 +43,15 @@ export type El = {
   fill?: string;
   stroke?: string;
   strokeW?: number;
+  // 목업
+  variant?: MockVariant;
+  title?: string;
+  items?: string[]; // 빈 줄 = 회색 막대(스켈레톤)
+  skel?: boolean; // 글자 대신 회색 막대로 자리만
+  // 커서: (x,y) → (x2,y2) 로 움직여 클릭
+  x2?: number;
+  y2?: number;
+  click?: boolean;
   motion: Motion;
 };
 export type SceneBg = {
@@ -79,6 +90,26 @@ export const MOTIONS: { id: MotionId; label: string; en: string; desc: string; f
   { id: "panRight", label: "오른쪽으로 흐르기", en: "Pan", desc: "사진이 천천히 오른쪽으로 흘러요", for: ["image"] },
 ];
 
+export const MOCKUPS: { id: MockVariant; label: string; desc: string }[] = [
+  { id: "browser", label: "🪟 브라우저 창", desc: "창이 툭 뜨고 회색 막대가 반짝여요" },
+  { id: "checklist", label: "✅ 체크리스트", desc: "체크가 하나씩 채워져요" },
+  { id: "toggle", label: "🔘 토글", desc: "스위치가 차례로 켜져요" },
+  { id: "phone", label: "📱 폰 화면", desc: "목록이 하나씩 올라와요" },
+  { id: "chat", label: "💬 대화창", desc: "말풍선이 번갈아 나타나요" },
+  { id: "search", label: "🔍 검색창", desc: "검색어가 쳐지고 결과가 떠요" },
+  { id: "progress", label: "⏳ 진행 링", desc: "링이 차오르고 체크로 바뀌어요" },
+  { id: "notify", label: "🔔 알림", desc: "위에서 알림이 내려와요" },
+];
+/** 색 테마 6종 (다크·라이트 한 쌍씩) — 이름만 바꿔 갈아끼우기 */
+export const THEMES: { id: string; label: string; dark: boolean; bg: string; bg2?: string; card: string; ink: string; sub: string; accent: string; skel: string }[] = [
+  { id: "blue-light", label: "블루 라이트", dark: false, bg: "#f5f6f8", card: "#ffffff", ink: "#16181d", sub: "#4a4f57", accent: "#3355ff", skel: "#e3e6eb" },
+  { id: "blue-dark", label: "블루 다크", dark: true, bg: "#0f1115", bg2: "#171a20", card: "#1c2027", ink: "#eceef2", sub: "#9aa2b1", accent: "#7b93ff", skel: "#2a2f38" },
+  { id: "peach-light", label: "피치 라이트", dark: false, bg: "#fff4ee", card: "#ffffff", ink: "#2b1d16", sub: "#6b5448", accent: "#ff7a45", skel: "#f3e2d8" },
+  { id: "peach-dark", label: "피치 다크", dark: true, bg: "#1d1411", bg2: "#2a1c17", card: "#2f211b", ink: "#fbeee6", sub: "#c9a99a", accent: "#ff9a6b", skel: "#43312a" },
+  { id: "mint-light", label: "민트 라이트", dark: false, bg: "#eefaf4", card: "#ffffff", ink: "#11241a", sub: "#47604f", accent: "#13a36b", skel: "#d6efe2" },
+  { id: "mint-dark", label: "민트 다크", dark: true, bg: "#0c1712", bg2: "#12211a", card: "#16291f", ink: "#e5f7ee", sub: "#93b8a3", accent: "#4fd18b", skel: "#244034" },
+];
+
 let seq = 0;
 export const newElId = () => `el${Date.now().toString(36)}${(seq++).toString(36)}`;
 
@@ -89,6 +120,8 @@ export function baseEl(type: ElType, accent: string, over: Partial<El> = {}): El
   if (type === "rect") return { ...common, x: 140, y: 500, w: 800, h: 300, fill: "#ffffff", stroke: accent, strokeW: 0, radius: 28, ...over };
   if (type === "circle") return { ...common, x: 390, y: 525, w: 300, h: 300, fill: accent, stroke: "", strokeW: 0, ...over };
   if (type === "line") return { ...common, x: 120, y: 670, w: 840, h: 10, fill: accent, motion: { id: "slideLeft", delay: 0.2, dur: 0.6 }, ...over };
+  if (type === "mockup") return { ...common, x: 120, y: 620, w: 840, h: 560, variant: "browser", title: "", items: ["", "", ""], skel: true, fill: "#ffffff", stroke: accent, color: "#16181d", mark: "#e3e6eb", radius: 28, motion: { id: "pop", delay: 0.5, dur: 2.4 }, ...over };
+  if (type === "cursor") return { ...common, x: 760, y: 1200, w: 60, h: 60, x2: 540, y2: 900, click: true, fill: "#16181d", stroke: "#ffffff", motion: { id: "none", delay: 1.2, dur: 1 }, ...over };
   return { ...common, x: 760, y: 140, w: 140, h: 140, fill: "#ffd84d", motion: { id: "twinkle", delay: 0, dur: 1.2 }, ...over };
 }
 
@@ -123,7 +156,7 @@ export function cleanScene(raw: unknown, imageCount: number): Scene | undefined 
   const img = (v: unknown) => (v == null || v === "" ? null : Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) < imageCount ? Number(v) : null);
   const b = (r.bg ?? {}) as Partial<SceneBg>;
   const bg: SceneBg = { color: color(b.color, "#ffffff"), color2: b.color2 ? color(b.color2, "") || undefined : undefined, image: img(b.image), blur: num(b.blur, 0, 0, 20), dim: num(b.dim, 0, 0, 0.85), pattern: (["none", "grid", "dots", "stripes"] as const).includes(b.pattern as never) ? b.pattern : "none", glow: !!b.glow, kenburns: !!b.kenburns };
-  const types: ElType[] = ["text", "image", "rect", "circle", "line", "sparkle"];
+  const types: ElType[] = ["text", "image", "rect", "circle", "line", "sparkle", "mockup", "cursor"];
   const els = (Array.isArray(r.els) ? r.els : []).slice(0, 60).flatMap((e): El[] => {
     if (!e || !types.includes(e.type)) return [];
     const m = (e.motion ?? {}) as Partial<Motion>;
@@ -134,6 +167,8 @@ export function cleanScene(raw: unknown, imageCount: number): Scene | undefined 
       ...(e.type === "text" ? { text: str(e.text, 1200), size: num(e.size, 60, 8, 400), weight: num(e.weight, 700, 100, 900), color: color(e.color, "#16181d"), align: (["left", "center", "right"] as const).includes(e.align as never) ? e.align : "left", lineHeight: num(e.lineHeight, 1.25, 0.6, 3), letter: num(e.letter, 0, -20, 60), textBg: e.textBg ? color(e.textBg, "") : "", shadow: !!e.shadow, mark: color(e.mark, "#ffd84d") } : {}),
       ...(e.type === "image" ? { image: img(e.image) ?? 0, fit: e.fit === "contain" ? "contain" : "cover", radius: num(e.radius, 0, 0, 600) } : {}),
       ...(["rect", "circle", "line", "sparkle"].includes(e.type) ? { fill: color(e.fill, "#ffffff"), stroke: e.stroke ? color(e.stroke, "") : "", strokeW: num(e.strokeW, 0, 0, 60), radius: num(e.radius, 0, 0, 600) } : {}),
+      ...(e.type === "mockup" ? { variant: MOCKUPS.some((x) => x.id === e.variant) ? e.variant : "browser", title: str(e.title, 120), items: (Array.isArray(e.items) ? e.items : []).slice(0, 8).map((x) => str(x, 80)), skel: !!e.skel, fill: color(e.fill, "#ffffff"), stroke: color(e.stroke, "#3355ff"), color: color(e.color, "#16181d"), mark: color(e.mark, "#e3e6eb"), radius: num(e.radius, 28, 0, 200) } : {}),
+      ...(e.type === "cursor" ? { x2: num(e.x2, 540, -500, 1600), y2: num(e.y2, 900, -500, 1900), click: e.click !== false, fill: color(e.fill, "#16181d"), stroke: color(e.stroke, "#ffffff") } : {}),
       motion: { id: MOTIONS.some((x) => x.id === m.id) ? (m.id as MotionId) : "none", delay: num(m.delay, 0, 0, 20), dur: num(m.dur, 0.6, 0, 20) },
     }];
   });
