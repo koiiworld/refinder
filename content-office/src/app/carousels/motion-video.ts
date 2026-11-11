@@ -2,7 +2,7 @@
 // - 크롬·엣지(윈도우 포함): WebCodecs로 프레임을 하나씩 그려 H.264 MP4로 → 실제 시간보다 빠르고 화질 일정
 // - 지원 안 되는 브라우저: 화면 녹화(MediaRecorder)로 대신 (실제 시간만큼 걸림, 형식은 브라우저에 따라 mp4/webm)
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
-import { H, W } from "./render";
+import { SH as H, SW as W } from "@/lib/carousel-scene";
 
 export const FPS = 30;
 type Draw = (canvas: HTMLCanvasElement, t: number) => void | Promise<void>;

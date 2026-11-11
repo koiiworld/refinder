@@ -2016,7 +2016,7 @@ test("📚 학습 결과를 캐러셀 후킹·블로그·이미지 프롬프트�
   // 디자인 값 저장·로드·기존 틀로 복귀. 원본 이미지·원고는 그대로.
   const recipe=ref.analysis.recipe;
   const saved=await call(`/api/carousels/${c.id}`,'PUT',{style:{design:recipe,designRef:ref.id}});assert.deepEqual(saved.data.style.design,recipe);
-  const page=await (await fetch(`${BASE}/carousels/${c.id}`)).text();assert.ok(page.includes('디자인 학습 시안'));
+  const page=await (await fetch(`${BASE}/carousels/${c.id}`)).text();assert.ok(page.includes('캐러셀 편집 툴'),'새 캐러셀 편집 툴 화면');
   const cleared=await call(`/api/carousels/${c.id}`,'PUT',{style:{design:null,designRef:''}});assert.equal(cleared.data.style.design,null);
   for(const r of refs.filter(r=>r.analysis?.categories.includes('hook')))await call(`/api/learn/${r.id}`,'PATCH',{enabled:false});
   await call(`/api/carousels/${c.id}`,'POST',{action:'regenerate'});assert.doesNotMatch(await stepPrompt('카드뉴스) 카피라이터'),/후킹학습마커|학습취향마커/);

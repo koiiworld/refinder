@@ -1,5 +1,6 @@
 import {parseRepurposeCards} from "./repurpose-cards";
 import type { CardVideo } from "./carousel-video-types";
+import { cleanScene, type Scene } from "./carousel-scene";
 import "server-only";
 import crypto from "node:crypto";
 import { q, q1, newId, j } from "./db";
@@ -18,7 +19,7 @@ import { importPostWithImages } from "./sample-html";
  * - 이미지는 브라우저에서 그림(서버 부담 없음) → 사진 앱에 저장/공유
  */
 
-export type Slide = { kind: "cover" | "content" | "cta"; headline: string; body: string; image: number | null; video?: CardVideo };
+export type Slide = { kind: "cover" | "content" | "cta"; headline: string; body: string; image: number | null; video?: CardVideo; scene?: Scene };
 export type CarouselImage = { url: string; alt: string };
 /** 지운 사진 (30일 동안 되살리기 가능) */
 export type RemovedImage = CarouselImage & { at: string };
@@ -253,6 +254,7 @@ export async function saveCarousel(id: string, patch: { title?: string; slides?:
   const vids = new Map(c.slides.filter((s) => s.video?.jobId).map((s) => [s.video!.jobId, s.video!]));
   const slides = (patch.slides ?? c.slides).slice(0, 15).map((s) => ({
     ...(s.video?.jobId && vids.has(s.video.jobId) ? { video: vids.get(s.video.jobId) } : {}),
+    ...(s.scene ? { scene: cleanScene(s.scene, c.images.length) } : {}),
     kind: (["cover", "content", "cta"].includes(s.kind) ? s.kind : "content") as Slide["kind"],
     headline: String(s.headline ?? "").slice(0, 80),
     body: String(s.body ?? "").slice(0, 300),
@@ -279,7 +281,9 @@ export async function removeImage(id: string, index: number, current?: Slide[]) 
   const c = await getCarousel(id);
   if (!c) throw new Error("캐러셀을 찾을 수 없어요.");
   if (!Number.isInteger(index) || !c.images[index]) throw new Error("지울 사진을 다시 골라 주세요.");
-  const fix = (list: Slide[]) => list.map((s) => ({ ...s, image: s.image == null ? null : s.image === index ? null : s.image > index ? s.image - 1 : s.image }));
+  const shift = (n: number | null | undefined) => (n == null ? null : n === index ? null : n > index ? n - 1 : n);
+  const fixScene = (sc: Slide["scene"]) => sc && { ...sc, bg: { ...sc.bg, image: shift(sc.bg.image) }, els: sc.els.flatMap((e) => (e.type === "image" ? (shift(e.image) == null ? [] : [{ ...e, image: shift(e.image)! }]) : [e])) };
+  const fix = (list: Slide[]) => list.map((s) => ({ ...s, image: shift(s.image), ...(s.scene ? { scene: fixScene(s.scene) } : {}) }));
   const slides = fix(Array.isArray(current) && current.length ? current : c.slides);
   const versions = Object.fromEntries(Object.entries(c.style?.versions ?? {}).map(([k, v]) => [k, v ? { ...v, slides: fix(v.slides ?? []) } : v]));
   const removed = [{ ...c.images[index], at: new Date().toISOString() }, ...liveRemoved(c.style?.removedImages)].slice(0, 40);
