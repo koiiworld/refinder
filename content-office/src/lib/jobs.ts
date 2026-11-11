@@ -63,6 +63,10 @@ export function ensureWorker() {
   const rt = () => void import("./routines").then((m) => m.routineTick()).catch(() => {});
   setTimeout(rt, 15_000).unref?.();
   setInterval(rt, 60_000).unref?.();
+  // 📊 인스타 인사이트: 하루 한 번 자동 수집 (1시간마다 확인, 토큰이 있을 때만, 실패하면 다음 시간에 다시)
+  const ig = () => void import("./ig-api").then((m) => m.igDailyTick()).catch(() => {});
+  setTimeout(ig, 120_000).unref?.();
+  setInterval(ig, 60 * 60 * 1000).unref?.();
   // 🗑 휴지통 30일 지난 것 자동 완전 삭제 (1시간마다)
   const tp = () => void import("./trash").then((m) => m.purgeExpired()).catch(() => {});
   setTimeout(tp, 90_000).unref?.();

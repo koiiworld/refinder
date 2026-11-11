@@ -140,6 +140,26 @@ http
       });
     }
     // 한국 공휴일 달력(ICS) — 선거일 포함
+    // 모의 인스타그램 API (Instagram 로그인 방식)
+    if (url.pathname.startsWith("/ig/")) {
+      const igj = (code, obj) => { res.writeHead(code, { "content-type": "application/json" }); return res.end(JSON.stringify(obj)); };
+      if (url.searchParams.get("access_token") !== "test-ig") return igj(401, { error: { message: "Invalid OAuth access token", code: 190 } });
+      const p = url.pathname.slice(3);
+      if (p === "/me") return igj(200, { user_id: "17841", username: "algokitchen", followers_count: 1234, follows_count: 10, media_count: 2, profile_picture_url: "" });
+      if (p === "/me/media") return igj(200, { data: [
+        { id: "m1", caption: "김장 실패 막는 법\n#김장", media_type: "VIDEO", media_product_type: "REELS", permalink: "https://www.instagram.com/reel/m1/", thumbnail_url: "", timestamp: "2026-11-10T10:00:00+0000", like_count: 120, comments_count: 8 },
+        { id: "m2", caption: "굴보쌈 한 상", media_type: "IMAGE", media_product_type: "FEED", permalink: "https://www.instagram.com/p/m2/", media_url: "", timestamp: "2026-11-09T10:00:00+0000", like_count: 50, comments_count: 3 },
+      ] });
+      const im = /^\/(m\d)\/insights$/.exec(p);
+      if (im) {
+        const metrics = String(url.searchParams.get("metric") ?? "").split(",");
+        // 사진 게시물은 묶음 요청·'views' 를 거부 → 하나씩 다시 받는지 확인
+        if (im[1] === "m2" && (metrics.length > 1 || metrics[0] === "views")) return igj(400, { error: { message: "metric not supported", code: 100 } });
+        const val = { m1: { reach: 5000, views: 8000, saved: 300, shares: 90, total_interactions: 520, ig_reels_avg_watch_time: 6400 }, m2: { reach: 900, saved: 20, shares: 4, total_interactions: 80 } }[im[1]];
+        return igj(200, { data: metrics.filter((m) => m in val).map((m) => ({ name: m, period: "lifetime", values: [{ value: val[m] }] })) });
+      }
+      return igj(404, { error: { message: "not found" } });
+    }
     if (url.pathname === "/fonts-css") { log.push({ path: url.pathname + url.search }); res.writeHead(200, { "content-type": "text/css" }); return res.end(`@font-face { font-family: 'X'; src: url(http://localhost:${PORT}/fontfile/x.ttf) format('truetype'); }`); }
     if (url.pathname === "/fontfile/x.ttf") { res.writeHead(200, { "content-type": "font/ttf" }); return res.end(Buffer.alloc(4096, 7)); }
     if (url.pathname === "/kr-holidays.ics") {

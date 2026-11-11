@@ -53,7 +53,7 @@ WF=$!
 env -i PATH="$PATH" HOME="$TEST_HOME" PGLITE_DIR=./data/ai \
   OPENAI_API_KEY=test-openai ANTHROPIC_API_KEY=test-anthropic GOOGLE_AI_API_KEY=test-google GOOGLE_AI_TEXT_API_KEY=test-google HIGGSFIELD_API_KEY=test-id:test-secret \
   OPENAI_BASE_URL=http://localhost:4110 ANTHROPIC_BASE_URL=http://localhost:4110 GOOGLE_AI_BASE_URL=http://localhost:4110 HIGGSFIELD_BASE_URL=http://localhost:4110 \
-  GOOGLE_FONTS_CSS_URL=http://localhost:4110/fonts-css REEL_FONT_DIR=./data/fonts \
+  GOOGLE_FONTS_CSS_URL=http://localhost:4110/fonts-css REEL_FONT_DIR=./data/fonts INSTAGRAM_GRAPH_BASE=http://localhost:4110/ig INSTAGRAM_ACCESS_TOKEN=test-ig \
   NAVER_AD_API_KEY=test-ad-key NAVER_AD_SECRET_KEY=test-ad-secret NAVER_AD_CUSTOMER_ID=12345 NAVER_AD_BASE_URL=http://localhost:4110 \
   NAVER_CLIENT_ID=test-dl-id NAVER_CLIENT_SECRET=test-dl-key NAVER_DATALAB_URL=http://localhost:4110/search-trend/v1/search \
   YOUTUBE_API_KEY=test-yt-key YOUTUBE_BASE_URL=http://localhost:4110 NAVER_BLOG_BASE_URL=http://localhost:4110 NAVER_RSS_BASE_URL=http://localhost:4110 NAVER_MBLOG_BASE_URL=http://localhost:4110 OFFICIAL_IMAGES_ALLOW_LOCAL=1 VIDEO_ALLOW_LOCAL=1 PUBLIC_BASE_URL=https://app.example.test TELEGRAM_BOT_TOKEN=test-tg-token TELEGRAM_CHAT_ID=987654 TELEGRAM_API_BASE=http://localhost:4110 YTDLP_NO_UPDATE=1 INSTAGRAM_TEST_ORIGIN=http://localhost:4110 RADAR_TEST_ORIGIN=http://localhost:4110 KR_HOLIDAY_ICS_URL=http://localhost:4110/kr-holidays.ics \

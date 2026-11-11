@@ -2485,3 +2485,13 @@ test('📝 릴스 AI 대본 · 블로그 글로: 블로그 목록 → 고른 글
  const sent=[...(await mockLog())].reverse().find(x=>typeof x.body?.system==='string'&&x.body.system.includes('쇼츠 대본 작가'));
  const u=sent.body.messages[0].content;assert.match(u,/\[원본 블로그 글/);assert.match(u,/사골 팩으로 15분/);assert.match(u,/주제: 닭한마리 집에서/);
 });
+
+test('📊 인스타 대시보드: API로 프로필·게시물 인사이트 받아 날짜별 저장 (안 되는 지표는 하나씩 다시)', async()=>{
+ const s=await call('/api/instagram/insights','POST');assert.equal(s.status,200,JSON.stringify(s.data));
+ assert.equal(s.data.connected,true);assert.equal(s.data.profile.username,'algokitchen');assert.equal(s.data.profile.followers,1234);
+ const m1=s.data.posts.find(p=>p.id==='m1'),m2=s.data.posts.find(p=>p.id==='m2');
+ assert.equal(m1.views,8000);assert.equal(m1.saved,300);assert.equal(m1.avgWatchSec,6.4,'밀리초 → 초');assert.equal(m1.likes,120);
+ assert.equal(m2.reach,900,'묶음이 거부돼도 하나씩 받음');assert.equal(m2.views,null);assert.equal(m2.saved,20);
+ const g=await call('/api/instagram/insights');assert.equal(g.data.posts.length,2);assert.ok(g.data.history.length>=1);assert.equal(g.data.history.at(-1).followers,1234);
+ const page=await (await fetch(`${BASE}/instagram`)).text();assert.ok(page.includes('인스타 운영'));
+});
