@@ -2495,3 +2495,23 @@ test('📊 인스타 대시보드: API로 프로필·게시물 인사이트 받�
  const g=await call('/api/instagram/insights');assert.equal(g.data.posts.length,2);assert.ok(g.data.history.length>=1);assert.equal(g.data.history.at(-1).followers,1234);
  const page=await (await fetch(`${BASE}/instagram`)).text();assert.ok(page.includes('인스타 운영'));
 });
+
+test('🖼 썸네일 공장: 사진·스티커 올리기 → 꾸민 내용·템플릿 저장 (주소·값 정리) → 휴지통 30일', async()=>{
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+ const s0=(await call('/api/thumbs')).data;assert.ok(s0.templates.some(t=>t.id==='tpl_default'),'기본 템플릿');
+ const ph=await call('/api/thumbs/upload','POST',{dataUrl:png,kind:'photo'});assert.equal(ph.status,200);assert.match(ph.data.url,/^\/api\/img\/img_[0-9a-f]+\.jpg$/);
+ const sk=await call('/api/thumbs/upload','POST',{dataUrl:png,kind:'sticker'});assert.equal(sk.status,200);
+ assert.equal((await call('/api/thumbs/upload','POST',{dataUrl:'data:text/plain;base64,aGk=',kind:'photo'})).status,400);
+ const img=await fetch(BASE+sk.data.url);assert.equal(img.headers.get('content-type'),'image/png','투명 PNG 그대로');
+ const doc={ratio:'1:1',photo:{zoom:9,x:0.5,y:0.5},els:[{id:'a',kind:'text',slot:'제목 1줄',text:'저상형 침대',x:0.3,y:0.1,w:0,rot:0,font:'jua',size:92,color:'#5b4231',stroke:'#fff',strokeW:12,align:'left'},{id:'b',kind:'sticker',slot:'캐릭터',src:sk.data.url,x:0.8,y:0.8,w:0.28,rot:0},{id:'c',kind:'sticker',src:'https://evil.example/x.png',x:0,y:0,w:0.1,rot:0},{id:'d',kind:'bad'}]};
+ const sv=await call('/api/thumbs','PUT',{items:[{id:'th1',name:'침대',photo:ph.data.url,doc},{id:'th2',name:'나쁜',photo:'https://evil.example/a.jpg',doc}],stickers:[{id:'s1',name:'양',url:sk.data.url}],templates:[{id:'tpl_x',name:'내 템플릿',ratio:'1:1',els:doc.els}]});
+ assert.equal(sv.status,200,JSON.stringify(sv.data));
+ const st=(await call('/api/thumbs')).data;
+ assert.equal(st.items.length,1,'바깥 주소 사진은 버림');const it=st.items[0];
+ assert.equal(it.doc.photo.zoom,6,'확대는 6배까지');assert.equal(it.doc.els.length,3,'이상한 요소는 버림');assert.equal(it.doc.els[2].src,'','바깥 스티커 주소는 비움');assert.equal(it.doc.els[0].font,'jua');
+ assert.equal(st.stickers.length,1);assert.equal(st.templates.find(t=>t.id==='tpl_x').els.length,3);
+ // 휴지통: 지운 것은 30일 보관, 30일 지나면 사라짐
+ await call('/api/thumbs','PUT',{items:[{...it,deletedAt:new Date().toISOString()},{...it,id:'old',deletedAt:new Date(Date.now()-31*86400000).toISOString()}]});
+ const st2=(await call('/api/thumbs')).data;assert.equal(st2.items.length,1);assert.ok(st2.items[0].deletedAt);
+ const page=await (await fetch(`${BASE}/thumbs`)).text();assert.ok(page.includes('썸네일 공장'));
+});

@@ -23,6 +23,7 @@ export const MENU_GROUPS: MenuGroup[] = [
   ] },
   { id: "blog", label: "블로그 관리", items: [
     { href: "/posts", label: "업로드", short: "업로드", sub: "키워드 추천부터 발행 준비까지", badge: true, mobile: true },
+    { href: "/thumbs", label: "썸네일 공장", sub: "사진 + 스티커·글자로 썸네일 꾸미기 · 템플릿" },
     { href: "/repurpose", label: "채널 변환", sub: "글 하나로 릴스·카드뉴스·스레드 등" },
     { href: "/diagnose", label: "진단", sub: "노출·제목·누락 점검" },
     { href: "/blogs", label: "설정", sub: "블로그별 말투·작성 규칙" },

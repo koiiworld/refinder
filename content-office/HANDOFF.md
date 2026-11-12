@@ -242,3 +242,10 @@ zsh tests/run-isolated.sh   # 복사본 빌드 + 모의 AI 서버로 전체 테�
 - 단축키: `src/components/shortcuts.ts` (e.code 기준, 한글 입력에서도 Ctrl/Cmd+Z, Shift/Ctrl+Y)
 - 채널변환: 단계 `repurpose` (기본 Opus 5.5), make 는 confirm:true 필수(action:'estimate' 로 예상 비용). 릴스 대본 → '🎬 릴스편집으로' (자막 줄 → 장면·글자, 대본 전체 → 메모)
 - 릴스 AI 대본 '📝 내 블로그 글로': `/api/reels/sources` 최근 글 + 캐러셀 검색·새로고침 API 재사용, repurpose load 로 본문
+
+## 썸네일 공장 /thumbs (2026-11-12)
+- 블로그 관리 메뉴. 왼쪽 사진(파일·끌어놓기·Ctrl+V), 오른쪽 꾸미기 보드(canvas, `src/app/thumbs/render.ts` drawThumb = 미리보기·PNG 공용)
+- 요소: 글자(38 글꼴·테두리·배경상자·그림자·자간·줄간격) · 스티커(내 스티커 보관함, 투명 PNG) · 모양(✦♥★●). 칸 이름(slot)으로 템플릿 적용 시 글 내용·캐릭터 유지 (`applyTemplate`)
+- 저장: settings thumb_items/thumb_stickers/thumb_templates, 파일은 generated_images. 지우기 = deletedAt 30일
+- 인스타 대시보드 `src/lib/ig-api.ts` + `/api/instagram/insights` (INSTAGRAM_ACCESS_TOKEN 키 필요, 아직 메타 비즈니스 포트폴리오 대기 중)
+- FontPicker·ColorField 는 `src/components/FontPicker.tsx` 로 옮김
