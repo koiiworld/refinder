@@ -17,6 +17,7 @@ export type ThumbEl = {
   kind: "text" | "sticker" | "shape" | "mosaic";
   slot?: string; // 템플릿 칸 이름 (같은 칸끼리 위치·글꼴을 맞춤)
   x: number; y: number; w: number; rot: number; opacity?: number; flip?: boolean;
+  locked?: boolean; // 🔒 자리 고정 (끌기·크기·회전·방향키·정렬·지우기 막음)
   // 글자
   text?: string; font?: string; size?: number; color?: string; stroke?: string; strokeW?: number; shadow?: boolean; bold?: boolean;
   align?: "left" | "center" | "right"; lineHeight?: number; letter?: number; bg?: string;

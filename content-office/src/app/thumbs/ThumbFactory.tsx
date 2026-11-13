@@ -186,13 +186,21 @@ export default function ThumbFactory() {
     // 빈 곳: 기본은 네모로 고르기, ✋ 사진 옮기기 모드나 Alt(⌥)를 누르면 사진 위치
     if (mode === "photo" && !panMode && !e.altKey) mode = "marquee";
     let group = sels;
+    // 🔒 잠긴 것: 눌러서 고르기만 (끌기·크기·회전 안 됨)
+    const target = id ? doc.els.find((x) => x.id === id) : undefined;
+    if (target?.locked && (mode === "size" || mode === "rot" || mode === "move")) {
+      if (additive) setSels(sels.includes(id!) ? sels.filter((x) => x !== id) : [...sels, id!]);
+      else if (!sels.includes(id!)) setSels([id!]);
+      drag.current = null;
+      return;
+    }
     if (mode === "move" && id) {
       if (additive) { group = sels.includes(id) ? sels.filter((x) => x !== id) : [...sels, id]; setSels(group); if (!group.includes(id)) return; }
       else if (!sels.includes(id)) { group = [id]; setSels(group); }
     } else if ((mode === "size" || mode === "rot") && id) { group = [id]; setSels(group); }
     else if (mode === "marquee") { if (!additive) setSels([]); setMarquee({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); }
     if (mode !== "marquee") { hist.current.past = [...hist.current.past.slice(-80), doc]; hist.current.future = []; }
-    const starts = Object.fromEntries(doc.els.filter((x) => group.includes(x.id)).map((x) => [x.id, { x: x.x, y: x.y }]));
+    const starts = Object.fromEntries(doc.els.filter((x) => group.includes(x.id) && !x.locked).map((x) => [x.id, { x: x.x, y: x.y }]));
     drag.current = { mode, id, sx: p.x, sy: p.y, starts, el: id ? doc.els.find((x) => x.id === id) : undefined, photo: doc.photo, box: boxes.find((b) => b.id === id), moved: false, additive, guide };
   }
   function move(e: React.PointerEvent) {
@@ -256,7 +264,8 @@ export default function ThumbFactory() {
         if (m && d.moved) {
           const l = Math.min(m.x0, m.x1), r = Math.max(m.x0, m.x1), t = Math.min(m.y0, m.y1), b = Math.max(m.y0, m.y1);
           // 네모와 겹치는 것 모두 고르기
-          const hit = boxes.map((bx) => ({ id: bx.id, a: aabb(bx) })).filter(({ a }) => a.r >= l && a.l <= r && a.b >= t && a.t <= b).map((x) => x.id);
+          const lockedIds = new Set(doc.els.filter((x) => x.locked).map((x) => x.id));
+          const hit = boxes.map((bx) => ({ id: bx.id, a: aabb(bx) })).filter(({ id, a }) => !lockedIds.has(id) && a.r >= l && a.l <= r && a.b >= t && a.t <= b).map((x) => x.id);
           setSels((old) => (d.additive ? [...new Set([...old, ...hit])] : hit));
         }
         return null;
@@ -286,7 +295,7 @@ export default function ThumbFactory() {
     if (!g) return;
     setDoc((x) => ({ ...x, els: x.els.map((el) => {
       const b = boxes.find((bb) => bb.id === el.id);
-      if (!b || !sels.includes(el.id)) return el;
+      if (!b || !sels.includes(el.id) || el.locked) return el;
       const a = aabb(b);
       const nx = how === "l" ? g.l + (a.cx - a.l) : how === "r" ? g.r - (a.r - a.cx) : how === "c" ? g.cx : a.cx;
       const ny = how === "t" ? g.t + (a.cy - a.t) : how === "b" ? g.b - (a.b - a.cy) : how === "m" ? g.cy : a.cy;
@@ -303,7 +312,7 @@ export default function ThumbFactory() {
     let pos = axis === "x" ? first.l : first.t;
     const want: Record<string, number> = {};
     for (const it of list) { const sz = axis === "x" ? it.a.r - it.a.l : it.a.b - it.a.t; want[it.id] = pos + sz / 2; pos += sz + gap; }
-    setDoc((x) => ({ ...x, els: x.els.map((el) => { const it = list.find((l) => l.id === el.id); if (!it) return el; return axis === "x" ? { ...el, x: el.x + (want[el.id] - it.a.cx) / THUMB_W } : { ...el, y: el.y + (want[el.id] - it.a.cy) / H }; }) }));
+    setDoc((x) => ({ ...x, els: x.els.map((el) => { const it = list.find((l) => l.id === el.id); if (!it || el.locked) return el; return axis === "x" ? { ...el, x: el.x + (want[el.id] - it.a.cx) / THUMB_W } : { ...el, y: el.y + (want[el.id] - it.a.cy) / H }; }) }));
   }
   const patchMany = (pred: (e: ThumbEl) => boolean, p: Partial<ThumbEl>) => setDoc((d) => ({ ...d, els: d.els.map((e) => (sels.includes(e.id) && pred(e) ? { ...e, ...p } : e)) }));
 
@@ -314,13 +323,13 @@ export default function ThumbFactory() {
       const u = undoKey(e);
       if (u) { e.preventDefault(); return u === "redo" ? redo() : undo(); }
       if (!doc) return;
-      if ((e.metaKey || e.ctrlKey) && (e.code === "KeyA" || e.key.toLowerCase() === "a")) { e.preventDefault(); setSels(doc.els.map((x) => x.id)); return; }
+      if ((e.metaKey || e.ctrlKey) && (e.code === "KeyA" || e.key.toLowerCase() === "a")) { e.preventDefault(); setSels(doc.els.filter((x) => !x.locked).map((x) => x.id)); return; }
       if (!sels.length) return;
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeEls(sels); }
       // 방향키: 눈금 간격을 켰으면 그 간격만큼, 아니면 조금씩 (Shift = 크게)
       const px = step > 0 ? step : e.shiftKey ? 20 : 4;
       const mv: Record<string, [number, number]> = { ArrowLeft: [-px, 0], ArrowRight: [px, 0], ArrowUp: [0, -px], ArrowDown: [0, px] };
-      if (mv[e.key]) { e.preventDefault(); setDoc((d) => ({ ...d, els: d.els.map((el) => (sels.includes(el.id) ? { ...el, x: el.x + mv[e.key][0] / THUMB_W, y: el.y + mv[e.key][1] / H } : el)) })); }
+      if (mv[e.key]) { e.preventDefault(); setDoc((d) => ({ ...d, els: d.els.map((el) => (sels.includes(el.id) && !el.locked ? { ...el, x: el.x + mv[e.key][0] / THUMB_W, y: el.y + mv[e.key][1] / H } : el)) })); }
       if ((e.metaKey || e.ctrlKey) && (e.code === "KeyD" || e.key.toLowerCase() === "d")) { e.preventDefault(); duplicateMany(sels); }
       if (e.key === "Escape") setSels([]);
     };
@@ -345,7 +354,13 @@ export default function ThumbFactory() {
     addEl({ kind: "sticker", slot: nextSlot("스티커"), src: s.url, w: 0.26, x: 0.78, y: 0.8 });
   }
   function removeEl(id: string) { removeEls([id]); }
-  function removeEls(ids: string[]) { setDoc((d) => ({ ...d, els: d.els.filter((e) => !ids.includes(e.id)) })); setSels([]); }
+  function removeEls(ids: string[]) {
+    const lockedN = doc?.els.filter((e) => ids.includes(e.id) && e.locked).length ?? 0;
+    setDoc((d) => ({ ...d, els: d.els.filter((e) => !ids.includes(e.id) || e.locked) }));
+    setSels((s) => s.filter((id) => doc?.els.find((e) => e.id === id)?.locked));
+    if (lockedN) setMsg({ ok: true, text: `🔒 잠긴 ${lockedN}개는 지우지 않았어요. 지우려면 먼저 잠금을 풀어 주세요.` });
+  }
+  const toggleLock = (ids: string[], on?: boolean) => setDoc((d) => { const v = on ?? !d.els.filter((e) => ids.includes(e.id)).every((e) => e.locked); return { ...d, els: d.els.map((e) => (ids.includes(e.id) ? { ...e, locked: v || undefined } : e)) }; });
   function order(id: string, dir: 1 | -1) { setDoc((d) => { const i = d.els.findIndex((e) => e.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= d.els.length) return d; const els = [...d.els]; [els[i], els[j]] = [els[j], els[i]]; return { ...d, els }; }); }
   function duplicate(id: string) { duplicateMany([id]); }
   function duplicateMany(ids: string[]) {
@@ -484,11 +499,18 @@ export default function ThumbFactory() {
                   {doc.els.map((el) => {
                     const b = boxOf(el.id);
                     if (!b) return null;
-                    const on = sels.includes(el.id), single = on && sels.length === 1;
+                    const on = sels.includes(el.id), single = on && sels.length === 1 && !el.locked;
                     return (
                       <div key={el.id} onPointerDown={(e) => down(e, "move", el.id)} onDoubleClick={() => { setSel(el.id); setTimeout(() => (document.getElementById("thumb-text") as HTMLTextAreaElement | null)?.focus(), 30); }}
-                        style={{ position: "absolute", left: (b.cx - b.w / 2) * k, top: (b.cy - b.h / 2) * k, width: b.w * k, height: b.h * k, transform: `rotate(${b.rot}deg)`, outline: on ? `2px ${single ? "solid" : "dashed"} #3b82f6` : el.kind === "mosaic" ? "1px dashed rgba(255,255,255,.7)" : undefined, cursor: "move", borderRadius: el.kind === "mosaic" && el.round ? "50%" : 4 }}
+                        style={{ position: "absolute", left: (b.cx - b.w / 2) * k, top: (b.cy - b.h / 2) * k, width: b.w * k, height: b.h * k, transform: `rotate(${b.rot}deg)`, outline: on ? `2px ${el.locked ? "solid #f59e0b" : single ? "solid #3b82f6" : "dashed #3b82f6"}` : el.kind === "mosaic" ? "1px dashed rgba(255,255,255,.7)" : undefined, cursor: el.locked ? "default" : "move", borderRadius: el.kind === "mosaic" && el.round ? "50%" : 4 }}
                         title={el.kind === "mosaic" ? "모자이크" : el.slot ?? ""} data-el={el.id}>
+                        {on && (
+                          <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); toggleLock([el.id]); }}
+                            title={el.locked ? "잠김 — 눌러서 풀기" : "눌러서 자리 고정(잠금)"} aria-label={el.locked ? "잠금 풀기" : "잠그기"}
+                            style={{ position: "absolute", right: -12, top: -12, width: 24, height: 24, borderRadius: 999, border: `2px solid ${el.locked ? "#f59e0b" : "#3b82f6"}`, background: el.locked ? "#fef3c7" : "#fff", fontSize: 12, lineHeight: "18px", padding: 0, cursor: "pointer", transform: `rotate(${-b.rot}deg)` }}>
+                            {el.locked ? "🔒" : "🔓"}
+                          </button>
+                        )}
                         {single && <>
                           <span onPointerDown={(e) => down(e, "size", el.id)} style={{ position: "absolute", right: -7, bottom: -7, width: 14, height: 14, background: "#fff", border: "2px solid #3b82f6", borderRadius: 3, cursor: "nwse-resize" }} title="끌어서 크기" />
                           <span onPointerDown={(e) => down(e, "rot", el.id)} style={{ position: "absolute", left: "50%", top: -26, marginLeft: -7, width: 14, height: 14, background: "#3b82f6", borderRadius: 999, cursor: "grab" }} title="끌어서 돌리기" />
@@ -511,7 +533,7 @@ export default function ThumbFactory() {
             {/* 속성 + 스티커 */}
             <div className="stack" style={{ gap: 10 }}>
               {sels.length > 1 ? (
-                <MultiPanel els={doc.els.filter((e) => sels.includes(e.id))} onAlign={align} onDistribute={distribute} onPatch={patchMany} onRemove={() => removeEls(sels)} onDup={() => duplicateMany(sels)} onClear={() => setSels([])} />
+                <MultiPanel els={doc.els.filter((e) => sels.includes(e.id))} onLock={(on) => toggleLock(sels, on)} onAlign={align} onDistribute={distribute} onPatch={patchMany} onRemove={() => removeEls(sels)} onDup={() => duplicateMany(sels)} onClear={() => setSels([])} />
               ) : selEl ? <ElPanel el={selEl} onPatch={(p, rec) => patchEl(selEl.id, p, rec)} onRemove={() => removeEl(selEl.id)} onOrder={(d) => order(selEl.id, d)} onDup={() => duplicate(selEl.id)} /> : <p className="tiny muted" style={{ margin: 0 }}>보드에서 글자·스티커를 누르면 여기서 고칠 수 있어요. 글자는 두 번 누르면 바로 쓸 수 있어요. 여러 개는 빈 곳을 끌어 네모로 감싸거나 Shift+클릭.</p>}
               <div ref={stickerBox} tabIndex={0} className="card card-pad stack" style={{ gap: 6, outline: dragOver === "sticker" ? "3px dashed var(--accent)" : undefined }}
                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver("sticker"); }} onDragLeave={() => setDragOver("")}
@@ -555,6 +577,7 @@ function ElPanel({ el, onPatch, onRemove, onOrder, onDup }: { el: ThumbEl; onPat
     <div className="card card-pad stack" style={{ gap: 6 }}>
       <div className="row" style={{ gap: 4 }}>
         <b className="small">{el.kind === "text" ? "✏️ 글자" : el.kind === "sticker" ? "🐑 스티커" : el.kind === "mosaic" ? "🫥 모자이크" : "✦ 모양"}</b>
+        <button className={`btn btn-sm ${el.locked ? "btn-primary" : ""}`} onClick={() => onPatch({ locked: el.locked ? undefined : true })} title="자리 고정: 끌기·크기·회전·방향키·정렬·지우기를 막아요" aria-label={el.locked ? "잠금 풀기" : "잠그기"}>{el.locked ? "🔒 잠김" : "🔓"}</button>
         {el.kind !== "mosaic" && <input className="input" style={{ flex: 1, minWidth: 0, padding: "2px 6px", fontSize: 12 }} value={el.slot ?? ""} onChange={(e) => onPatch({ slot: e.target.value })} placeholder="칸 이름" title="칸 이름: 템플릿을 입힐 때 같은 이름끼리 글 내용·캐릭터를 지켜요" aria-label="칸 이름" />}
       </div>
       {el.kind === "text" && <>
@@ -608,6 +631,7 @@ function ElPanel({ el, onPatch, onRemove, onOrder, onDup }: { el: ThumbEl; onPat
           <input className="input" type="number" min={2} max={150} step={0.5} value={Math.round(el.w * 1000) / 10} onChange={(e) => onPatch({ w: Number(e.target.value) / 100 })} style={{ width: 62, padding: "2px 4px" }} aria-label="크기 %" />%
         </label>
       )}
+      <fieldset disabled={!!el.locked} className="stack" style={{ gap: 6, border: 0, padding: 0, margin: 0, opacity: el.locked ? 0.55 : 1 }} title={el.locked ? "🔒 잠겨 있어요 — 위 🔒 를 눌러 풀면 위치·회전을 바꿀 수 있어요" : undefined}>
       {num("회전", el.rot ?? 0, -180, 180, 1, "rot", "°")}
       {num("투명도", el.opacity ?? 1, 0.1, 1, 0.05, "opacity")}
       <div className="row tiny" style={{ gap: 6 }}>
@@ -615,6 +639,7 @@ function ElPanel({ el, onPatch, onRemove, onOrder, onDup }: { el: ThumbEl; onPat
         <label>가로 <input className="input" type="number" step={0.5} value={Math.round(el.x * 1000) / 10} onChange={(e) => onPatch({ x: Number(e.target.value) / 100 })} style={{ width: 62, padding: "2px 4px" }} aria-label="가로 위치 %" />%</label>
         <label>세로 <input className="input" type="number" step={0.5} value={Math.round(el.y * 1000) / 10} onChange={(e) => onPatch({ y: Number(e.target.value) / 100 })} style={{ width: 62, padding: "2px 4px" }} aria-label="세로 위치 %" />%</label>
       </div>
+      </fieldset>
       <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
         <button className="btn btn-sm" onClick={() => onOrder(1)}>앞으로</button>
         <button className="btn btn-sm" onClick={() => onOrder(-1)}>뒤로</button>
@@ -644,12 +669,17 @@ function Ruler({ axis, len, size, onPointerDown }: { axis: "v" | "h"; len: numbe
 }
 
 /** 여러 개 고른 상태: 정렬 · 같은 간격 · 글자·모양 색 한꺼번에 */
-function MultiPanel({ els, onAlign, onDistribute, onPatch, onRemove, onDup, onClear }: { els: ThumbEl[]; onAlign: (h: "l" | "c" | "r" | "t" | "m" | "b") => void; onDistribute: (a: "x" | "y") => void; onPatch: (pred: (e: ThumbEl) => boolean, p: Partial<ThumbEl>) => void; onRemove: () => void; onDup: () => void; onClear: () => void }) {
+function MultiPanel({ els, onLock, onAlign, onDistribute, onPatch, onRemove, onDup, onClear }: { els: ThumbEl[]; onLock: (on: boolean) => void; onAlign: (h: "l" | "c" | "r" | "t" | "m" | "b") => void; onDistribute: (a: "x" | "y") => void; onPatch: (pred: (e: ThumbEl) => boolean, p: Partial<ThumbEl>) => void; onRemove: () => void; onDup: () => void; onClear: () => void }) {
   const texts = els.filter((e) => e.kind === "text"), shapes = els.filter((e) => e.kind === "shape");
   const isText = (e: ThumbEl) => e.kind === "text", isShape = (e: ThumbEl) => e.kind === "shape";
   return (
     <div className="card card-pad stack" style={{ gap: 6 }}>
       <div className="row" style={{ gap: 4 }}><b className="small">☑️ {els.length}개 고름</b><span className="tiny muted">글자 {texts.length} · 모양 {shapes.length} · 스티커 {els.filter((e) => e.kind === "sticker").length}{els.some((e) => e.kind === "mosaic") ? ` · 모자이크 ${els.filter((e) => e.kind === "mosaic").length}` : ""}</span><button className="btn btn-sm btn-ghost" style={{ marginLeft: "auto" }} onClick={onClear}>고르기 풀기</button></div>
+      <div className="row" style={{ gap: 4 }}>
+        <button className="btn btn-sm" onClick={() => onLock(true)}>🔒 모두 잠그기</button>
+        <button className="btn btn-sm" onClick={() => onLock(false)}>🔓 모두 풀기</button>
+        <span className="tiny muted">잠긴 것 {els.filter((e) => e.locked).length}개 (정렬·이동에서 빠져요)</span>
+      </div>
       <span className="tiny muted">정렬 (고른 것들 기준)</span>
       <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
         {([["l", "⇤ 왼쪽"], ["c", "↔ 가운데"], ["r", "⇥ 오른쪽"], ["t", "⤒ 위"], ["m", "↕ 가운데"], ["b", "⤓ 아래"]] as const).map(([h, l]) => <button key={h} className="btn btn-sm" onClick={() => onAlign(h)}>{l}</button>)}

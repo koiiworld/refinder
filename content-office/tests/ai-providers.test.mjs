@@ -2536,3 +2536,11 @@ test('◐ 썸네일 스티커 흑백: 저장되고 다시 끌 수 있음', async
  let r=await call('/api/thumbs','PUT',mk(true));assert.equal(r.data.items.find(x=>x.id==='gr').doc.els[0].gray,true);
  r=await call('/api/thumbs','PUT',mk(false));assert.equal(r.data.items.find(x=>x.id==='gr').doc.els[0].gray,undefined);
 });
+
+test('🔒 썸네일 잠금: 저장·풀기', async()=>{
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+ const ph=(await call('/api/thumbs/upload','POST',{dataUrl:png,kind:'photo'})).data.url;
+ const mk=(locked)=>({items:[{id:'lk',name:'잠금',photo:ph,doc:{ratio:'1:1',photo:{zoom:1,x:0.5,y:0.5},els:[{id:'t',kind:'text',text:'가',x:0.3,y:0.2,w:0,rot:0,locked}]}}],templates:[{id:'tpl_lk',name:'잠금 템플릿',ratio:'1:1',els:[{id:'t',kind:'text',slot:'제목',text:'가',x:0.3,y:0.2,w:0,rot:0,locked}]}]});
+ let r=await call('/api/thumbs','PUT',mk(true));assert.equal(r.data.items.find(x=>x.id==='lk').doc.els[0].locked,true);assert.equal(r.data.templates.find(x=>x.id==='tpl_lk').els[0].locked,true,'템플릿에도 잠금 저장');
+ r=await call('/api/thumbs','PUT',mk(false));assert.equal(r.data.items.find(x=>x.id==='lk').doc.els[0].locked,undefined);
+});
