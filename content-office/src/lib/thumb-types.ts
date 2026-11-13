@@ -32,9 +32,10 @@ export type ThumbEl = {
 export type ThumbGuides = { v: number[]; h: number[] };
 export type ThumbDoc = { ratio: ThumbRatio; photo: { zoom: number; x: number; y: number }; els: ThumbEl[]; guides?: ThumbGuides };
 export type ThumbItem = { id: string; name: string; photo: string; doc: ThumbDoc; templateId?: string | null; updatedAt: string; deletedAt?: string | null };
-export type ThumbSticker = { id: string; name: string; url: string; deletedAt?: string | null };
+export type ThumbSticker = { id: string; name: string; url: string; group?: string; deletedAt?: string | null };
 export type ThumbTemplate = { id: string; name: string; ratio: ThumbRatio; els: ThumbEl[]; guides?: ThumbGuides; deletedAt?: string | null };
-export type ThumbState = { items: ThumbItem[]; stickers: ThumbSticker[]; templates: ThumbTemplate[] };
+/** stickerGroups: 스티커 묶음 이름 (순서대로, 비어 있는 묶음도 남김) */
+export type ThumbState = { items: ThumbItem[]; stickers: ThumbSticker[]; templates: ThumbTemplate[]; stickerGroups?: string[] };
 
 /** 기본 템플릿: 보내 준 예시처럼 — 왼쪽 위 두 줄 제목(갈색·분홍, 흰 테두리) · 반짝이 · 오른쪽 아래 캐릭터 자리 */
 export function defaultTemplate(): ThumbTemplate {

@@ -2544,3 +2544,12 @@ test('🔒 썸네일 잠금: 저장·풀기', async()=>{
  let r=await call('/api/thumbs','PUT',mk(true));assert.equal(r.data.items.find(x=>x.id==='lk').doc.els[0].locked,true);assert.equal(r.data.templates.find(x=>x.id==='tpl_lk').els[0].locked,true,'템플릿에도 잠금 저장');
  r=await call('/api/thumbs','PUT',mk(false));assert.equal(r.data.items.find(x=>x.id==='lk').doc.els[0].locked,undefined);
 });
+
+test('📁 스티커 묶음: 묶음 목록·스티커 묶음 저장, 빈 묶음도 남고 스티커에만 있는 묶음도 목록에', async()=>{
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+ const u=(await call('/api/thumbs/upload','POST',{dataUrl:png,kind:'sticker'})).data.url;
+ const r=await call('/api/thumbs','PUT',{stickerGroups:['양 캐릭터','빈 묶음','양 캐릭터',''],stickers:[{id:'g1',name:'양',url:u,group:'양 캐릭터'},{id:'g2',name:'별',url:u,group:'반짝이'},{id:'g3',name:'기타',url:u}]});
+ assert.equal(r.status,200,JSON.stringify(r.data));
+ assert.deepEqual(r.data.stickerGroups,['양 캐릭터','빈 묶음','반짝이'],'중복·빈 이름 빼고, 스티커에만 있는 묶음도');
+ assert.equal(r.data.stickers.find(x=>x.id==='g1').group,'양 캐릭터');assert.equal(r.data.stickers.find(x=>x.id==='g3').group,undefined);
+});

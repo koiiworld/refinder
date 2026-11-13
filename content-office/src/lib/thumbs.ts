@@ -9,7 +9,7 @@ import { defaultTemplate, type ThumbEl, type ThumbItem, type ThumbState, type Th
  * - 목록·꾸민 내용·템플릿: settings 'thumb_items' · 'thumb_stickers' · 'thumb_templates'
  * - 지우기는 휴지통(deletedAt) → 30일 지나면 목록에서 완전히 뺌
  */
-const KEYS = { items: "thumb_items", stickers: "thumb_stickers", templates: "thumb_templates" } as const;
+const KEYS = { items: "thumb_items", stickers: "thumb_stickers", templates: "thumb_templates", groups: "thumb_sticker_groups" } as const;
 const IMG = /^\/api\/img\/img_[0-9a-f]{8,}\.jpg$/;
 const DAY30 = 30 * 86400_000;
 
@@ -23,10 +23,12 @@ async function write(key: string, list: unknown[]) {
 const alive = <T extends { deletedAt?: string | null }>(xs: T[]) => xs.filter((x) => !x.deletedAt || Date.now() - new Date(x.deletedAt).getTime() < DAY30);
 
 export async function thumbState(): Promise<ThumbState> {
-  const [items, stickers, templates] = await Promise.all([read<ThumbItem>(KEYS.items), read<ThumbSticker>(KEYS.stickers), read<ThumbTemplate>(KEYS.templates)]);
+  const [items, stickers, templates, groups] = await Promise.all([read<ThumbItem>(KEYS.items), read<ThumbSticker>(KEYS.stickers), read<ThumbTemplate>(KEYS.templates), read<string>(KEYS.groups)]);
   // 기본 템플릿은 늘 목록 맨 앞에 (직접 휴지통에 넣은 경우만 빼고)
   const tpls = alive(templates);
-  return { items: alive(items), stickers: alive(stickers), templates: templates.some((t) => t.id === "tpl_default") ? tpls : [defaultTemplate(), ...tpls] };
+  // 묶음 목록: 저장된 순서 + 스티커에만 적힌 묶음 이름
+  const stickerGroups = [...new Set([...groups.filter((g) => typeof g === "string"), ...alive(stickers).map((x) => x.group ?? "").filter(Boolean)])];
+  return { items: alive(items), stickers: alive(stickers), templates: templates.some((t) => t.id === "tpl_default") ? tpls : [defaultTemplate(), ...tpls], stickerGroups };
 }
 
 /** 사진·스티커 올리기 → 주소 */
@@ -69,7 +71,8 @@ export async function saveThumbs(input: Partial<ThumbState>) {
     }));
     await write(KEYS.items, alive(items));
   }
-  if (input.stickers) await write(KEYS.stickers, alive(input.stickers.slice(0, 300).filter((x) => IMG.test(String(x.url ?? ""))).map((x) => ({ id: s(x.id, 40), name: s(x.name, 80), url: x.url, deletedAt: del(x.deletedAt) }))));
+  if (input.stickers) await write(KEYS.stickers, alive(input.stickers.slice(0, 300).filter((x) => IMG.test(String(x.url ?? ""))).map((x) => ({ id: s(x.id, 40), name: s(x.name, 80), url: x.url, group: x.group ? s(x.group, 40).trim() || undefined : undefined, deletedAt: del(x.deletedAt) }))));
+  if (input.stickerGroups) await write(KEYS.groups, [...new Set(input.stickerGroups.map((g) => s(g, 40).trim()).filter(Boolean))].slice(0, 60));
   if (input.templates) await write(KEYS.templates, alive(input.templates.slice(0, 60).map((x) => ({ id: s(x.id, 40), name: s(x.name, 60) || "템플릿", ratio: ratio(x.ratio), els: cleanEls(x.els).filter((e) => e.kind !== "mosaic"), guides: guides(x.guides), deletedAt: del(x.deletedAt) }))));
   return thumbState();
 }

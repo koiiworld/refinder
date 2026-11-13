@@ -76,6 +76,32 @@ export default function ThumbFactory() {
   }, []);
   const setItems = (fn: (xs: ThumbItem[]) => ThumbItem[], delay = 800) => setSt((s) => { if (!s) return s; const next = { ...s, items: fn(s.items) }; persist({ items: next.items }, delay); return next; });
   const setStickers = (fn: (xs: ThumbSticker[]) => ThumbSticker[]) => setSt((s) => { if (!s) return s; const next = { ...s, stickers: fn(s.stickers) }; persist({ stickers: next.stickers }); return next; });
+  // ── 스티커 묶음 ──
+  const groups = useMemo(() => st?.stickerGroups ?? [], [st]);
+  const [stickerTab, setStickerTab] = useState<string>("all"); // all | none | 묶음 이름
+  useEffect(() => { try { const t = localStorage.getItem("thumb_sticker_tab"); if (t) setStickerTab(t); } catch { /* 무시 */ } }, []);
+  useEffect(() => { try { localStorage.setItem("thumb_sticker_tab", stickerTab); } catch { /* 무시 */ } }, [stickerTab]);
+  useEffect(() => { if (st && stickerTab !== "all" && stickerTab !== "none" && !groups.includes(stickerTab)) setStickerTab("all"); }, [st, groups, stickerTab]);
+  const setGroupsAndStickers = (g: string[], fn?: (xs: ThumbSticker[]) => ThumbSticker[]) => setSt((s) => { if (!s) return s; const next = { ...s, stickerGroups: g, stickers: fn ? fn(s.stickers) : s.stickers }; persist(fn ? { stickerGroups: g, stickers: next.stickers } : { stickerGroups: g }); return next; });
+  function newGroup() {
+    const name = prompt("새 스티커 묶음 이름 (예: 양 캐릭터, 반짝이, 말풍선)")?.trim().slice(0, 40);
+    if (!name) return;
+    if (!groups.includes(name)) setGroupsAndStickers([...groups, name]);
+    setStickerTab(name);
+  }
+  function renameGroup(old: string) {
+    const name = prompt("묶음 이름 바꾸기", old)?.trim().slice(0, 40);
+    if (!name || name === old) return;
+    setGroupsAndStickers([...new Set(groups.map((g) => (g === old ? name : g)))], (xs) => xs.map((x) => (x.group === old ? { ...x, group: name } : x)));
+    setStickerTab(name);
+  }
+  function dropGroup(name: string) {
+    if (!confirm(`'${name}' 묶음을 없앨까요? 안의 스티커는 지워지지 않고 '묶음 없음'으로 가요.`)) return;
+    setGroupsAndStickers(groups.filter((g) => g !== name), (xs) => xs.map((x) => (x.group === name ? { ...x, group: undefined } : x)));
+    setStickerTab("all");
+  }
+  const moveSticker = (id: string, group: string) => setStickers((xs) => xs.map((x) => (x.id === id ? { ...x, group: group || undefined } : x)));
+  function moveGroup(name: string, dir: -1 | 1) { const i = groups.indexOf(name), j = i + dir; if (i < 0 || j < 0 || j >= groups.length) return; const g = [...groups]; [g[i], g[j]] = [g[j], g[i]]; setGroupsAndStickers(g); }
   const setTemplates = (fn: (xs: ThumbTemplate[]) => ThumbTemplate[]) => setSt((s) => { if (!s) return s; const base = live(s.templates).length ? s.templates : [defaultTemplate(), ...s.templates]; const next = { ...s, templates: fn(base) }; persist({ templates: next.templates }); return next; });
 
   /** 지금 사진의 꾸민 내용 바꾸기 (되돌리기 기록 포함) */
@@ -110,7 +136,7 @@ export default function ThumbFactory() {
     try {
       for (const f of files) {
         const { url } = await api<{ url: string }>("/api/thumbs/upload", "POST", { dataUrl: await fileToDataUrl(f, "sticker"), kind: "sticker" });
-        made.push({ id: uid("st_"), name: (f.name || "스티커").replace(/\.[a-z0-9]+$/i, ""), url });
+        made.push({ id: uid("st_"), name: (f.name || "스티커").replace(/\.[a-z0-9]+$/i, ""), url, group: stickerTab !== "all" && stickerTab !== "none" ? stickerTab : undefined });
       }
     } catch (e) { setMsg({ ok: false, text: (e as Error).message }); }
     if (made.length) setStickers((xs) => [...made, ...xs]);
@@ -537,21 +563,58 @@ export default function ThumbFactory() {
               ) : selEl ? <ElPanel el={selEl} onPatch={(p, rec) => patchEl(selEl.id, p, rec)} onRemove={() => removeEl(selEl.id)} onOrder={(d) => order(selEl.id, d)} onDup={() => duplicate(selEl.id)} /> : <p className="tiny muted" style={{ margin: 0 }}>보드에서 글자·스티커를 누르면 여기서 고칠 수 있어요. 글자는 두 번 누르면 바로 쓸 수 있어요. 여러 개는 빈 곳을 끌어 네모로 감싸거나 Shift+클릭.</p>}
               <div ref={stickerBox} tabIndex={0} className="card card-pad stack" style={{ gap: 6, outline: dragOver === "sticker" ? "3px dashed var(--accent)" : undefined }}
                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver("sticker"); }} onDragLeave={() => setDragOver("")}
-                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(""); void addStickers(imageFiles(e.dataTransfer.files)); }}>
+                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(""); if (e.dataTransfer.types.includes("text/sticker-id")) return; void addStickers(imageFiles(e.dataTransfer.files)); }}>
                 <div className="row" style={{ gap: 6 }}>
                   <b className="small">🐑 내 스티커 {stickers.length}</b>
-                  <label className="btn btn-sm" style={{ marginLeft: "auto" }}>{busy === "sticker" ? <span className="spinner" /> : "＋ 올리기"}<input type="file" accept="image/*" multiple hidden onChange={(e) => { void addStickers(imageFiles(e.target.files)); e.target.value = ""; }} /></label>
+                  <label className="btn btn-sm" style={{ marginLeft: "auto" }}>{busy === "sticker" ? <span className="spinner" /> : stickerTab !== "all" && stickerTab !== "none" ? `＋ '${stickerTab.slice(0, 8)}'에 올리기` : "＋ 올리기"}<input type="file" accept="image/*" multiple hidden onChange={(e) => { void addStickers(imageFiles(e.target.files)); e.target.value = ""; }} /></label>
                 </div>
-                <span className="tiny muted">여기를 한 번 누른 뒤 Ctrl+V 하면 스티커로 들어가요 · 끌어다 놓기 · 투명 배경 PNG 추천</span>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(62px, 1fr))", gap: 6, maxHeight: 260, overflowY: "auto" }}>
-                  {stickers.map((s) => (
-                    <div key={s.id} style={{ position: "relative" }}>
-                      <button className="card" style={{ width: "100%", aspectRatio: "1", padding: 4, cursor: "pointer", background: "repeating-conic-gradient(#f2f2f2 0 25%, #fff 0 50%) 0 0/12px 12px" }} title={`${s.name} — ${selEl?.kind === "sticker" ? "고른 스티커를 이걸로 바꾸기" : "보드에 붙이기"}`} onClick={() => pickSticker(s)}>
-                        <img src={s.url} alt={s.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                      </button>
-                      <button className="btn btn-sm btn-ghost" style={{ position: "absolute", top: -6, right: -6, padding: "0 4px", fontSize: 11 }} title="휴지통으로" onClick={() => setStickers((xs) => xs.map((x) => (x.id === s.id ? { ...x, deletedAt: new Date().toISOString() } : x)))}>✕</button>
+                {/* 묶음 탭: 스티커를 탭 위로 끌어다 놓으면 그 묶음으로 옮겨요 */}
+                <div className="row" style={{ gap: 4, flexWrap: "wrap" }} role="tablist" aria-label="스티커 묶음">
+                  {[["all", `전체 ${stickers.length}`], ...groups.map((g) => [g, `${g} ${stickers.filter((x) => x.group === g).length}`]), ["none", `묶음 없음 ${stickers.filter((x) => !x.group || !groups.includes(x.group)).length}`]].map(([id, label]) => (
+                    <button key={id} role="tab" aria-selected={stickerTab === id} className={`chip${stickerTab === id ? " on" : ""}`} onClick={() => setStickerTab(id)}
+                      onDragOver={(e) => { if (id !== "all" && e.dataTransfer.types.includes("text/sticker-id")) { e.preventDefault(); e.stopPropagation(); } }}
+                      onDrop={(e) => { const sid = e.dataTransfer.getData("text/sticker-id"); if (!sid || id === "all") return; e.preventDefault(); e.stopPropagation(); setDragOver(""); moveSticker(sid, id === "none" ? "" : id); }}
+                      title={id === "all" ? "모든 스티커 (묶음별로 나눠 보기)" : "스티커를 여기로 끌어다 놓으면 이 묶음으로 옮겨요"}>{id === "all" ? "📚 " : id === "none" ? "" : "📁 "}{label}</button>
+                  ))}
+                  <button className="btn btn-sm btn-ghost" onClick={newGroup}>＋ 묶음</button>
+                </div>
+                {stickerTab !== "all" && stickerTab !== "none" && (
+                  <div className="row tiny" style={{ gap: 4 }}>
+                    <button className="btn btn-sm btn-ghost" onClick={() => moveGroup(stickerTab, -1)} title="묶음 순서 앞으로">◀</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => moveGroup(stickerTab, 1)} title="묶음 순서 뒤로">▶</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => renameGroup(stickerTab)}>✏️ 이름 바꾸기</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => dropGroup(stickerTab)}>묶음 없애기</button>
+                  </div>
+                )}
+                <span className="tiny muted">여기를 한 번 누른 뒤 Ctrl+V 하면 스티커로 들어가요 · 끌어다 놓기 · 지금 고른 묶음에 들어가요 · 스티커를 묶음 탭으로 끌면 옮겨져요</span>
+                <div className="stack" style={{ gap: 8, maxHeight: 360, overflowY: "auto" }}>
+                  {(stickerTab === "all"
+                    ? [...groups.map((g) => ({ title: `📁 ${g}`, list: stickers.filter((x) => x.group === g) })), { title: "묶음 없음", list: stickers.filter((x) => !x.group || !groups.includes(x.group)) }].filter((sec) => sec.list.length)
+                    : [{ title: "", list: stickers.filter((x) => (stickerTab === "none" ? !x.group || !groups.includes(x.group) : x.group === stickerTab)) }]
+                  ).map((sec) => (
+                    <div key={sec.title || "one"} className="stack" style={{ gap: 4 }}>
+                      {sec.title && <span className="tiny" style={{ fontWeight: 700 }}>{sec.title} <span className="muted">{sec.list.length}</span></span>}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(62px, 1fr))", gap: 6 }}>
+                        {sec.list.map((s) => (
+                          <div key={s.id} style={{ position: "relative" }} draggable onDragStart={(e) => { e.dataTransfer.setData("text/sticker-id", s.id); e.dataTransfer.effectAllowed = "move"; }}>
+                            <button className="card" style={{ width: "100%", aspectRatio: "1", padding: 4, cursor: "pointer", background: "repeating-conic-gradient(#f2f2f2 0 25%, #fff 0 50%) 0 0/12px 12px" }} title={`${s.name} — ${selEl?.kind === "sticker" ? "고른 스티커를 이걸로 바꾸기" : "보드에 붙이기"}`} onClick={() => pickSticker(s)}>
+                              <img src={s.url} alt={s.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} draggable={false} />
+                            </button>
+                            <button className="btn btn-sm btn-ghost" style={{ position: "absolute", top: -6, right: -6, padding: "0 4px", fontSize: 11 }} title="휴지통으로" onClick={() => setStickers((xs) => xs.map((x) => (x.id === s.id ? { ...x, deletedAt: new Date().toISOString() } : x)))}>✕</button>
+                            {/* 묶음 옮기기 (작은 📁) */}
+                            <label style={{ position: "absolute", left: -4, bottom: -4, width: 20, height: 20, borderRadius: 999, background: "#fff", border: "1px solid var(--line)", fontSize: 11, display: "grid", placeItems: "center", cursor: "pointer", overflow: "hidden" }} title={`묶음: ${s.group ?? "없음"} (눌러서 옮기기)`}>
+                              📁
+                              <select value={s.group && groups.includes(s.group) ? s.group : ""} onChange={(e) => moveSticker(s.id, e.target.value)} aria-label={`${s.name} 묶음 옮기기`} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}>
+                                <option value="">묶음 없음</option>
+                                {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+                              </select>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
+                  {!stickers.length && <p className="tiny muted" style={{ margin: 0 }}>스티커를 올려 주세요. ＋ 묶음으로 &apos;양 캐릭터&apos;, &apos;반짝이&apos;처럼 나눠 둘 수 있어요.</p>}
                 </div>
                 {hiddenStickers.length > 0 && <details><summary className="tiny muted">지운 스티커 {hiddenStickers.length}개</summary><div className="row" style={{ gap: 4, flexWrap: "wrap", marginTop: 4 }}>{hiddenStickers.map((s) => <button key={s.id} className="card" style={{ width: 48, height: 48, padding: 2 }} title="↺ 되살리기" onClick={() => setStickers((xs) => xs.map((x) => (x.id === s.id ? { ...x, deletedAt: null } : x)))}><img src={s.url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", opacity: 0.5 }} /></button>)}</div></details>}
               </div>
