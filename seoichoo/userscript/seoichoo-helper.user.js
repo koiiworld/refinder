@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.8.1
+// @version      1.8.2
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
@@ -23,12 +23,12 @@
   "use strict";
 
   // ---------------------------------------------------------------- 공통 설정
-  const VERSION = "1.8.1";
+  const VERSION = "1.8.2";
   const DAILY_LIMIT = 100;      // 네이버 정책상 계정당 하루 서이추 최대
   const SESSION_LIMIT = 20;     // 20명마다 쉬어가기 알림
   const DEFAULT_COOLDOWN = 60;      // 신청 간격 최소(초)
   const DEFAULT_COOLDOWN_MAX = 180; // 신청 간격 최대(초)
-  const MIN_COOLDOWN = 30;          // 이보다 짧게는 못 줄임
+  const MIN_COOLDOWN = 20;          // 이보다 짧게는 못 줄임
   const MAX_ACCOUNTS = 3;       // 계정 탭 최대 개수
   const POPUP_NAME = "seoichoo_buddy";
   const DEFAULT_MSG = [
