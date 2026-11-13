@@ -579,7 +579,10 @@ function ElPanel({ el, onPatch, onRemove, onOrder, onDup }: { el: ThumbEl; onPat
       {el.kind === "sticker" && <>
         {!el.src && <p className="tiny muted" style={{ margin: 0 }}>아래 &apos;내 스티커&apos;에서 하나를 누르면 이 자리에 들어가요.</p>}
         {el.src && <span className="tiny muted">아래 스티커를 누르면 이걸로 바뀌어요.</span>}
-        <button className={`btn btn-sm ${el.flip ? "btn-primary" : ""}`} style={{ alignSelf: "flex-start" }} onClick={() => onPatch({ flip: !el.flip })}>↔ 좌우 뒤집기</button>
+        <div className="row" style={{ gap: 4 }}>
+          <button className={`btn btn-sm ${el.flip ? "btn-primary" : ""}`} onClick={() => onPatch({ flip: !el.flip })}>↔ 좌우 뒤집기</button>
+          <button className={`btn btn-sm ${el.gray ? "btn-primary" : ""}`} onClick={() => onPatch({ gray: !el.gray })} title="스티커를 흑백으로 (다시 누르면 원래 색)">◐ 흑백{el.gray ? " 켬" : ""}</button>
+        </div>
       </>}
       {el.kind === "shape" && <>
         <div className="seg">{([["sparkle", "✦"], ["heart", "♥"], ["star", "★"], ["circle", "●"]] as const).map(([s, l]) => <button key={s} className={el.shape === s ? "on" : ""} onClick={() => onPatch({ shape: s })}>{l}</button>)}</div>
@@ -662,6 +665,12 @@ function MultiPanel({ els, onAlign, onDistribute, onPatch, onRemove, onDup, onCl
         <div className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>테두리색</span><ColorField value={texts[0].stroke || "#ffffff"} onChange={(stroke) => onPatch(isText, { stroke })} label="여러 테두리색" /></div>
         <label className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>크기</span><input type="range" min={16} max={300} value={texts[0].size ?? 80} onChange={(e) => onPatch(isText, { size: Number(e.target.value) })} style={{ flex: 1 }} /><b>{texts[0].size ?? 80}</b></label>
       </>}
+      {els.some((e) => e.kind === "sticker") && (
+        <div className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>스티커</span>
+          <button className="btn btn-sm" onClick={() => onPatch((e) => e.kind === "sticker", { gray: true })}>◐ 모두 흑백</button>
+          <button className="btn btn-sm" onClick={() => onPatch((e) => e.kind === "sticker", { gray: undefined })}>원래 색</button>
+        </div>
+      )}
       {shapes.length > 0 && <div className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>모양 색</span><ColorField value={shapes[0].fill ?? "#ffd84d"} onChange={(fill) => onPatch(isShape, { fill })} label="여러 모양 색" /></div>}
       <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
         <button className="btn btn-sm" onClick={onDup}>복제 (Ctrl+D)</button>

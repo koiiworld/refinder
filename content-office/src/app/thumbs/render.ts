@@ -85,6 +85,25 @@ function drawMosaic(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, e:
   ctx.restore();
 }
 
+/** 흑백 스티커: 한 번 바꿔 둔 캔버스를 다시 씀 (모든 브라우저에서 같게 — 밝기 공식으로 직접 바꿈, 투명은 그대로) */
+const grayCache = new Map<string, HTMLCanvasElement>();
+function grayOf(img: HTMLImageElement, key: string) {
+  const hit = grayCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+  const x = c.getContext("2d")!;
+  x.drawImage(img, 0, 0);
+  try {
+    const d = x.getImageData(0, 0, c.width, c.height);
+    const p = d.data;
+    for (let i = 0; i < p.length; i += 4) { const v = Math.round(p[i] * 0.299 + p[i + 1] * 0.587 + p[i + 2] * 0.114); p[i] = p[i + 1] = p[i + 2] = v; }
+    x.putImageData(d, 0, 0);
+  } catch { /* 다른 사이트 사진이면 그대로 */ }
+  grayCache.set(key, c);
+  return c;
+}
+
 export type Box = { id: string; cx: number; cy: number; w: number; h: number; rot: number };
 
 function sparkle(ctx: CanvasRenderingContext2D, r: number) {
@@ -170,7 +189,7 @@ export function drawThumb(canvas: HTMLCanvasElement, doc: ThumbDoc, photo: HTMLI
       const img = e.src ? getImg(e.src, opts.onImg) : null;
       const w = e.w * W;
       const h = img ? (w * img.height) / img.width : w;
-      if (img) ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      if (img) ctx.drawImage(e.gray ? grayOf(img, e.src!) : img, -w / 2, -h / 2, w, h);
       else if (opts.placeholder) {
         ctx.setLineDash([14, 10]); ctx.lineWidth = 4; ctx.strokeStyle = "rgba(240,122,143,0.9)"; ctx.fillStyle = "rgba(255,255,255,0.35)";
         ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 24); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);

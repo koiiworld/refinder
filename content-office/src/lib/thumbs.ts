@@ -48,7 +48,7 @@ function cleanEl(e: ThumbEl): ThumbEl | null {
   if (!e || !["text", "sticker", "shape", "mosaic"].includes(e.kind)) return null;
   const base: ThumbEl = { id: s(e.id, 40) || crypto.randomUUID().slice(0, 8), kind: e.kind, slot: e.slot ? s(e.slot, 40) : undefined, x: n(e.x, -1, 2, 0.5), y: n(e.y, -1, 2, 0.5), w: n(e.w, 0, 3, 0.2), rot: n(e.rot, -360, 360, 0), opacity: e.opacity == null ? undefined : n(e.opacity, 0, 1, 1), flip: !!e.flip || undefined };
   if (e.kind === "text") return { ...base, text: s(e.text, 300), font: s(e.font, 40), size: n(e.size, 8, 600, 80), color: color(e.color) || "#222222", stroke: color(e.stroke), strokeW: n(e.strokeW, 0, 60, 0), shadow: !!e.shadow || undefined, bold: !!e.bold || undefined, align: ["left", "center", "right"].includes(String(e.align)) ? e.align : "center", lineHeight: n(e.lineHeight, 0.6, 3, 1.15), letter: n(e.letter, -20, 40, 0), bg: color(e.bg) || undefined };
-  if (e.kind === "sticker") return { ...base, src: IMG.test(String(e.src ?? "")) ? e.src : "" };
+  if (e.kind === "sticker") return { ...base, src: IMG.test(String(e.src ?? "")) ? e.src : "", gray: !!e.gray || undefined };
   if (e.kind === "mosaic") return { ...base, slot: undefined, h: n(e.h, 0.01, 3, 0.2), mosaic: e.mosaic === "pixel" ? "pixel" : "blur", strength: n(e.strength, 1, 100, 40), round: !!e.round || undefined };
   return { ...base, shape: ["sparkle", "heart", "star", "circle"].includes(String(e.shape)) ? e.shape : "sparkle", fill: color(e.fill) || "#ffd84d" };
 }

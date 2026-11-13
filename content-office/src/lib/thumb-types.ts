@@ -20,8 +20,8 @@ export type ThumbEl = {
   // 글자
   text?: string; font?: string; size?: number; color?: string; stroke?: string; strokeW?: number; shadow?: boolean; bold?: boolean;
   align?: "left" | "center" | "right"; lineHeight?: number; letter?: number; bg?: string;
-  // 스티커
-  src?: string;
+  // 스티커 (gray = 흑백)
+  src?: string; gray?: boolean;
   // 모양
   shape?: ThumbShape; fill?: string;
   // 모자이크 (얼굴 가리기): h = 세로 크기(가로 1080 대비), mosaic = 흐리게·픽셀, strength 1~100, round = 동그라미

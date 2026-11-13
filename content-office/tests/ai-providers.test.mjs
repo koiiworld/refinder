@@ -2528,3 +2528,11 @@ test('🫥 썸네일 모자이크·📏 안내선: 저장·정리 · 템플릿�
  assert.deepEqual(it.doc.guides,{v:[0.1,0.9],h:[0.5]},'보드 밖 안내선은 버림');
  const t=sv.data.templates.find(x=>x.id==='tpl_m');assert.equal(t.els.length,1,'템플릿엔 모자이크 안 넣음');assert.deepEqual(t.guides,{v:[0.1,0.9],h:[0.5]});
 });
+
+test('◐ 썸네일 스티커 흑백: 저장되고 다시 끌 수 있음', async()=>{
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+ const ph=(await call('/api/thumbs/upload','POST',{dataUrl:png,kind:'photo'})).data.url;const sk=(await call('/api/thumbs/upload','POST',{dataUrl:png,kind:'sticker'})).data.url;
+ const mk=(gray)=>({items:[{id:'gr',name:'흑백',photo:ph,doc:{ratio:'1:1',photo:{zoom:1,x:0.5,y:0.5},els:[{id:'s',kind:'sticker',slot:'캐릭터',src:sk,x:0.5,y:0.5,w:0.3,rot:0,gray}]}}]});
+ let r=await call('/api/thumbs','PUT',mk(true));assert.equal(r.data.items.find(x=>x.id==='gr').doc.els[0].gray,true);
+ r=await call('/api/thumbs','PUT',mk(false));assert.equal(r.data.items.find(x=>x.id==='gr').doc.els[0].gray,undefined);
+});
