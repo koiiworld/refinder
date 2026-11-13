@@ -2515,3 +2515,16 @@ test('🖼 썸네일 공장: 사진·스티커 올리기 → 꾸민 내용·템�
  const st2=(await call('/api/thumbs')).data;assert.equal(st2.items.length,1);assert.ok(st2.items[0].deletedAt);
  const page=await (await fetch(`${BASE}/thumbs`)).text();assert.ok(page.includes('썸네일 공장'));
 });
+
+test('🫥 썸네일 모자이크·📏 안내선: 저장·정리 · 템플릿엔 모자이크 빼고 안내선은 저장', async()=>{
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+ const ph=(await call('/api/thumbs/upload','POST',{dataUrl:png,kind:'photo'})).data.url;
+ const els=[{id:'m',kind:'mosaic',slot:'x',mosaic:'pixel',strength:500,round:true,x:0.5,y:0.4,w:0.2,h:0.3,rot:0},{id:'t',kind:'text',slot:'제목 1줄',text:'가',x:0.3,y:0.1,w:0,rot:0}];
+ const guides={v:[0.1,0.9,7],h:[0.5]};
+ const sv=await call('/api/thumbs','PUT',{items:[{id:'mz',name:'모자이크',photo:ph,doc:{ratio:'1:1',photo:{zoom:1,x:0.5,y:0.5},els,guides}}],templates:[{id:'tpl_m',name:'안내선 템플릿',ratio:'1:1',els,guides}]});
+ assert.equal(sv.status,200,JSON.stringify(sv.data));
+ const it=sv.data.items.find(x=>x.id==='mz');const m=it.doc.els.find(e=>e.kind==='mosaic');
+ assert.equal(m.mosaic,'pixel');assert.equal(m.strength,100,'세기 100까지');assert.equal(m.h,0.3);assert.equal(m.round,true);assert.equal(m.slot,undefined,'모자이크는 칸 이름 없음');
+ assert.deepEqual(it.doc.guides,{v:[0.1,0.9],h:[0.5]},'보드 밖 안내선은 버림');
+ const t=sv.data.templates.find(x=>x.id==='tpl_m');assert.equal(t.els.length,1,'템플릿엔 모자이크 안 넣음');assert.deepEqual(t.guides,{v:[0.1,0.9],h:[0.5]});
+});

@@ -14,7 +14,7 @@ export type ThumbShape = "sparkle" | "heart" | "star" | "circle";
 /** 보드 위 요소. x·y 는 가운데 위치(0~1, 가로·세로 비율), w 는 가로 대비 너비(스티커·모양), size 는 글자 크기(px, 가로 1080 기준) */
 export type ThumbEl = {
   id: string;
-  kind: "text" | "sticker" | "shape";
+  kind: "text" | "sticker" | "shape" | "mosaic";
   slot?: string; // 템플릿 칸 이름 (같은 칸끼리 위치·글꼴을 맞춤)
   x: number; y: number; w: number; rot: number; opacity?: number; flip?: boolean;
   // 글자
@@ -24,11 +24,15 @@ export type ThumbEl = {
   src?: string;
   // 모양
   shape?: ThumbShape; fill?: string;
+  // 모자이크 (얼굴 가리기): h = 세로 크기(가로 1080 대비), mosaic = 흐리게·픽셀, strength 1~100, round = 동그라미
+  h?: number; mosaic?: "blur" | "pixel"; strength?: number; round?: boolean;
 };
-export type ThumbDoc = { ratio: ThumbRatio; photo: { zoom: number; x: number; y: number }; els: ThumbEl[] };
+/** 안내선 (줄자): v = 세로선 x 위치들, h = 가로선 y 위치들 (0~1) */
+export type ThumbGuides = { v: number[]; h: number[] };
+export type ThumbDoc = { ratio: ThumbRatio; photo: { zoom: number; x: number; y: number }; els: ThumbEl[]; guides?: ThumbGuides };
 export type ThumbItem = { id: string; name: string; photo: string; doc: ThumbDoc; templateId?: string | null; updatedAt: string; deletedAt?: string | null };
 export type ThumbSticker = { id: string; name: string; url: string; deletedAt?: string | null };
-export type ThumbTemplate = { id: string; name: string; ratio: ThumbRatio; els: ThumbEl[]; deletedAt?: string | null };
+export type ThumbTemplate = { id: string; name: string; ratio: ThumbRatio; els: ThumbEl[]; guides?: ThumbGuides; deletedAt?: string | null };
 export type ThumbState = { items: ThumbItem[]; stickers: ThumbSticker[]; templates: ThumbTemplate[] };
 
 /** 기본 템플릿: 보내 준 예시처럼 — 왼쪽 위 두 줄 제목(갈색·분홍, 흰 테두리) · 반짝이 · 오른쪽 아래 캐릭터 자리 */
@@ -59,7 +63,7 @@ export function applyTemplate(doc: ThumbDoc, t: ThumbTemplate): ThumbDoc {
     if (e.kind === "sticker" && !e.src && old?.kind === "sticker" && old.src) return { ...e, id, src: old.src };
     return { ...e, id };
   });
-  // 템플릿에 없는 칸(이 사진에만 더한 것)은 그대로 위에 남김
+  // 템플릿에 없는 칸(이 사진에만 더한 것·모자이크)은 그대로 남김. 모자이크는 사진 바로 위라 순서 상관없음
   const extra = doc.els.filter((e) => !e.slot || !t.els.some((x) => x.slot === e.slot));
-  return { ...doc, ratio: t.ratio, els: [...els, ...extra] };
+  return { ...doc, ratio: t.ratio, els: [...els, ...extra], guides: t.guides ? { v: [...t.guides.v], h: [...t.guides.h] } : doc.guides };
 }

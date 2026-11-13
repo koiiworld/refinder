@@ -44,6 +44,47 @@ export async function loadImg(url: string) {
   return new Promise<HTMLImageElement | null>((res) => { const im = new Image(); im.onload = () => { cache.set(url, im); res(im); }; im.onerror = () => res(null); im.src = url; });
 }
 
+/**
+ * 모자이크 한 칸: 지금까지 그린 사진(캔버스)을 작게 줄였다가 다시 키워서
+ * - pixel: 네모 픽셀 (부드럽게 안 함) · blur: 흐리게 (부드럽게 두 번)
+ * 영역은 네모 또는 동그라미로 잘라서 덮음 (돌리기 반영)
+ */
+function drawMosaic(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, e: ThumbEl, W: number, H: number, sc: number) {
+  const w = e.w * W, h = (e.h ?? e.w) * W;
+  if (w < 2 || h < 2) return;
+  const st = Math.min(100, Math.max(1, e.strength ?? 40));
+  const block = e.mosaic === "pixel" ? 6 + st * 0.6 : 3 + st * 0.35; // 1080 기준 픽셀 크기
+  const sw = Math.max(1, Math.round((W * sc) / (block * sc))), sh = Math.max(1, Math.round((H * sc) / (block * sc)));
+  const small = document.createElement("canvas");
+  small.width = sw; small.height = sh;
+  const sctx = small.getContext("2d")!;
+  sctx.imageSmoothingEnabled = true;
+  sctx.drawImage(canvas, 0, 0, sw, sh);
+  let src: HTMLCanvasElement = small;
+  if (e.mosaic !== "pixel") {
+    // 한 번 더 줄였다 키워 더 부드럽게
+    const mid = document.createElement("canvas");
+    mid.width = Math.max(1, sw * 2); mid.height = Math.max(1, sh * 2);
+    const m = mid.getContext("2d")!;
+    m.imageSmoothingEnabled = true; m.imageSmoothingQuality = "high";
+    m.drawImage(small, 0, 0, mid.width, mid.height);
+    src = mid;
+  }
+  ctx.save();
+  ctx.translate(e.x * W, e.y * H);
+  ctx.rotate(((e.rot ?? 0) * Math.PI) / 180);
+  ctx.beginPath();
+  if (e.round) ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else ctx.roundRect(-w / 2, -h / 2, w, h, Math.min(w, h) * 0.08);
+  ctx.clip();
+  ctx.rotate((-(e.rot ?? 0) * Math.PI) / 180);
+  ctx.translate(-e.x * W, -e.y * H);
+  ctx.imageSmoothingEnabled = e.mosaic !== "pixel";
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(src, 0, 0, W, H);
+  ctx.restore();
+}
+
 export type Box = { id: string; cx: number; cy: number; w: number; h: number; rot: number };
 
 function sparkle(ctx: CanvasRenderingContext2D, r: number) {
@@ -100,7 +141,10 @@ export function drawThumb(canvas: HTMLCanvasElement, doc: ThumbDoc, photo: HTMLI
     ctx.drawImage(photo, px, py, pw, ph);
   }
   const boxes: Box[] = [];
+  // 모자이크: 사진 바로 위에 (스티커·글자는 가리지 않게 먼저 그림)
+  for (const e of doc.els) if (e.kind === "mosaic") { drawMosaic(ctx, canvas, e, W, H, sc); boxes.push({ id: e.id, cx: e.x * W, cy: e.y * H, w: e.w * W, h: (e.h ?? e.w) * W, rot: e.rot ?? 0 }); }
   for (const e of doc.els) {
+    if (e.kind === "mosaic") continue;
     const cx = e.x * W, cy = e.y * H;
     ctx.save();
     ctx.translate(cx, cy);

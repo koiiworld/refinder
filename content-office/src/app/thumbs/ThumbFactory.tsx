@@ -37,13 +37,22 @@ function download(blob: Blob, name: string) {
 export default function ThumbFactory() {
   const [st, setSt] = useState<ThumbState | null>(null);
   const [curId, setCurId] = useState<string | null>(null);
-  const [sel, setSel] = useState<string | null>(null);
+  const [sels, setSels] = useState<string[]>([]);
+  const sel = sels.length === 1 ? sels[0] : null;
+  const setSel = (id: string | null) => setSels(id ? [id] : []);
   const [tplId, setTplId] = useState("tpl_default");
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [save, setSave] = useState<"saved" | "dirty" | "saving">("saved");
   const [dragOver, setDragOver] = useState<"" | "photo" | "sticker">("");
-  const [guide, setGuide] = useState<{ v: boolean; h: boolean }>({ v: false, h: false });
+  const [snapLines, setSnapLines] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // 📏 줄자·간격 (이 브라우저에 기억)
+  const [ruler, setRuler] = useState(false);
+  const [step, setStep] = useState(0);
+  const [panMode, setPanMode] = useState(false);
+  useEffect(() => { try { setRuler(localStorage.getItem("thumb_ruler") === "1"); setStep(Number(localStorage.getItem("thumb_step") ?? 0) || 0); } catch { /* 저장 안 돼도 됨 */ } }, []);
+  useEffect(() => { try { localStorage.setItem("thumb_ruler", ruler ? "1" : "0"); localStorage.setItem("thumb_step", String(step)); } catch { /* 무시 */ } }, [ruler, step]);
   const [, force] = useState(0);
   const hist = useRef<{ past: ThumbDoc[]; future: ThumbDoc[] }>({ past: [], future: [] });
 
@@ -149,18 +158,42 @@ export default function ThumbFactory() {
     return () => { off = true; };
   }, [doc, cur, stageW, H, tick]);
 
-  // ── 끌기: 옮기기 · 크기 · 회전 · 사진 위치 ──
-  const drag = useRef<{ mode: "move" | "size" | "rot" | "photo"; id?: string; sx: number; sy: number; el?: ThumbEl; photo?: ThumbDoc["photo"]; box?: Box; moved: boolean } | null>(null);
-  const toStage = (e: React.PointerEvent) => { const r = canvas.current!.getBoundingClientRect(); return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k }; };
-  function down(e: React.PointerEvent, mode: "move" | "size" | "rot" | "photo", id?: string) {
+  // ── 끌기: 옮기기(여러 개 함께) · 크기 · 회전 · 사진 위치 · 네모로 고르기 · 안내선 ──
+  type Drag = { mode: "move" | "size" | "rot" | "photo" | "marquee" | "guide"; id?: string; sx: number; sy: number; starts?: Record<string, { x: number; y: number }>; el?: ThumbEl; photo?: ThumbDoc["photo"]; box?: Box; moved: boolean; additive?: boolean; guide?: { axis: "v" | "h"; i: number } };
+  const drag = useRef<Drag | null>(null);
+  const toStage = (e: { clientX: number; clientY: number }) => { const r = canvas.current!.getBoundingClientRect(); return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k }; };
+  // 돌린 상자의 겉 네모 (정렬·끌기 붙기에 사용)
+  const aabb = (b: Box) => { const r = (b.rot * Math.PI) / 180; const w = Math.abs(b.w * Math.cos(r)) + Math.abs(b.h * Math.sin(r)), h = Math.abs(b.w * Math.sin(r)) + Math.abs(b.h * Math.cos(r)); return { l: b.cx - w / 2, r: b.cx + w / 2, t: b.cy - h / 2, b: b.cy + h / 2, cx: b.cx, cy: b.cy }; };
+  const groupBox = (ids: string[]) => { const bs = boxes.filter((b) => ids.includes(b.id)).map(aabb); if (!bs.length) return null; const l = Math.min(...bs.map((x) => x.l)), r = Math.max(...bs.map((x) => x.r)), t = Math.min(...bs.map((x) => x.t)), b = Math.max(...bs.map((x) => x.b)); return { l, r, t, b, cx: (l + r) / 2, cy: (t + b) / 2 }; };
+  /** 붙기: 가장자리·가운데가 안내선·보드 가운데·끝·눈금 간격에 가까우면 착 붙임 (화면 7px 이내) */
+  function snap(edges: number[], axis: "x" | "y") {
+    const size = axis === "x" ? THUMB_W : H;
+    const targets = [0, size / 2, size, ...(ruler ? (doc?.guides?.[axis === "x" ? "v" : "h"] ?? []).map((g) => g * size) : [])];
+    const thr = 7 / k;
+    let best: { d: number; line: number } | null = null;
+    for (const e of edges) {
+      for (const t of targets) if (Math.abs(t - e) <= thr && (!best || Math.abs(t - e) < Math.abs(best.d))) best = { d: t - e, line: t };
+      if (ruler && step > 0) { const t = Math.round(e / step) * step; if (Math.abs(t - e) <= thr && (!best || Math.abs(t - e) < Math.abs(best.d))) best = { d: t - e, line: t }; }
+    }
+    return best;
+  }
+  function down(e: React.PointerEvent, mode: Drag["mode"], id?: string, guide?: Drag["guide"]) {
     if (!doc) return;
     e.stopPropagation();
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     const p = toStage(e);
-    const el = id ? doc.els.find((x) => x.id === id) : undefined;
-    if (id) setSel(id); else setSel(null);
-    hist.current.past = [...hist.current.past.slice(-80), doc]; hist.current.future = [];
-    drag.current = { mode, id, sx: p.x, sy: p.y, el, photo: doc.photo, box: boxes.find((b) => b.id === id), moved: false };
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    // 빈 곳: 기본은 네모로 고르기, ✋ 사진 옮기기 모드나 Alt(⌥)를 누르면 사진 위치
+    if (mode === "photo" && !panMode && !e.altKey) mode = "marquee";
+    let group = sels;
+    if (mode === "move" && id) {
+      if (additive) { group = sels.includes(id) ? sels.filter((x) => x !== id) : [...sels, id]; setSels(group); if (!group.includes(id)) return; }
+      else if (!sels.includes(id)) { group = [id]; setSels(group); }
+    } else if ((mode === "size" || mode === "rot") && id) { group = [id]; setSels(group); }
+    else if (mode === "marquee") { if (!additive) setSels([]); setMarquee({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); }
+    if (mode !== "marquee") { hist.current.past = [...hist.current.past.slice(-80), doc]; hist.current.future = []; }
+    const starts = Object.fromEntries(doc.els.filter((x) => group.includes(x.id)).map((x) => [x.id, { x: x.x, y: x.y }]));
+    drag.current = { mode, id, sx: p.x, sy: p.y, starts, el: id ? doc.els.find((x) => x.id === id) : undefined, photo: doc.photo, box: boxes.find((b) => b.id === id), moved: false, additive, guide };
   }
   function move(e: React.PointerEvent) {
     const d = drag.current;
@@ -168,23 +201,43 @@ export default function ThumbFactory() {
     const p = toStage(e);
     const dx = p.x - d.sx, dy = p.y - d.sy;
     if (Math.abs(dx) + Math.abs(dy) > 1) d.moved = true;
+    if (d.mode === "marquee") { setMarquee((m) => (m ? { ...m, x1: p.x, y1: p.y } : m)); return; }
+    if (d.mode === "guide" && d.guide) {
+      const g = d.guide;
+      const v = g.axis === "v" ? p.x / THUMB_W : p.y / H;
+      setDoc((x) => { const gs = { v: [...(x.guides?.v ?? [])], h: [...(x.guides?.h ?? [])] }; gs[g.axis][g.i] = v; return { ...x, guides: gs }; }, false);
+      return;
+    }
     if (d.mode === "photo" && d.photo) {
       const z = d.photo.zoom || 1;
       setDoc((x) => ({ ...x, photo: { ...x.photo, x: Math.min(1, Math.max(0, d.photo!.x - dx / (THUMB_W * Math.max(0.2, z - 0.8)))), y: Math.min(1, Math.max(0, d.photo!.y - dy / (H * Math.max(0.2, z - 0.8)))) } }), false);
       return;
     }
+    if (d.mode === "move" && d.starts) {
+      const ids = Object.keys(d.starts);
+      const g0 = groupBox(ids);
+      let ddx = dx, ddy = dy;
+      const lines = { x: [] as number[], y: [] as number[] };
+      if (g0) {
+        // 끌기 시작 때 위치 기준으로 얼마나 옮겼는지 → 그 자리의 가장자리·가운데로 붙기 계산
+        const cur0 = doc.els.find((x) => x.id === ids[0]);
+        const offX = cur0 ? (cur0.x - d.starts[ids[0]].x) * THUMB_W : 0, offY = cur0 ? (cur0.y - d.starts[ids[0]].y) * H : 0;
+        const l = g0.l - offX + dx, r = g0.r - offX + dx, cx = g0.cx - offX + dx, t = g0.t - offY + dy, b = g0.b - offY + dy, cy = g0.cy - offY + dy;
+        const sx = snap([l, cx, r], "x"), sy = snap([t, cy, b], "y");
+        if (sx) { ddx += sx.d; lines.x.push(sx.line); }
+        if (sy) { ddy += sy.d; lines.y.push(sy.line); }
+      }
+      setSnapLines(lines);
+      setDoc((x) => ({ ...x, els: x.els.map((el) => (d.starts![el.id] ? { ...el, x: d.starts![el.id].x + ddx / THUMB_W, y: d.starts![el.id].y + ddy / H } : el)) }), false);
+      return;
+    }
     if (!d.el || !d.id) return;
-    if (d.mode === "move") {
-      let nx = d.el.x + dx / THUMB_W, ny = d.el.y + dy / H;
-      const sv = Math.abs(nx - 0.5) < 0.012, sh = Math.abs(ny - 0.5) < 0.012;
-      if (sv) nx = 0.5; if (sh) ny = 0.5;
-      setGuide({ v: sv, h: sh });
-      patchEl(d.id, { x: nx, y: ny }, false);
-    } else if (d.mode === "size" && d.box) {
+    if (d.mode === "size" && d.box) {
       // 가운데에서 끌어간 거리 비율로 크기 조절
       const r0 = Math.hypot(d.sx - d.box.cx, d.sy - d.box.cy), r1 = Math.hypot(p.x - d.box.cx, p.y - d.box.cy);
       const f = Math.max(0.1, r1 / Math.max(1, r0));
       if (d.el.kind === "text") patchEl(d.id, { size: Math.round(Math.min(600, Math.max(8, (d.el.size ?? 80) * f))) }, false);
+      else if (d.el.kind === "mosaic") patchEl(d.id, { w: Math.min(3, Math.max(0.02, d.el.w * f)), h: Math.min(3, Math.max(0.02, (d.el.h ?? d.el.w) * f)) }, false);
       else patchEl(d.id, { w: Math.min(3, Math.max(0.02, d.el.w * f)) }, false);
     } else if (d.mode === "rot" && d.box) {
       const a = (Math.atan2(p.y - d.box.cy, p.x - d.box.cx) * 180) / Math.PI + 90;
@@ -196,9 +249,63 @@ export default function ThumbFactory() {
   function up() {
     const d = drag.current;
     drag.current = null;
-    setGuide({ v: false, h: false });
-    if (d && !d.moved) hist.current.past.pop();
+    setSnapLines({ x: [], y: [] });
+    if (!d || !doc) return;
+    if (d.mode === "marquee") {
+      setMarquee((m) => {
+        if (m && d.moved) {
+          const l = Math.min(m.x0, m.x1), r = Math.max(m.x0, m.x1), t = Math.min(m.y0, m.y1), b = Math.max(m.y0, m.y1);
+          // 네모와 겹치는 것 모두 고르기
+          const hit = boxes.map((bx) => ({ id: bx.id, a: aabb(bx) })).filter(({ a }) => a.r >= l && a.l <= r && a.b >= t && a.t <= b).map((x) => x.id);
+          setSels((old) => (d.additive ? [...new Set([...old, ...hit])] : hit));
+        }
+        return null;
+      });
+      return;
+    }
+    if (d.mode === "guide" && d.guide) {
+      // 보드 밖으로 끌어내면 안내선 지우기
+      const g = d.guide;
+      setDoc((x) => { const gs = { v: [...(x.guides?.v ?? [])], h: [...(x.guides?.h ?? [])] }; if (gs[g.axis][g.i] < 0 || gs[g.axis][g.i] > 1) gs[g.axis].splice(g.i, 1); return { ...x, guides: gs }; }, false);
+    }
+    if (!d.moved) hist.current.past.pop();
   }
+  /** 줄자 클릭 → 그 자리에 안내선 */
+  function addGuide(axis: "v" | "h", e: React.PointerEvent) {
+    if (!doc) return;
+    const p = toStage(e);
+    let v = axis === "v" ? p.x / THUMB_W : p.y / H;
+    if (step > 0) { const size = axis === "v" ? THUMB_W : H; v = (Math.round((v * size) / step) * step) / size; }
+    setDoc((x) => ({ ...x, guides: { v: [...(x.guides?.v ?? [])], h: [...(x.guides?.h ?? [])], [axis]: [...(x.guides?.[axis] ?? []), Math.min(1, Math.max(0, v))] } }));
+  }
+  const removeGuide = (axis: "v" | "h", i: number) => setDoc((x) => { const gs = { v: [...(x.guides?.v ?? [])], h: [...(x.guides?.h ?? [])] }; gs[axis].splice(i, 1); return { ...x, guides: gs }; });
+
+  // ── 여러 개: 정렬 · 같은 간격 · 함께 고치기 ──
+  function align(how: "l" | "c" | "r" | "t" | "m" | "b") {
+    const g = groupBox(sels);
+    if (!g) return;
+    setDoc((x) => ({ ...x, els: x.els.map((el) => {
+      const b = boxes.find((bb) => bb.id === el.id);
+      if (!b || !sels.includes(el.id)) return el;
+      const a = aabb(b);
+      const nx = how === "l" ? g.l + (a.cx - a.l) : how === "r" ? g.r - (a.r - a.cx) : how === "c" ? g.cx : a.cx;
+      const ny = how === "t" ? g.t + (a.cy - a.t) : how === "b" ? g.b - (a.b - a.cy) : how === "m" ? g.cy : a.cy;
+      return { ...el, x: el.x + (nx - a.cx) / THUMB_W, y: el.y + (ny - a.cy) / H };
+    }) }));
+  }
+  function distribute(axis: "x" | "y") {
+    const list = boxes.filter((b) => sels.includes(b.id)).map((b) => ({ id: b.id, a: aabb(b) })).sort((p, q) => (axis === "x" ? p.a.cx - q.a.cx : p.a.cy - q.a.cy));
+    if (list.length < 3) return;
+    const first = list[0].a, last = list[list.length - 1].a;
+    const total = axis === "x" ? last.r - first.l : last.b - first.t;
+    const sizes = list.reduce((s, it) => s + (axis === "x" ? it.a.r - it.a.l : it.a.b - it.a.t), 0);
+    const gap = (total - sizes) / (list.length - 1);
+    let pos = axis === "x" ? first.l : first.t;
+    const want: Record<string, number> = {};
+    for (const it of list) { const sz = axis === "x" ? it.a.r - it.a.l : it.a.b - it.a.t; want[it.id] = pos + sz / 2; pos += sz + gap; }
+    setDoc((x) => ({ ...x, els: x.els.map((el) => { const it = list.find((l) => l.id === el.id); if (!it) return el; return axis === "x" ? { ...el, x: el.x + (want[el.id] - it.a.cx) / THUMB_W } : { ...el, y: el.y + (want[el.id] - it.a.cy) / H }; }) }));
+  }
+  const patchMany = (pred: (e: ThumbEl) => boolean, p: Partial<ThumbEl>) => setDoc((d) => ({ ...d, els: d.els.map((e) => (sels.includes(e.id) && pred(e) ? { ...e, ...p } : e)) }));
 
   // ── 단축키 ──
   useEffect(() => {
@@ -206,12 +313,16 @@ export default function ThumbFactory() {
       if (isTyping(e)) return;
       const u = undoKey(e);
       if (u) { e.preventDefault(); return u === "redo" ? redo() : undo(); }
-      if (!sel || !doc) return;
-      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeEl(sel); }
-      const st = e.shiftKey ? 0.02 : 0.004;
-      const mv: Record<string, [number, number]> = { ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st] };
-      if (mv[e.key]) { e.preventDefault(); const el = doc.els.find((x) => x.id === sel); if (el) patchEl(sel, { x: el.x + mv[e.key][0], y: el.y + mv[e.key][1] }); }
-      if (e.key === "Escape") setSel(null);
+      if (!doc) return;
+      if ((e.metaKey || e.ctrlKey) && (e.code === "KeyA" || e.key.toLowerCase() === "a")) { e.preventDefault(); setSels(doc.els.map((x) => x.id)); return; }
+      if (!sels.length) return;
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeEls(sels); }
+      // 방향키: 눈금 간격을 켰으면 그 간격만큼, 아니면 조금씩 (Shift = 크게)
+      const px = step > 0 ? step : e.shiftKey ? 20 : 4;
+      const mv: Record<string, [number, number]> = { ArrowLeft: [-px, 0], ArrowRight: [px, 0], ArrowUp: [0, -px], ArrowDown: [0, px] };
+      if (mv[e.key]) { e.preventDefault(); setDoc((d) => ({ ...d, els: d.els.map((el) => (sels.includes(el.id) ? { ...el, x: el.x + mv[e.key][0] / THUMB_W, y: el.y + mv[e.key][1] / H } : el)) })); }
+      if ((e.metaKey || e.ctrlKey) && (e.code === "KeyD" || e.key.toLowerCase() === "d")) { e.preventDefault(); duplicateMany(sels); }
+      if (e.key === "Escape") setSels([]);
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -233,9 +344,19 @@ export default function ThumbFactory() {
     if (empty) { patchEl(empty.id, { src: s.url }); setSel(empty.id); return; }
     addEl({ kind: "sticker", slot: nextSlot("스티커"), src: s.url, w: 0.26, x: 0.78, y: 0.8 });
   }
-  function removeEl(id: string) { setDoc((d) => ({ ...d, els: d.els.filter((e) => e.id !== id) })); setSel(null); }
+  function removeEl(id: string) { removeEls([id]); }
+  function removeEls(ids: string[]) { setDoc((d) => ({ ...d, els: d.els.filter((e) => !ids.includes(e.id)) })); setSels([]); }
   function order(id: string, dir: 1 | -1) { setDoc((d) => { const i = d.els.findIndex((e) => e.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= d.els.length) return d; const els = [...d.els]; [els[i], els[j]] = [els[j], els[i]]; return { ...d, els }; }); }
-  function duplicate(id: string) { const e = doc?.els.find((x) => x.id === id); if (!e) return; addEl({ ...e, id: uid("e"), slot: e.slot ? nextSlot(e.slot.replace(/\s*\d+$/, "")) : undefined, x: e.x + 0.03, y: e.y + 0.03 }); }
+  function duplicate(id: string) { duplicateMany([id]); }
+  function duplicateMany(ids: string[]) {
+    if (!doc) return;
+    const used = new Set(doc.els.map((e) => e.slot));
+    const slotFor = (s?: string) => { if (!s) return undefined; const base = s.replace(/\s*\d+$/, ""); let i = 1; while (used.has(`${base} ${i}`)) i++; const n = `${base} ${i}`; used.add(n); return n; };
+    const copies = doc.els.filter((e) => ids.includes(e.id)).map((e) => ({ ...e, id: uid("e"), slot: e.kind === "mosaic" ? undefined : slotFor(e.slot), x: e.x + 0.03, y: e.y + 0.03 }));
+    setDoc((d) => ({ ...d, els: [...d.els, ...copies] }));
+    setSels(copies.map((c) => c.id));
+  }
+  const addMosaic = (mosaic: "blur" | "pixel") => addEl({ kind: "mosaic", mosaic, strength: 45, round: true, w: 0.22, h: 0.22, x: 0.5, y: 0.45 });
 
   // ── 템플릿 ──
   function applyTo(ids: string[]) {
@@ -246,13 +367,13 @@ export default function ThumbFactory() {
     if (!doc) return;
     if (overwrite && tpl) {
       if (!confirm(`'${tpl.name}' 템플릿을 지금 모양으로 바꿀까요? (위치·글꼴·크기·색·캐릭터 크기)`)) return;
-      setTemplates((ts) => ts.map((t) => (t.id === tpl.id ? { ...t, ratio: doc.ratio, els: doc.els.map((e) => ({ ...e })) } : t)));
+      setTemplates((ts) => ts.map((t) => (t.id === tpl.id ? { ...t, ratio: doc.ratio, els: doc.els.filter((e) => e.kind !== "mosaic").map((e) => ({ ...e })), guides: doc.guides } : t)));
       setMsg({ ok: true, text: `'${tpl.name}' 템플릿을 저장했어요. '모든 사진에 적용'을 누르면 다른 사진도 같은 모양이 돼요.` });
       return;
     }
     const name = prompt("새 템플릿 이름", `템플릿 ${templates.length + 1}`);
     if (!name) return;
-    const t: ThumbTemplate = { id: uid("tpl_"), name: name.slice(0, 60), ratio: doc.ratio, els: doc.els.map((e) => ({ ...e })) };
+    const t: ThumbTemplate = { id: uid("tpl_"), name: name.slice(0, 60), ratio: doc.ratio, els: doc.els.filter((e) => e.kind !== "mosaic").map((e) => ({ ...e })), guides: doc.guides };
     setTemplates((ts) => [...ts, t]);
     setTplId(t.id);
     setMsg({ ok: true, text: `'${t.name}' 템플릿을 만들었어요.` });
@@ -341,39 +462,57 @@ export default function ThumbFactory() {
                 <button className="btn btn-sm" onClick={() => addShape("heart", "#ff8fa8")}>＋ ♥ 하트</button>
                 <button className="btn btn-sm" onClick={() => addShape("star", "#ffd84d")}>＋ ★ 별</button>
                 <button className="btn btn-sm" onClick={() => addEl({ kind: "sticker", slot: nextSlot("캐릭터"), src: "", w: 0.26, x: 0.8, y: 0.82 })}>＋ 캐릭터 자리</button>
+                <button className="btn btn-sm" onClick={() => addMosaic("blur")} title="얼굴 등을 흐리게 가려요">＋ 🫥 모자이크</button>
+                <button className={`btn btn-sm ${ruler ? "btn-primary" : ""}`} onClick={() => setRuler((r) => !r)} title="줄자를 누르면 안내선이 생겨요">📏 줄자</button>
+                {ruler && <select className="input" style={{ width: "auto" }} value={step} onChange={(e) => setStep(Number(e.target.value))} aria-label="눈금 간격 맞추기">
+                  {[[0, "간격 맞추기 끔"], [10, "10px 간격"], [20, "20px 간격"], [30, "30px 간격"], [50, "50px 간격"], [100, "100px 간격"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>}
+                <button className={`btn btn-sm ${panMode ? "btn-primary" : ""}`} onClick={() => setPanMode((m) => !m)} title="켜면 빈 곳을 끌어 사진 위치를 옮겨요 (Alt/⌥ 누른 채 끌어도 돼요)">✋ 사진 옮기기</button>
                 <select className="input" style={{ width: "auto", marginLeft: "auto" }} value={doc.ratio} onChange={(e) => setDoc((d) => ({ ...d, ratio: e.target.value as ThumbRatio }))} aria-label="비율">
                   {THUMB_RATIOS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                 </select>
               </div>
               <div ref={wrap} style={{ width: "100%" }}>
+                <div style={{ display: "grid", gridTemplateColumns: ruler ? "20px auto" : "auto", gridTemplateRows: ruler ? "20px auto" : "auto", width: "fit-content" }}>
+                  {ruler && <span style={{ background: "var(--line)", borderRadius: "4px 0 0 0" }} title="줄자: 1080px 기준" />}
+                  {ruler && <Ruler axis="v" len={stageW} size={THUMB_W} onPointerDown={(e) => addGuide("v", e)} />}
+                  {ruler && <Ruler axis="h" len={stageW * (H / THUMB_W)} size={H} onPointerDown={(e) => addGuide("h", e)} />}
                 <div style={{ position: "relative", width: stageW, height: stageW * (H / THUMB_W), touchAction: "none", userSelect: "none" }} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-                  <canvas ref={canvas} style={{ width: stageW, height: stageW * (H / THUMB_W), display: "block", borderRadius: 8, boxShadow: "0 2px 12px rgba(0,0,0,.12)", cursor: "grab" }} onPointerDown={(e) => down(e, "photo")} aria-label="썸네일 보드 (빈 곳을 끌면 사진 위치 이동)" />
-                  {guide.v && <div style={{ position: "absolute", left: stageW / 2, top: 0, bottom: 0, width: 1, background: "#ff3d8b", pointerEvents: "none" }} />}
-                  {guide.h && <div style={{ position: "absolute", top: (stageW * (H / THUMB_W)) / 2, left: 0, right: 0, height: 1, background: "#ff3d8b", pointerEvents: "none" }} />}
+                  <canvas ref={canvas} style={{ width: stageW, height: stageW * (H / THUMB_W), display: "block", borderRadius: 8, boxShadow: "0 2px 12px rgba(0,0,0,.12)", cursor: panMode ? "grab" : "crosshair" }} onPointerDown={(e) => down(e, "photo")} aria-label="썸네일 보드 (빈 곳을 끌면 네모로 여러 개 고르기)" />
+                  {snapLines.x.map((x) => <div key={`sx${x}`} style={{ position: "absolute", left: x * k, top: 0, bottom: 0, width: 1, background: "#ff3d8b", pointerEvents: "none" }} />)}
+                  {snapLines.y.map((y) => <div key={`sy${y}`} style={{ position: "absolute", top: y * k, left: 0, right: 0, height: 1, background: "#ff3d8b", pointerEvents: "none" }} />)}
                   {doc.els.map((el) => {
                     const b = boxOf(el.id);
                     if (!b) return null;
-                    const on = el.id === sel;
+                    const on = sels.includes(el.id), single = on && sels.length === 1;
                     return (
                       <div key={el.id} onPointerDown={(e) => down(e, "move", el.id)} onDoubleClick={() => { setSel(el.id); setTimeout(() => (document.getElementById("thumb-text") as HTMLTextAreaElement | null)?.focus(), 30); }}
-                        style={{ position: "absolute", left: (b.cx - b.w / 2) * k, top: (b.cy - b.h / 2) * k, width: b.w * k, height: b.h * k, transform: `rotate(${b.rot}deg)`, outline: on ? "2px solid #3b82f6" : undefined, cursor: "move", borderRadius: 4 }}
-                        title={el.slot ?? ""}>
-                        {on && <>
+                        style={{ position: "absolute", left: (b.cx - b.w / 2) * k, top: (b.cy - b.h / 2) * k, width: b.w * k, height: b.h * k, transform: `rotate(${b.rot}deg)`, outline: on ? `2px ${single ? "solid" : "dashed"} #3b82f6` : el.kind === "mosaic" ? "1px dashed rgba(255,255,255,.7)" : undefined, cursor: "move", borderRadius: el.kind === "mosaic" && el.round ? "50%" : 4 }}
+                        title={el.kind === "mosaic" ? "모자이크" : el.slot ?? ""} data-el={el.id}>
+                        {single && <>
                           <span onPointerDown={(e) => down(e, "size", el.id)} style={{ position: "absolute", right: -7, bottom: -7, width: 14, height: 14, background: "#fff", border: "2px solid #3b82f6", borderRadius: 3, cursor: "nwse-resize" }} title="끌어서 크기" />
                           <span onPointerDown={(e) => down(e, "rot", el.id)} style={{ position: "absolute", left: "50%", top: -26, marginLeft: -7, width: 14, height: 14, background: "#3b82f6", borderRadius: 999, cursor: "grab" }} title="끌어서 돌리기" />
                         </>}
                       </div>
                     );
                   })}
+                  {/* 안내선: 끌어서 옮기기 · 두 번 누르거나 보드 밖으로 끌면 지우기 */}
+                  {ruler && (doc.guides?.v ?? []).map((g, i) => <div key={`gv${i}`} onPointerDown={(e) => down(e, "guide", undefined, { axis: "v", i })} onDoubleClick={() => removeGuide("v", i)} title={`세로 안내선 ${Math.round(g * THUMB_W)}px · 끌어서 옮기기 · 두 번 누르면 지우기`} style={{ position: "absolute", left: g * stageW - 4, top: 0, bottom: 0, width: 9, cursor: "ew-resize" }}><div style={{ margin: "0 auto", width: 1, height: "100%", background: "#06b6d4" }} /></div>)}
+                  {ruler && (doc.guides?.h ?? []).map((g, i) => <div key={`gh${i}`} onPointerDown={(e) => down(e, "guide", undefined, { axis: "h", i })} onDoubleClick={() => removeGuide("h", i)} title={`가로 안내선 ${Math.round(g * H)}px · 끌어서 옮기기 · 두 번 누르면 지우기`} style={{ position: "absolute", top: g * stageW * (H / THUMB_W) - 4, left: 0, right: 0, height: 9, cursor: "ns-resize", display: "flex", alignItems: "center" }}><div style={{ width: "100%", height: 1, background: "#06b6d4" }} /></div>)}
+                  {marquee && <div style={{ position: "absolute", left: Math.min(marquee.x0, marquee.x1) * k, top: Math.min(marquee.y0, marquee.y1) * k, width: Math.abs(marquee.x1 - marquee.x0) * k, height: Math.abs(marquee.y1 - marquee.y0) * k, border: "1px dashed #3b82f6", background: "rgba(59,130,246,.12)", pointerEvents: "none" }} />}
+                </div>
                 </div>
               </div>
+              {ruler && (doc.guides?.v.length || doc.guides?.h.length) ? <div className="row tiny muted" style={{ gap: 6 }}>안내선 세로 {doc.guides?.v.length ?? 0} · 가로 {doc.guides?.h.length ?? 0}개<button className="btn btn-sm btn-ghost" onClick={() => setDoc((d) => ({ ...d, guides: { v: [], h: [] } }))}>안내선 모두 지우기</button></div> : null}
               <label className="row tiny" style={{ gap: 6 }}>사진 확대<input type="range" min={1} max={4} step={0.01} value={doc.photo.zoom} onChange={(e) => setDoc((d) => ({ ...d, photo: { ...d.photo, zoom: Number(e.target.value) } }), false)} style={{ flex: 1 }} /><b>{doc.photo.zoom.toFixed(2)}×</b><button className="btn btn-sm btn-ghost" onClick={() => setDoc((d) => ({ ...d, photo: { zoom: 1, x: 0.5, y: 0.5 } }))}>원래대로</button></label>
-              <span className="tiny muted">빈 곳을 끌면 사진 위치가 움직여요 · 요소는 끌어서 옮기고 ■ 모서리로 크기, ● 로 회전 · 가운데에 오면 분홍 선에 붙어요 · 방향키로 미세 이동(Shift=크게) · Delete 지우기 · Ctrl+Z 되돌리기</span>
+              <span className="tiny muted">빈 곳을 끌면 네모로 여러 개 고르기 · Shift/Ctrl(⌘)+클릭으로 하나씩 더하기 · Ctrl+A 전부 · 사진 위치는 ✋ 사진 옮기기(또는 Alt/⌥+끌기) · ■ 모서리 크기, ● 회전 · 가운데·안내선·눈금에 착 붙어요(분홍 선) · 📏 줄자를 누르면 안내선 · 방향키 이동(간격 켜면 그만큼) · Ctrl+D 복제 · Delete 지우기 · Ctrl+Z 되돌리기</span>
             </div>
 
             {/* 속성 + 스티커 */}
             <div className="stack" style={{ gap: 10 }}>
-              {selEl ? <ElPanel el={selEl} onPatch={(p, rec) => patchEl(selEl.id, p, rec)} onRemove={() => removeEl(selEl.id)} onOrder={(d) => order(selEl.id, d)} onDup={() => duplicate(selEl.id)} /> : <p className="tiny muted" style={{ margin: 0 }}>보드에서 글자·스티커를 누르면 여기서 고칠 수 있어요. 글자는 두 번 누르면 바로 쓸 수 있어요.</p>}
+              {sels.length > 1 ? (
+                <MultiPanel els={doc.els.filter((e) => sels.includes(e.id))} onAlign={align} onDistribute={distribute} onPatch={patchMany} onRemove={() => removeEls(sels)} onDup={() => duplicateMany(sels)} onClear={() => setSels([])} />
+              ) : selEl ? <ElPanel el={selEl} onPatch={(p, rec) => patchEl(selEl.id, p, rec)} onRemove={() => removeEl(selEl.id)} onOrder={(d) => order(selEl.id, d)} onDup={() => duplicate(selEl.id)} /> : <p className="tiny muted" style={{ margin: 0 }}>보드에서 글자·스티커를 누르면 여기서 고칠 수 있어요. 글자는 두 번 누르면 바로 쓸 수 있어요. 여러 개는 빈 곳을 끌어 네모로 감싸거나 Shift+클릭.</p>}
               <div ref={stickerBox} tabIndex={0} className="card card-pad stack" style={{ gap: 6, outline: dragOver === "sticker" ? "3px dashed var(--accent)" : undefined }}
                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver("sticker"); }} onDragLeave={() => setDragOver("")}
                 onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(""); void addStickers(imageFiles(e.dataTransfer.files)); }}>
@@ -415,8 +554,8 @@ function ElPanel({ el, onPatch, onRemove, onOrder, onDup }: { el: ThumbEl; onPat
   return (
     <div className="card card-pad stack" style={{ gap: 6 }}>
       <div className="row" style={{ gap: 4 }}>
-        <b className="small">{el.kind === "text" ? "✏️ 글자" : el.kind === "sticker" ? "🐑 스티커" : "✦ 모양"}</b>
-        <input className="input" style={{ flex: 1, minWidth: 0, padding: "2px 6px", fontSize: 12 }} value={el.slot ?? ""} onChange={(e) => onPatch({ slot: e.target.value })} placeholder="칸 이름" title="칸 이름: 템플릿을 입힐 때 같은 이름끼리 글 내용·캐릭터를 지켜요" aria-label="칸 이름" />
+        <b className="small">{el.kind === "text" ? "✏️ 글자" : el.kind === "sticker" ? "🐑 스티커" : el.kind === "mosaic" ? "🫥 모자이크" : "✦ 모양"}</b>
+        {el.kind !== "mosaic" && <input className="input" style={{ flex: 1, minWidth: 0, padding: "2px 6px", fontSize: 12 }} value={el.slot ?? ""} onChange={(e) => onPatch({ slot: e.target.value })} placeholder="칸 이름" title="칸 이름: 템플릿을 입힐 때 같은 이름끼리 글 내용·캐릭터를 지켜요" aria-label="칸 이름" />}
       </div>
       {el.kind === "text" && <>
         <textarea id="thumb-text" className="textarea" rows={2} value={el.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} aria-label="글자 내용" />
@@ -446,9 +585,22 @@ function ElPanel({ el, onPatch, onRemove, onOrder, onDup }: { el: ThumbEl; onPat
         <div className="seg">{([["sparkle", "✦"], ["heart", "♥"], ["star", "★"], ["circle", "●"]] as const).map(([s, l]) => <button key={s} className={el.shape === s ? "on" : ""} onClick={() => onPatch({ shape: s })}>{l}</button>)}</div>
         <div className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>색</span><ColorField value={el.fill ?? "#ffd84d"} onChange={(fill) => onPatch({ fill })} label="모양 색" /></div>
       </>}
+      {el.kind === "mosaic" && <>
+        <div className="row tiny" style={{ gap: 4, flexWrap: "wrap" }}>
+          <div className="seg">{([["blur", "흐리게"], ["pixel", "픽셀"]] as const).map(([v, l]) => <button key={v} className={(el.mosaic ?? "blur") === v ? "on" : ""} onClick={() => onPatch({ mosaic: v })}>{l}</button>)}</div>
+          <div className="seg">{([[true, "● 동그라미"], [false, "■ 네모"]] as const).map(([v, l]) => <button key={String(v)} className={!!el.round === v ? "on" : ""} onClick={() => onPatch({ round: v })}>{l}</button>)}</div>
+        </div>
+        {num("세기", el.strength ?? 45, 1, 100, 1, "strength")}
+        <label className="row tiny" style={{ gap: 6, flexWrap: "nowrap" }}>
+          <span style={{ width: 56, flexShrink: 0 }}>세로 크기</span>
+          <input type="range" min={2} max={150} step={0.5} value={Math.round((el.h ?? el.w) * 1000) / 10} onChange={(e) => onPatch({ h: Number(e.target.value) / 100 }, false)} onPointerUp={() => onPatch({}, true)} style={{ flex: 1, minWidth: 0 }} />
+          <input className="input" type="number" min={2} max={150} step={0.5} value={Math.round((el.h ?? el.w) * 1000) / 10} onChange={(e) => onPatch({ h: Number(e.target.value) / 100 })} style={{ width: 62, padding: "2px 4px" }} aria-label="세로 크기 %" />%
+        </label>
+        <span className="tiny muted">모자이크는 사진만 가리고, 스티커·글자는 위에 그대로 보여요. 템플릿에는 저장되지 않아요(사진마다 얼굴 위치가 달라서).</span>
+      </>}
       {el.kind !== "text" && (
         <label className="row tiny" style={{ gap: 6, flexWrap: "nowrap" }}>
-          <span style={{ width: 56, flexShrink: 0 }}>크기</span>
+          <span style={{ width: 56, flexShrink: 0 }}>{el.kind === "mosaic" ? "가로 크기" : "크기"}</span>
           <input type="range" min={2} max={150} step={0.5} value={Math.round(el.w * 1000) / 10} onChange={(e) => onPatch({ w: Number(e.target.value) / 100 }, false)} onPointerUp={() => onPatch({}, true)} style={{ flex: 1, minWidth: 0 }} />
           <input className="input" type="number" min={2} max={150} step={0.5} value={Math.round(el.w * 1000) / 10} onChange={(e) => onPatch({ w: Number(e.target.value) / 100 })} style={{ width: 62, padding: "2px 4px" }} aria-label="크기 %" />%
         </label>
@@ -466,6 +618,56 @@ function ElPanel({ el, onPatch, onRemove, onOrder, onDup }: { el: ThumbEl; onPat
         <button className="btn btn-sm" onClick={onDup}>복제</button>
         <button className="btn btn-sm btn-ghost" onClick={onRemove}>🗑 지우기</button>
       </div>
+    </div>
+  );
+}
+
+/** 줄자: 1080 기준 눈금 (작은 눈금 10px, 중간 50px, 숫자 100px). 누르면 그 자리에 안내선 */
+function Ruler({ axis, len, size, onPointerDown }: { axis: "v" | "h"; len: number; size: number; onPointerDown: (e: React.PointerEvent) => void }) {
+  const k = len / size;
+  const ticks: React.ReactNode[] = [];
+  for (let v = 0; v <= size; v += 10) {
+    const p = v * k;
+    const big = v % 100 === 0, mid = v % 50 === 0;
+    const l = big ? 12 : mid ? 8 : 4;
+    ticks.push(axis === "v" ? <line key={v} x1={p} x2={p} y1={20 - l} y2={20} stroke="currentColor" strokeWidth={big ? 1 : 0.6} /> : <line key={v} y1={p} y2={p} x1={20 - l} x2={20} stroke="currentColor" strokeWidth={big ? 1 : 0.6} />);
+    if (big && v > 0 && v < size) ticks.push(axis === "v" ? <text key={`t${v}`} x={p + 2} y={9} fontSize={8} fill="currentColor">{v}</text> : <text key={`t${v}`} x={2} y={p - 2} fontSize={8} fill="currentColor" transform={`rotate(-90 2 ${p - 2})`}>{v}</text>);
+  }
+  return (
+    <svg width={axis === "v" ? len : 20} height={axis === "v" ? 20 : len} onPointerDown={onPointerDown} style={{ background: "var(--line)", color: "var(--muted, #888)", cursor: axis === "v" ? "s-resize" : "e-resize", display: "block" }} role="button" aria-label={axis === "v" ? "가로 줄자 (누르면 세로 안내선)" : "세로 줄자 (누르면 가로 안내선)"}>
+      {ticks}
+    </svg>
+  );
+}
+
+/** 여러 개 고른 상태: 정렬 · 같은 간격 · 글자·모양 색 한꺼번에 */
+function MultiPanel({ els, onAlign, onDistribute, onPatch, onRemove, onDup, onClear }: { els: ThumbEl[]; onAlign: (h: "l" | "c" | "r" | "t" | "m" | "b") => void; onDistribute: (a: "x" | "y") => void; onPatch: (pred: (e: ThumbEl) => boolean, p: Partial<ThumbEl>) => void; onRemove: () => void; onDup: () => void; onClear: () => void }) {
+  const texts = els.filter((e) => e.kind === "text"), shapes = els.filter((e) => e.kind === "shape");
+  const isText = (e: ThumbEl) => e.kind === "text", isShape = (e: ThumbEl) => e.kind === "shape";
+  return (
+    <div className="card card-pad stack" style={{ gap: 6 }}>
+      <div className="row" style={{ gap: 4 }}><b className="small">☑️ {els.length}개 고름</b><span className="tiny muted">글자 {texts.length} · 모양 {shapes.length} · 스티커 {els.filter((e) => e.kind === "sticker").length}{els.some((e) => e.kind === "mosaic") ? ` · 모자이크 ${els.filter((e) => e.kind === "mosaic").length}` : ""}</span><button className="btn btn-sm btn-ghost" style={{ marginLeft: "auto" }} onClick={onClear}>고르기 풀기</button></div>
+      <span className="tiny muted">정렬 (고른 것들 기준)</span>
+      <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        {([["l", "⇤ 왼쪽"], ["c", "↔ 가운데"], ["r", "⇥ 오른쪽"], ["t", "⤒ 위"], ["m", "↕ 가운데"], ["b", "⤓ 아래"]] as const).map(([h, l]) => <button key={h} className="btn btn-sm" onClick={() => onAlign(h)}>{l}</button>)}
+      </div>
+      <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        <button className="btn btn-sm" disabled={els.length < 3} onClick={() => onDistribute("x")} title="3개 이상">가로 같은 간격</button>
+        <button className="btn btn-sm" disabled={els.length < 3} onClick={() => onDistribute("y")} title="3개 이상">세로 같은 간격</button>
+      </div>
+      {texts.length > 0 && <>
+        <span className="tiny muted">글자 {texts.length}개 한꺼번에</span>
+        <div className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>글꼴</span><FontPicker value={texts[0].font ?? "noto"} onPick={(font) => onPatch(isText, { font })} /></div>
+        <div className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>글자색</span><ColorField value={texts[0].color ?? "#222222"} onChange={(color) => onPatch(isText, { color })} label="여러 글자색" /></div>
+        <div className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>테두리색</span><ColorField value={texts[0].stroke || "#ffffff"} onChange={(stroke) => onPatch(isText, { stroke })} label="여러 테두리색" /></div>
+        <label className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>크기</span><input type="range" min={16} max={300} value={texts[0].size ?? 80} onChange={(e) => onPatch(isText, { size: Number(e.target.value) })} style={{ flex: 1 }} /><b>{texts[0].size ?? 80}</b></label>
+      </>}
+      {shapes.length > 0 && <div className="row tiny" style={{ gap: 6 }}><span style={{ width: 56 }}>모양 색</span><ColorField value={shapes[0].fill ?? "#ffd84d"} onChange={(fill) => onPatch(isShape, { fill })} label="여러 모양 색" /></div>}
+      <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        <button className="btn btn-sm" onClick={onDup}>복제 (Ctrl+D)</button>
+        <button className="btn btn-sm btn-ghost" onClick={onRemove}>🗑 모두 지우기</button>
+      </div>
+      <span className="tiny muted">함께 끌어 옮기기 · 방향키로 함께 이동 · Shift/Ctrl+클릭으로 빼기</span>
     </div>
   );
 }
