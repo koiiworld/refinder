@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         서이추 도우미 (반자동)
 // @namespace    https://github.com/koiiworld/refinder
-// @version      1.8.2
+// @version      1.9.0
 // @updateURL    https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @downloadURL  https://raw.githubusercontent.com/koiiworld/refinder/claude/seoichoo-automation-program-50awjg/seoichoo/userscript/seoichoo-helper.user.js
 // @description  네이버 블로그 서로이웃 대상 검색 + 신청창 멘트 자동 입력. 보내기(확인)는 직접 누릅니다. 계정별 탭 지원.
 // @match        https://section.blog.naver.com/*
 // @match        https://m.blog.naver.com/BuddyAddForm.naver*
+// @match        https://admin.blog.naver.com/BuddyListManage*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
@@ -15,6 +16,7 @@
 // @grant        unsafeWindow
 // @grant        GM_xmlhttpRequest
 // @connect      blog.naver.com
+// @connect      admin.blog.naver.com
 // @run-at       document-start
 // @noframes
 // ==/UserScript==
@@ -23,7 +25,7 @@
   "use strict";
 
   // ---------------------------------------------------------------- 공통 설정
-  const VERSION = "1.8.2";
+  const VERSION = "1.9.0";
   const DAILY_LIMIT = 100;      // 네이버 정책상 계정당 하루 서이추 최대
   const SESSION_LIMIT = 20;     // 20명마다 쉬어가기 알림
   const DEFAULT_COOLDOWN = 60;      // 신청 간격 최소(초)
@@ -42,7 +44,7 @@
     "안녕하세요 {닉네임}님, 블로그 분위기가 좋아서 이웃 맺고 싶어요. 잘 부탁드립니다!",
   ].join("\n");
   const OLD_DEFAULT_MSG = "안녕하세요 {닉네임}님! 글 잘 보고 갑니다. 서로이웃 맺고 자주 소통해요 :)";
-  const ACC_KEYS = ["history", "daily", "candidates", "batches", "batchCur", "keywords", "pages", "message", "cooldown", "cooldownMax"];
+  const ACC_KEYS = ["history", "daily", "candidates", "batches", "batchCur", "keywords", "pages", "message", "cooldown", "cooldownMax", "rel"];
 
   // 멘트 칸은 한 줄에 멘트 하나. 여러 줄이면 그중 하나를 무작위로 고른다 (직전 멘트는 가능하면 피함).
   function pickMessage(raw, last) {
@@ -145,7 +147,64 @@
     } catch (e) { /* 가로채기가 안 되면 안내창이 그대로 보인다 */ }
   }
 
-  if (location.hostname === "m.blog.naver.com") {
+  // ---------------------------------------------------------------- 이웃 관계 (수락률)
+  // '내가 추가한 이웃' 목록의 한 줄마다 '서로이웃'(수락함) 또는 '이웃'(아직 수락 안 함)이 표시된다.
+  function idsInRow(row, selfId) {
+    const ids = new Set();
+    const html = row.innerHTML || "";
+    const re = /blog\.naver\.com\/([A-Za-z0-9_-]+)(?=$|["'\/?#&])|[?&]blogId=([A-Za-z0-9_-]+)/g;
+    let m;
+    while ((m = re.exec(html))) {
+      const id = m[1] || m[2];
+      if (id && id !== selfId && !/^(MyBlog|PostList|PostView|BlogHome|BuddyListManage)$/i.test(id)) ids.add(id);
+    }
+    return [...ids];
+  }
+  function parseBuddyRows(doc, selfId) {
+    const out = {};
+    for (const row of doc.querySelectorAll("tr, li")) {
+      if (row.querySelector("tr, li")) continue; // 가장 안쪽 줄만
+      const text = row.textContent || "";
+      const rel = /서로\s*이웃/.test(text) ? "mutual" : /이웃/.test(text) ? "oneway" : "";
+      if (!rel) continue;
+      const ids = idsInRow(row, selfId);
+      if (ids.length === 1) out[ids[0]] = rel; // 한 줄에 블로그가 하나일 때만 믿는다
+    }
+    return out;
+  }
+  function mergeRelations(acc, map) {
+    const cur = aget(acc, "rel", { map: {}, at: 0 });
+    Object.assign(cur.map, map);
+    cur.at = Date.now();
+    aset(acc, "rel", cur);
+    store.set("ping", Date.now());
+  }
+
+  // 이웃 관리 페이지를 열면 화면에 보이는 이웃 관계를 읽어 둔다
+  function buddyListPage() {
+    const myId = new URLSearchParams(location.search).get("blogId") || "";
+    const acc = (accounts().find((a) => a.naverId && a.naverId === myId) || {}).id || activeAcc();
+    const badge = el("div", { style: "position:fixed;right:16px;bottom:16px;z-index:2147483647;padding:8px 12px;border-radius:10px;" +
+      "background:#1f2937;color:#fff;font:13px/1.4 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25)" });
+    document.body.append(badge);
+    let timer = null;
+    const scan = () => {
+      const map = parseBuddyRows(document, myId);
+      const ids = Object.keys(map);
+      if (ids.length) mergeRelations(acc, map);
+      const mutual = ids.filter((k) => map[k] === "mutual").length;
+      badge.textContent = ids.length
+        ? `서이추 도우미: 이 화면에서 서로이웃 ${mutual}명, 이웃 ${ids.length - mutual}명을 읽었어요. 다음 페이지도 넘겨 보세요.`
+        : "서이추 도우미: 이 화면에서 이웃 목록을 찾지 못했어요.";
+    };
+    scan();
+    new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(scan, 700); })
+      .observe(document.body, { childList: true, subtree: true });
+  }
+
+  if (location.hostname === "admin.blog.naver.com") {
+    onReady(buddyListPage);
+  } else if (location.hostname === "m.blog.naver.com") {
     const cur = store.get("current", {});
     const id = new URLSearchParams(location.search).get("blogId") || "";
     if (cur.blogId === id) hookAlerts(); // 도우미가 연 신청창에서만
@@ -367,6 +426,7 @@
       #sc-panel li:last-child{border-bottom:0}
       #sc-panel li .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #sc-panel li .s{font-size:11px;color:#6b7280;white-space:nowrap}
+      #sc-panel li .s.ok{color:#03a94d;font-weight:700}
       #sc-panel li .s.why{color:#b45309;cursor:help;border-bottom:1px dotted currentColor}
       #sc-bubble{position:fixed;z-index:2147483647;max-width:240px;padding:8px 11px;border-radius:12px;
         background:#1f2937;color:#f9fafb;font:12px/1.5 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
@@ -399,6 +459,8 @@
     const olderBtn = el("button", { title: "이전 검색 결과", onclick: () => stepBatch(1) }, "‹");
     const newerBtn = el("button", { title: "다음 검색 결과", onclick: () => stepBatch(-1) }, "›");
     const batchStat = el("div", { class: "muted" });
+    const acceptInfo = el("span", { class: "muted", style: "flex:1" });
+    const acceptBtn = el("button", { onclick: checkAccept, title: "내 블로그 '내가 추가한 이웃' 목록에서 서로이웃이 된 사람을 확인해요" }, "수락 확인");
     const list = el("ul");
     const nextBtn = el("button", { onclick: openNext, title: "한 명씩 직접 확인하며 보내기" }, "다음 신청창 열기");
     const skipBtn = el("button", { onclick: skipCurrent }, "건너뛰기");
@@ -434,6 +496,7 @@
         el("div", { class: "row" }, nextBtn, skipBtn,
           el("button", { onclick: clearList, style: "margin-left:auto", title: "지금 보는 검색 결과 묶음을 지워요 (보낸 기록은 남아요)" }, "묶음 삭제")),
         info,
+        el("div", { class: "row" }, acceptInfo, acceptBtn),
         el("div", { class: "muted" },
           "탭마다 검색어·멘트·보낸 목록·하루 한도를 따로 기억해요. 탭 이름을 두 번 누르면 이름을 바꿀 수 있어요."),
       ),
@@ -589,6 +652,8 @@
     // -------------------------------------------------------------- 목록
     const statusOf = (id) => (historyOf(acc)[id] || {}).status || "";
     const LABEL = { sent: "보냄", opened: "열림" }; // 그 외 완료 상태는 모두 '건너뜀'
+    const relMap = () => aget(acc, "rel", { map: {}, at: 0 }).map || {};
+    const accepted = (id) => relMap()[id] === "mutual";
     const REASON = {
       refused: "서로이웃 신청을 받지 않는 블로그",
       already: "이미 이웃이거나 이미 신청한 상태",
@@ -629,7 +694,8 @@
         box.checked = !!c.sel && !done;
         box.disabled = done || running;
         box.addEventListener("change", () => { c.sel = box.checked; saveBatch(); renderSel(); });
-        const tag = el("span", { class: "s" }, LABEL[st] || (DONE.includes(st) ? "건너뜀" : "대기"));
+        const tag = el("span", { class: "s" + (st === "sent" && accepted(c.blogId) ? " ok" : "") },
+          st === "sent" && accepted(c.blogId) ? "수락" : LABEL[st] || (DONE.includes(st) ? "건너뜀" : "대기"));
         if (DONE.includes(st) && st !== "sent") {
           const why = reasonOf(st, (historyOf(acc)[c.blogId] || {}).detail);
           tag.classList.add("why");
@@ -643,6 +709,7 @@
       }
       renderSel();
       info.textContent = `오늘 보냄 ${todayCountOf(acc)}/${DAILY_LIMIT} (이 계정)`;
+      renderAccept();
       renderBatchNav();
       const problem = accountMismatch();
       if (problem) {
@@ -663,7 +730,8 @@
         else if (DONE.includes(st)) skipped++;
         else left++;
       }
-      return { total: items.length, sent, skipped, left };
+      const ok = items.filter((c) => (h[c.blogId] || {}).status === "sent" && accepted(c.blogId)).length;
+      return { total: items.length, sent, skipped, left, ok };
     }
     function renderBatchNav() {
       const bs = batchesOf(acc);
@@ -685,8 +753,58 @@
       olderBtn.disabled = running || i >= bs.length - 1;
       newerBtn.disabled = running || i <= 0;
       const n = batchCounts(candidates);
-      batchStat.textContent = `${n.total}명 · 남은 ${n.left}명 · 보냄 ${n.sent} · 건너뜀 ${n.skipped}` + (i === 0 ? "" : " · 이전 검색 결과");
+      const rate = n.sent ? ` (${Math.round((n.ok / n.sent) * 100)}%)` : "";
+      batchStat.textContent = `${n.total}명 · 남은 ${n.left}명 · 보냄 ${n.sent} · 수락 ${n.ok}${rate} · 건너뜀 ${n.skipped}` + (i === 0 ? "" : " · 이전 검색 결과");
     }
+    // -------------------------------------------------------------- 수락률
+    function renderAccept() {
+      const rel = aget(acc, "rel", { map: {}, at: 0 });
+      const h = historyOf(acc);
+      const sentIds = Object.keys(h).filter((k) => h[k].status === "sent");
+      const ok = sentIds.filter((k) => (rel.map || {})[k] === "mutual").length;
+      if (!rel.at) { acceptInfo.textContent = `보낸 ${sentIds.length}명 · 수락은 아직 확인 안 함`; return; }
+      const pct = sentIds.length ? Math.round((ok / sentIds.length) * 100) : 0;
+      acceptInfo.textContent = `보낸 ${sentIds.length}명 중 수락 ${ok}명 (${pct}%) · ${fmtTime(rel.at)} 확인`;
+    }
+    const gmGet = (url) => new Promise((resolve, reject) => {
+      try {
+        GM_xmlhttpRequest({ method: "GET", url, onload: (r) => resolve(String(r.responseText || "")), onerror: reject, ontimeout: reject, timeout: 20000 });
+      } catch (e) { reject(e); }
+    });
+    async function checkAccept() {
+      const myId = (accounts().find((a) => a.id === acc) || {}).naverId || loginId;
+      if (!myId) { alert("이 탭의 네이버 아이디를 아직 몰라요. 네이버에 로그인한 상태로 새로고침한 뒤 다시 눌러 주세요."); return; }
+      const base = `https://admin.blog.naver.com/BuddyListManage.naver?blogId=${encodeURIComponent(myId)}`;
+      acceptBtn.disabled = true;
+      const found = {};
+      try {
+        let pageParam = "";
+        for (let p = 1; p <= 60; p++) {
+          if (p > 1 && !pageParam) break;
+          acceptBtn.textContent = `확인 중… ${p}쪽`;
+          const html = await gmGet(p === 1 ? base : `${base}&${pageParam}=${p}`);
+          const doc = new DOMParser().parseFromString(html, "text/html");
+          if (p === 1) {
+            const m = html.match(/[?&](currentPage|page|pageNo|curPage)=\d+/);
+            pageParam = m ? m[1] : "";
+          }
+          const rows = parseBuddyRows(doc, myId);
+          let added = 0;
+          for (const k of Object.keys(rows)) if (!(k in found)) { found[k] = rows[k]; added++; }
+          if (!added) break;
+          await sleep(rand(400, 900));
+        }
+      } catch (e) { console.warn("[서이추 도우미] 수락 확인 실패", e); }
+      acceptBtn.disabled = false;
+      acceptBtn.textContent = "수락 확인";
+      if (Object.keys(found).length) {
+        mergeRelations(acc, found);
+        render();
+      } else if (confirm("이웃 목록을 자동으로 읽지 못했어요.\n'내가 추가한 이웃' 페이지를 열어 드릴게요. 그 페이지를 열어 두고 쪽을 넘기면 도우미가 읽어 와요.")) {
+        window.open(base, "_blank");
+      }
+    }
+
     function stepBatch(d) {
       const bs = batchesOf(acc);
       const i = bs.findIndex((b) => b.id === batchId);
