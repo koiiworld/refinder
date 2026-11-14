@@ -2553,3 +2553,14 @@ test('📁 스티커 묶음: 묶음 목록·스티커 묶음 저장, 빈 묶음�
  assert.deepEqual(r.data.stickerGroups,['양 캐릭터','빈 묶음','반짝이'],'중복·빈 이름 빼고, 스티커에만 있는 묶음도');
  assert.equal(r.data.stickers.find(x=>x.id==='g1').group,'양 캐릭터');assert.equal(r.data.stickers.find(x=>x.id==='g3').group,undefined);
 });
+
+test('⚙️ 단계별 AI 저장: 모든 단계가 저장됨 (캐러셀·릴스 대본·채널 변환 등)', async()=>{
+ const want={carousel:{provider:'anthropic',model:'claude-sonnet-5-5'},reelscript:{provider:'anthropic',model:'claude-fable-5-2'},repurpose:{provider:'openai',model:'gpt-5.4'},studio:{provider:'google',model:'gemini-3.5-flash'},hashtags:{provider:'openai',model:'gpt-5.4-mini'},bogus:{provider:'openai',model:'x'}};
+ const r=await call('/api/settings','PUT',{stepAi:want});assert.equal(r.status,200);
+ const s=(await call('/api/settings')).data;
+ for(const k of ['carousel','reelscript','repurpose','studio','hashtags'])assert.deepEqual(s.stepAi[k],want[k],k);
+ assert.equal(s.stepAi.bogus,undefined,'없는 단계는 무시');
+ const e=(await call('/api/reels/script')).data;assert.equal(e.steps[0].model,'claude-fable-5-2','예상 비용에도 바로 반영');
+ // 원래대로 돌려놓기 (다른 테스트 영향 없게)
+ await call('/api/settings','PUT',{stepAi:{carousel:{provider:'openai',model:'gpt-5.4-mini'},reelscript:{provider:'anthropic',model:'claude-opus-5-5'},repurpose:{provider:'anthropic',model:'claude-opus-5-5'},studio:{provider:'openai',model:'gpt-5.4-mini'},hashtags:{provider:'google',model:'gemini-3.5-flash'}}});
+});

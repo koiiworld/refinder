@@ -1,5 +1,6 @@
 import { getSettings, saveSettings, type AppSettings } from "@/lib/settings";
 import { body, handle, ok } from "@/lib/api";
+import { STEP_AI_LABEL } from "@/lib/steps";
 
 export async function GET() {
   return handle(async () => ok(await getSettings()));
@@ -14,7 +15,8 @@ export async function PUT(req: Request) {
       const ok = ["openai", "anthropic", "google"];
       const clean: Partial<AppSettings["stepAi"]> = {};
       for (const [k, v] of Object.entries(b.stepAi)) {
-        if (["keywords", "titles", "writing", "review"].includes(k) && v && ok.includes(v.provider) && String(v.model ?? "").trim()) {
+        // 모든 단계 저장 (예전엔 키워드·제목·글 작성·검수 4개만 받아 나머지가 조용히 빠졌음)
+        if (k in STEP_AI_LABEL && v && ok.includes(v.provider) && String(v.model ?? "").trim()) {
           clean[k as keyof AppSettings["stepAi"]] = { provider: v.provider, model: String(v.model).trim() };
         }
       }
