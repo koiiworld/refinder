@@ -2564,3 +2564,12 @@ test('⚙️ 단계별 AI 저장: 모든 단계가 저장됨 (캐러셀·릴스 
  // 원래대로 돌려놓기 (다른 테스트 영향 없게)
  await call('/api/settings','PUT',{stepAi:{carousel:{provider:'openai',model:'gpt-5.4-mini'},reelscript:{provider:'anthropic',model:'claude-opus-5-5'},repurpose:{provider:'anthropic',model:'claude-opus-5-5'},studio:{provider:'openai',model:'gpt-5.4-mini'},hashtags:{provider:'google',model:'gemini-3.5-flash'}}});
 });
+
+test('🪽 글자 움직임: 나타날 때·떠 있는 동안·사라질 때·글꼴이 릴스에 저장됨', async()=>{
+ const r=await call('/api/reels','POST',{blank:true,title:'움직임',script:'날아오는 글자'});assert.equal(r.status,200);
+ const reel=(await call('/api/reels/'+r.data.id)).data;const doc=structuredClone(reel.doc);
+ doc.texts[0].style={...doc.texts[0].style,anim:'letters',loop:'wave',out:'flyRight',font:'gaegu'};
+ assert.equal((await call('/api/reels/'+r.data.id,'PUT',{doc,title:'움직임'})).status,200);
+ const st=(await call('/api/reels/'+r.data.id)).data.doc.texts[0].style;
+ assert.equal(st.anim,'letters');assert.equal(st.loop,'wave');assert.equal(st.out,'flyRight');assert.equal(st.font,'gaegu');
+});

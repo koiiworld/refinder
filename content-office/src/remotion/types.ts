@@ -31,11 +31,21 @@ export type ReelTextStyle = {
   y: number; // 가운데 기준 (0~1920)
   width: number; // 글 폭 (px)
   rotate: number; // 도
-  anim?: "none" | "fade" | "pop" | "slide" | "bounce" | "type"; // 등장 효과 (모션그래픽)
+  anim?: TextIn; // 등장 효과 (모션그래픽)
+  loop?: TextLoop; // 떠 있는 동안 계속 움직이기
+  out?: TextOut; // 사라질 때
   font?: ReelFontId; // 글꼴 (없으면 본고딕)
   glow?: string; // 글자 둘레 빛 색 ('' = 없음)
   glowSize?: number; // 빛 세기 (0.3~3, 기본 1)
 };
+
+// ── 글자 움직임 (캡컷처럼) ──
+export type TextIn = "none" | "fade" | "pop" | "slide" | "bounce" | "type" | "flyLeft" | "flyRight" | "flyTop" | "zoomIn" | "spin" | "blurIn" | "swingIn" | "letters" | "lettersPop" | "lettersRain";
+export type TextLoop = "none" | "float" | "shake" | "pulse" | "swing" | "wave" | "jump" | "blink";
+export type TextOut = "none" | "fade" | "flyLeft" | "flyRight" | "up" | "down" | "zoomOut" | "spin" | "blurOut";
+export const TEXT_IN: [TextIn, string][] = [["none", "없음"], ["fade", "페이드"], ["pop", "팝"], ["slide", "올라오기"], ["bounce", "통통"], ["type", "타자"], ["flyLeft", "← 왼쪽에서 날아오기"], ["flyRight", "→ 오른쪽에서 날아오기"], ["flyTop", "↓ 위에서 떨어지기"], ["zoomIn", "확 커지기"], ["spin", "돌며 등장"], ["blurIn", "흐림→선명"], ["swingIn", "흔들며 등장"], ["letters", "한 글자씩 날아오기"], ["lettersPop", "한 글자씩 팡"], ["lettersRain", "한 글자씩 떨어지기"]];
+export const TEXT_LOOP: [TextLoop, string][] = [["none", "없음"], ["float", "둥둥"], ["shake", "덜덜"], ["pulse", "두근두근"], ["swing", "흔들흔들"], ["wave", "물결 (글자별)"], ["jump", "콩콩 (글자별)"], ["blink", "깜빡"]];
+export const TEXT_OUT: [TextOut, string][] = [["none", "없음"], ["fade", "페이드"], ["flyLeft", "← 왼쪽으로 날아가기"], ["flyRight", "→ 오른쪽으로 날아가기"], ["up", "↑ 위로"], ["down", "↓ 아래로"], ["zoomOut", "작아지며"], ["spin", "돌며 사라지기"], ["blurOut", "흐려지며"]];
 
 /** 글꼴: 구글 폰트의 무료(OFL) 한글 글꼴 전부. file 이 있는 4개는 bin/ 에 미리 받아 둠, 나머지는 처음 쓸 때 bin/fonts/ 로 받음 */
 export type ReelFontDef = { id: string; label: string; family: string; file?: string; weights?: number[] };

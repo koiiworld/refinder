@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Img, interpolate, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { TextLayer } from "./Reel";
+import { faceKey, fontFaces, fontFamily } from "./types";
 import { clipLen, clipStarts, editDuration, FILTERS, RATIO_SIZE, type Clip, type EditProps } from "./edit-types";
 
 const TR = 0.4; // 전환 길이(초)
@@ -29,7 +30,7 @@ function ClipLayer({ c, src, mute }: { c: Clip; src: string; mute: boolean }) {
   );
 }
 
-export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, scale = 1 }) => {
+export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, fontUrls, scale = 1 }) => {
   const [BW, BH] = RATIO_SIZE[doc.ratio] ?? [1080, 1920];
   const { fps } = useVideoConfig();
   const starts = clipStarts(doc);
@@ -38,7 +39,7 @@ export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, scale = 1 }) => 
     <AbsoluteFill style={{ background: doc.bg || "#000" }}>
       {/* 내용은 기준 크기(1080 폭)로 그리고 내보낼 해상도만큼 키움 */}
       <div style={{ position: "absolute", left: 0, top: 0, width: BW, height: BH, transform: scale !== 1 ? `scale(${scale})` : undefined, transformOrigin: "0 0" }}>
-      {fontUrl && <style>{`@font-face { font-family: 'ReelFont'; src: url('${fontUrl}'); font-weight: 100 900; }`}</style>}
+      {fontUrl && <style>{`@font-face { font-family: 'ReelFont'; src: url('${fontUrl}'); font-weight: 100 900; }` + fontFaces().map(({ id, w }) => { const u = fontUrls?.[faceKey(id, w)] ?? (id === "noto" ? fontUrl : ""); return u ? `@font-face { font-family: '${fontFamily(id)}'; src: url('${u}'); font-weight: ${w || "100 900"}; }` : ""; }).join("")}</style>}
       {doc.clips.map((c, i) => {
         const src = srcs[c.src];
         if (!src) return null;
@@ -74,7 +75,7 @@ export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, scale = 1 }) => 
         if (from >= total) return null;
         return (
           <Sequence key={t.id} from={from} durationInFrames={Math.max(1, Math.min(total - from, Math.round((t.end - t.start) * fps)))} name={t.text.slice(0, 20)}>
-            <TextLayer t={t} />
+            <TextLayer t={t} dur={Math.max(1, Math.min(total - from, Math.round((t.end - t.start) * fps)))} />
           </Sequence>
         );
       })}

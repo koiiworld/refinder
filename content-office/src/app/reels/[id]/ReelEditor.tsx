@@ -9,6 +9,7 @@ import { Reel } from "@/remotion/Reel";
 import { docDuration, faceKey, fontFaces, fontFamily, GUIDE_BOX, REEL_FONTS, sceneStarts, TEXT_PRESETS, type ReelBg, type ReelDoc, type ReelOverlay, type ReelText, type ReelTextStyle } from "@/remotion/types";
 import * as op from "./ops";
 import { ColorField, FontPicker, GLOWS } from "@/components/FontPicker";
+import TextMotionPicker from "@/components/TextMotionPicker";
 import AiScriptBox from "../AiScriptBox";
 
 /**
@@ -131,6 +132,13 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
   const toggle = () => (player.current?.isPlaying() ? player.current.pause() : player.current?.play());
   const stopAt = useRef<number | null>(null);
   /** 지금 장면(고른 장면 또는 재생 위치의 장면)만 처음부터 끝까지 재생 */
+  /** 구간만 재생 (글자 효과 보기 등) */
+  const playRange = (from: number, to: number) => {
+    const a = Math.max(0, Math.round(from * fps)), b = Math.min(totalFrames - 1, Math.round(to * fps) - 1);
+    player.current?.pause();
+    player.current?.seekTo(a); setFrame(a);
+    setTimeout(() => { stopAt.current = b; player.current?.play(); }, 50);
+  };
   const playScene = () => {
     const sc = curScene;
     if (!sc) return;
@@ -557,7 +565,8 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
           <div className="reel-panel-body">
             {rtab === "props" && (selText || (scopeAll && doc.texts.length) ? (
               <TextControls t={selText ?? (doc.texts[0] as XText)} scopeAll={scopeAll} total={doc.texts.length} onScope={setScopeAll}
-                onText={(patch) => selText && setDoc((d) => op.patchText(d, selText.id, patch as Partial<ReelText>))} onStyle={style} />
+                onText={(patch) => selText && setDoc((d) => op.patchText(d, selText.id, patch as Partial<ReelText>))} onStyle={style}
+                onPreview={selText ? () => playRange(selText.start, selText.end) : undefined} />
             ) : selOv ? (
               <OverlayControls o={selOv} onPatch={(p) => setDoc((d) => op.patchOverlay(d, selOv.id, p))} onDelete={() => { setDoc((d) => op.deleteOverlay(d, selOv.id)); setSel(null); }} />
             ) : selScene ? (
@@ -665,7 +674,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
   );
 }
 
-function TextControls({ t, scopeAll, total, onScope, onText, onStyle }: { t: XText; scopeAll: boolean; total: number; onScope: (v: boolean) => void; onText: (p: Partial<XText>) => void; onStyle: (p: Partial<ReelTextStyle>) => void }) {
+function TextControls({ t, scopeAll, total, onScope, onText, onStyle, onPreview }: { t: XText; scopeAll: boolean; total: number; onScope: (v: boolean) => void; onText: (p: Partial<XText>) => void; onStyle: (p: Partial<ReelTextStyle>) => void; onPreview?: () => void }) {
   const s = t.style;
   return (
     <div className="stack reel-ctl" style={{ gap: 8 }}>
@@ -699,9 +708,8 @@ function TextControls({ t, scopeAll, total, onScope, onText, onStyle }: { t: XTe
       </div>
       <div className="reel-row"><span>한 줄 맞춤</span><button className={`btn btn-sm ${s.fit ? "btn-primary" : ""}`} onClick={() => onStyle({ fit: !s.fit })}>{s.fit ? "넘치면 줄여요" : "줄바꿈"}</button></div>
       <div className="reel-row"><span>정렬</span><div className="seg">{(["left", "center", "right"] as const).map((a) => <button key={a} className={s.align === a ? "on" : ""} onClick={() => onStyle({ align: a })}>{{ left: "왼쪽", center: "가운데", right: "오른쪽" }[a]}</button>)}</div></div>
-      <div className="reel-row"><span>등장 효과</span>
-        <div className="seg" style={{ flexWrap: "wrap" }}>{([["none", "없음"], ["fade", "페이드"], ["pop", "팝"], ["slide", "올라오기"], ["bounce", "통통"], ["type", "타자"]] as const).map(([v, l]) => <button key={v} className={(s.anim ?? "none") === v ? "on" : ""} onClick={() => onStyle({ anim: v })}>{l}</button>)}</div>
-      </div>
+      <b className="small" style={{ marginTop: 6 }}>움직임</b>
+      <TextMotionPicker s={s} onStyle={onStyle} onPreview={scopeAll ? undefined : onPreview} />
       <b className="small" style={{ marginTop: 6 }}>위치</b>
       <div className="seg"><button className={!scopeAll ? "on" : ""} onClick={() => onScope(false)}>이 자막만</button><button className={scopeAll ? "on" : ""} onClick={() => onScope(true)}>자막 전체 {total}개</button></div>
       <span className="tiny muted">{scopeAll ? "'자막 전체에 포함'이 켜진 자막에 한 번에 적용돼요." : "이 자막 하나만 옮겨요. 화면에서 끌어도 돼요."}</span>

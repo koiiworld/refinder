@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Audio, Img, interpolate, OffthreadVideo, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import type { ReelBg, ReelProps, ReelText } from "./types";
+import type { ReelBg, ReelProps, ReelText, ReelTextStyle } from "./types";
 import { docDuration, faceKey, fontFaces, fontFamily, sceneStarts } from "./types";
 
 /** 배경 */
@@ -42,34 +42,83 @@ export function fittedSize(t: ReelText) {
   return Math.max(16, Math.min(t.style.size, Math.floor(t.style.width / (em + pad))));
 }
 
-/** 등장 효과: 자막이 나타나는 순간의 움직임 (Sequence 안에서 0프레임부터) */
-function useAnim(anim: string | undefined, text: string) {
+/**
+ * 글자 움직임 (Sequence 안에서 0프레임부터, dur = 이 글자가 보이는 프레임 수)
+ * - 등장(anim): 처음 0.5초쯤 · 계속(loop): 보이는 내내 · 사라질 때(out): 마지막 0.35초
+ * - 글자별 효과(한 글자씩·물결·콩콩)는 글자마다 따로 움직임
+ */
+const PER_CHAR_IN = new Set(["letters", "lettersPop", "lettersRain"]);
+const PER_CHAR_LOOP = new Set(["wave", "jump"]);
+
+function useMotion(s: ReelTextStyle, text: string, size: number, dur: number) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const sp = (damping: number) => spring({ frame, fps, config: { damping, stiffness: 180, mass: 0.6 } });
-  switch (anim) {
-    case "fade":
-      return { style: { opacity: interpolate(frame, [0, 8], [0, 1], { extrapolateRight: "clamp" }) }, text };
-    case "pop":
-      return { style: { transform: `scale(${interpolate(sp(12), [0, 1], [0.6, 1])})`, opacity: interpolate(frame, [0, 4], [0, 1], { extrapolateRight: "clamp" }) }, text };
-    case "slide":
-      return { style: { transform: `translateY(${interpolate(sp(16), [0, 1], [60, 0])}px)`, opacity: interpolate(frame, [0, 6], [0, 1], { extrapolateRight: "clamp" }) }, text };
-    case "bounce":
-      return { style: { transform: `scale(${interpolate(sp(5), [0, 1], [0.3, 1])})` }, text };
-    case "type": {
-      const chars = Array.from(text);
-      const n = Math.min(chars.length, Math.floor((frame / fps) * 18) + 1); // 1초에 18글자
-      return { style: {}, text: chars.slice(0, n).join("") };
-    }
-    default:
-      return { style: {}, text };
+  const sp = (damping: number, delay = 0) => spring({ frame: frame - delay, fps, config: { damping, stiffness: 180, mass: 0.6 } });
+  const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
+  const tr: string[] = [];
+  let opacity = 1;
+  let blur = 0;
+  let shown = text;
+  // 등장
+  switch (s.anim) {
+    case "fade": opacity *= interpolate(frame, [0, 8], [0, 1], clamp); break;
+    case "pop": tr.push(`scale(${interpolate(sp(12), [0, 1], [0.6, 1])})`); opacity *= interpolate(frame, [0, 4], [0, 1], clamp); break;
+    case "slide": tr.push(`translateY(${interpolate(sp(16), [0, 1], [60, 0])}px)`); opacity *= interpolate(frame, [0, 6], [0, 1], clamp); break;
+    case "bounce": tr.push(`scale(${interpolate(sp(5), [0, 1], [0.3, 1])})`); break;
+    case "type": { const chars = Array.from(text); shown = chars.slice(0, Math.min(chars.length, Math.floor((frame / fps) * 18) + 1)).join(""); break; }
+    case "flyLeft": tr.push(`translateX(${interpolate(sp(14), [0, 1], [-1300, 0])}px)`); break;
+    case "flyRight": tr.push(`translateX(${interpolate(sp(14), [0, 1], [1300, 0])}px)`); break;
+    case "flyTop": tr.push(`translateY(${interpolate(sp(9), [0, 1], [-900, 0])}px)`); break;
+    case "zoomIn": tr.push(`scale(${interpolate(sp(14), [0, 1], [3.2, 1])})`); opacity *= interpolate(frame, [0, 6], [0, 1], clamp); break;
+    case "spin": tr.push(`rotate(${interpolate(sp(13), [0, 1], [-360, 0])}deg) scale(${interpolate(sp(13), [0, 1], [0.2, 1])})`); break;
+    case "blurIn": blur += interpolate(frame, [0, 12], [size * 0.35, 0], clamp); opacity *= interpolate(frame, [0, 10], [0, 1], clamp); break;
+    case "swingIn": tr.push(`rotate(${interpolate(sp(4), [0, 1], [-25, 0])}deg)`); opacity *= interpolate(frame, [0, 5], [0, 1], clamp); break;
   }
+  // 계속 (글자 전체)
+  const t = frame / fps;
+  switch (s.loop) {
+    case "float": tr.push(`translateY(${Math.sin(t * Math.PI * 1.6) * size * 0.09}px)`); break;
+    case "shake": tr.push(`translate(${Math.sin(frame * 1.7) * size * 0.03}px, ${Math.cos(frame * 2.3) * size * 0.02}px) rotate(${Math.sin(frame * 1.3) * 2}deg)`); break;
+    case "pulse": tr.push(`scale(${1 + 0.07 * Math.max(0, Math.sin(t * Math.PI * 2.4))})`); break;
+    case "swing": tr.push(`rotate(${Math.sin(t * Math.PI * 1.4) * 6}deg)`); break;
+    case "blink": opacity *= 0.55 + 0.45 * (0.5 + 0.5 * Math.cos(t * Math.PI * 3)); break;
+  }
+  // 사라질 때 (마지막 0.35초)
+  const outLen = Math.max(1, Math.min(Math.round(fps * 0.35), Math.floor(dur / 2)));
+  const p = s.out && s.out !== "none" ? interpolate(frame, [dur - outLen, dur - 1], [0, 1], clamp) : 0;
+  if (p > 0) {
+    const e = p * p; // 점점 빨라지게
+    switch (s.out) {
+      case "fade": opacity *= 1 - p; break;
+      case "flyLeft": tr.push(`translateX(${-1300 * e}px)`); break;
+      case "flyRight": tr.push(`translateX(${1300 * e}px)`); break;
+      case "up": tr.push(`translateY(${-500 * e}px)`); opacity *= 1 - p; break;
+      case "down": tr.push(`translateY(${500 * e}px)`); opacity *= 1 - p; break;
+      case "zoomOut": tr.push(`scale(${1 - 0.9 * e})`); opacity *= 1 - p * 0.6; break;
+      case "spin": tr.push(`rotate(${360 * e}deg) scale(${1 - 0.8 * e})`); break;
+      case "blurOut": blur += size * 0.35 * p; opacity *= 1 - p; break;
+    }
+  }
+  // 글자별
+  const perChar = PER_CHAR_IN.has(s.anim ?? "") || PER_CHAR_LOOP.has(s.loop ?? "");
+  const charStyle = (i: number): React.CSSProperties => {
+    const ct: string[] = [];
+    let co = 1;
+    const d = i * 2.2; // 글자 사이 0.07초
+    if (s.anim === "letters") { const v = sp(13, d); ct.push(`translate(${interpolate(v, [0, 1], [size * 1.4, 0])}px, ${interpolate(v, [0, 1], [-size * 0.6, 0])}px) rotate(${interpolate(v, [0, 1], [25, 0])}deg)`); co = interpolate(frame - d, [0, 4], [0, 1], clamp); }
+    if (s.anim === "lettersPop") { const v = sp(8, d); ct.push(`scale(${interpolate(v, [0, 1], [0, 1])})`); }
+    if (s.anim === "lettersRain") { const v = sp(10, d); ct.push(`translateY(${interpolate(v, [0, 1], [-size * 3, 0])}px)`); co = interpolate(frame - d, [0, 3], [0, 1], clamp); }
+    if (s.loop === "wave") ct.push(`translateY(${Math.sin(t * Math.PI * 2 - i * 0.55) * size * 0.12}px)`);
+    if (s.loop === "jump") { const ph = (t * 2.2 - i * 0.12) % 1; ct.push(`translateY(${ph < 0.35 ? -Math.sin((ph / 0.35) * Math.PI) * size * 0.22 : 0}px)`); }
+    return { display: "inline-block", transform: ct.join(" ") || undefined, opacity: co };
+  };
+  return { shown, perChar, charStyle, style: { transform: tr.join(" ") || undefined, opacity, filter: blur > 0.2 ? `blur(${blur.toFixed(1)}px)` : undefined } as React.CSSProperties };
 }
 
-export function TextLayer({ t }: { t: ReelText }) {
+export function TextLayer({ t, dur = 9999 }: { t: ReelText; dur?: number }) {
   const s = t.style;
   const size = fittedSize(t);
-  const a = useAnim(s.anim, t.text);
+  const a = useMotion(s, t.text, size, dur);
   return (
     <div
       style={{
@@ -102,7 +151,17 @@ export function TextLayer({ t }: { t: ReelText }) {
           textShadow: s.glow ? glowShadow(s.glow, size, s.glowSize ?? 1) : undefined,
         }}
       >
-        {a.text}
+        {a.perChar
+          ? a.shown.split("\n").map((line, li, arr) => (
+              <span key={li}>
+                {Array.from(line).map((ch, ci) => {
+                  const idx = arr.slice(0, li).reduce((n, l) => n + Array.from(l).length, 0) + ci;
+                  return <span key={ci} style={a.charStyle(idx)}>{ch === " " ? "\u00a0" : ch}</span>;
+                })}
+                {li < arr.length - 1 && <br />}
+              </span>
+            ))
+          : a.shown}
       </span>
     </div>
   );
@@ -167,7 +226,7 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
         if (from >= total) return null;
         return (
           <Sequence key={t.id} from={from} durationInFrames={dur} name={t.text.slice(0, 20)}>
-            <TextLayer t={t} />
+            <TextLayer t={t} dur={dur} />
           </Sequence>
         );
       })}

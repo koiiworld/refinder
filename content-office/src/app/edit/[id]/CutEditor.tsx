@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { api, Modal } from "@/components/client-utils";
 import { Edit } from "@/remotion/Edit";
-import { DEFAULT_TEXT_STYLE, type ReelText } from "@/remotion/types";
+import { DEFAULT_TEXT_STYLE, faceKey, fontFaces, type ReelText } from "@/remotion/types";
+import { FontPicker } from "@/components/FontPicker";
+import TextMotionPicker from "@/components/TextMotionPicker";
 import { clipLen, clipStarts, editDuration, FILTERS, RATIO_SIZE, TRANSITIONS, type AudioClip, type Clip, type EditDoc, type Filter, type Overlay, type Ratio, type Transition } from "@/remotion/edit-types";
 
 type Media = { id: string; title: string; duration: number | null; thumb: boolean; kind: string };
@@ -77,6 +79,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   const [err, setErr] = useState("");
   const [pps, setPps] = useState(60); // 1초 = px
   const player = useRef<PlayerRef>(null);
+  const fontUrls = useMemo(() => Object.fromEntries(fontFaces().map(({ id, w }) => [faceKey(id, w), `/api/reels/font?f=${id}${w ? `&w=${w}` : ""}`])), []);
   const tl = useRef<HTMLDivElement>(null);
   const programmatic = useRef(false);
   const [tlW, setTlW] = useState(600);
@@ -166,6 +169,16 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   };
   const seek = (sec: number) => { const f = Math.max(0, Math.min(frames - 1, Math.round(sec * fps))); player.current?.seekTo(f); setFrame(f); };
   const toggle = () => (player.current?.isPlaying() ? player.current.pause() : player.current?.play());
+  // 구간만 재생 (글자 효과 보기): 끝나면 멈춤
+  const playRange = (from: number, to: number) => {
+    const a = Math.max(0, Math.round(from * fps)), b = Math.min(frames - 1, Math.round(to * fps));
+    player.current?.pause(); player.current?.seekTo(a); setFrame(a);
+    setTimeout(() => {
+      player.current?.play();
+      const stop = () => { const f = player.current?.getCurrentFrame() ?? b; if (f >= b - 1 || !player.current?.isPlaying()) { player.current?.pause(); return; } requestAnimationFrame(stop); };
+      requestAnimationFrame(stop);
+    }, 50);
+  };
 
   const selClip = sel?.kind === "clip" ? doc.clips.find((c) => c.id === sel.id) : undefined;
   const selText = sel?.kind === "text" ? doc.texts.find((x) => x.id === sel.id) : undefined;
@@ -343,7 +356,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       <div className="cut-stage">
         <div className="cut-frame" style={{ aspectRatio: `${W} / ${H}` }}>
           {doc.clips.length || doc.overlays.length ? (
-            <Player ref={player} component={Edit} inputProps={{ doc, srcs, fontUrl: "/api/reels/font" }} durationInFrames={frames} fps={fps} compositionWidth={W} compositionHeight={H} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense />
+            <Player ref={player} component={Edit} inputProps={{ doc, srcs, fontUrl: "/api/reels/font", fontUrls }} durationInFrames={frames} fps={fps} compositionWidth={W} compositionHeight={H} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense />
           ) : (
             <button className="cut-empty" onClick={() => setPickFor("append")}>＋ 영상 추가</button>
           )}
@@ -472,7 +485,8 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
                 {["", "#000000", "#ffffff", "#ffd1e8", "#ffe98a"].map((c) => <button key={c || "none"} className={selText.style.box === c ? "on" : ""} style={c ? { background: c, color: c === "#000000" ? "#fff" : "#000" } : undefined} onClick={() => patchText(selText.id, { style: { ...selText.style, box: c } })}>{c ? "상자" : "상자 없음"}</button>)}
                 <button className={selText.style.bold ? "on" : ""} onClick={() => patchText(selText.id, { style: { ...selText.style, bold: !selText.style.bold } })}>굵게</button>
               </div>
-              <div className="cut-chips">{([["none", "효과 없음"], ["fade", "페이드"], ["pop", "팝"], ["slide", "올라오기"], ["bounce", "통통"], ["type", "타자"]] as const).map(([k, l]) => <button key={k} className={(selText.style.anim ?? "none") === k ? "on" : ""} onClick={() => patchText(selText.id, { style: { ...selText.style, anim: k } })}>{l}</button>)}</div>
+              <div className="cut-row-ctl" style={{ gap: 6 }}>글꼴 <FontPicker value={selText.style.font ?? "noto"} onPick={(font) => patchText(selText.id, { style: { ...selText.style, font } })} /></div>
+              <TextMotionPicker chip="cut-chips" s={selText.style} onStyle={(p) => patchText(selText.id, { style: { ...selText.style, ...p } })} onPreview={() => playRange(selText.start, selText.end)} />
               <div className="row" style={{ gap: 6 }}><button className="cut-btn" onClick={split}>✂️ 분할</button><button className="cut-btn" onClick={duplicate}>⧉ 복제</button><button className="cut-btn" onClick={remove}>🗑 삭제</button></div>
             </div>
           )}

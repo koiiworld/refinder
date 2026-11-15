@@ -7,7 +7,8 @@ import { enqueue } from "./jobs";
 import { addVideoFile, ffmpegPath, fitSize, getVideo } from "./videos";
 import { getGeneratedImage } from "./image-gen";
 import { fileServer, FONT_FILE, run, videoToTemp } from "./reels";
-import { DEFAULT_TEXT_STYLE, type ReelText } from "@/remotion/types";
+import { DEFAULT_TEXT_STYLE, faceKey, fontFaces, type ReelText } from "@/remotion/types";
+import { ensureFont } from "./reel-fonts";
 import { clipLen, clipStarts, emptyEdit, RATIO_SIZE, type EditDoc } from "@/remotion/edit-types";
 
 /**
@@ -117,13 +118,16 @@ export async function runEditRender(id: string, resolution: string) {
       files[path.basename(f)] = f;
     }
     if (fs.existsSync(FONT_FILE())) files["font.ttf"] = FONT_FILE();
+    // 쓰는 글꼴만 (처음 쓰는 무료 글꼴은 이때 받아 둠)
+    const usedFonts = new Set(["noto", ...doc.texts.map((x) => x.style.font ?? "noto")]);
+    for (const { id: fid, w } of fontFaces(usedFonts)) { const p = await ensureFont(fid, w); if (p) files[`font-${faceKey(fid, w)}.ttf`] = p; }
     server = await fileServer(files);
     const srcs = Object.fromEntries(ids.map((s) => [s, `${server!.base}/${path.basename(Object.values(files).find((f) => path.basename(f).startsWith(s))!)}`]));
     const out = path.join(dir, "edit.mp4");
     const scale = RESOLUTIONS[resolution as keyof typeof RESOLUTIONS] ?? 1;
     const job = {
       entry: path.join(process.cwd(), "src", "remotion", "index.tsx"), compositionId: "Edit",
-      props: { doc, srcs, fontUrl: files["font.ttf"] ? `${server.base}/font.ttf` : "", scale }, out,
+      props: { doc, srcs, fontUrl: files["font.ttf"] ? `${server.base}/font.ttf` : "", fontUrls: Object.fromEntries(fontFaces(usedFonts).filter(({ id: fid, w }) => files[`font-${faceKey(fid, w)}.ttf`]).map(({ id: fid, w }) => [faceKey(fid, w), `${server!.base}/font-${faceKey(fid, w)}.ttf`])), scale }, out,
       cacheDir: path.join(HOME, ".ai-content-office", "remotion-cache"), ...(fs.existsSync(CHROME) ? { browser: CHROME } : {}),
     };
     const jobFile = path.join(dir, "job.json");

@@ -12,14 +12,19 @@
 | `benchmark.ts` | 인기 글 분석 → 내 블로그에 적용 | PostStats, statsOf, analyzePopular, lastBenchmark, startBenchmarkPost |
 | `blog-common-rules.ts` |  | listCommonBlogRules, commonRulesForBlog, saveCommonBlogRules |
 | `blog-hot.ts` | 📰 블로그 핫이슈: 네이버 블로그 홈 '주제별 보기'에 지금 올라오는 글 중 반응(공감·댓글) 많은 글 | HOT_TABS, HotPost, HotTabData, topWords, hotTab |
+| `blog-post-search.ts` | 내 블로그 글 검색 (네이버 검색에 노출된 공개 글, site: 로 내 블로그만) | FoundPost, searchBlogPosts |
 | `blog-posts.ts` | 내 블로그의 실제 최근 글 목록 (블로그 RSS) | BlogPostLink, rssUrlOf, parseRss, recentPosts, writtenTitles, PostStat, naverPostStats |
 | `blog-rule-types.ts` |  | BLOG_RULE_SCOPES, BlogRuleScope, BlogRuleTarget, CommonBlogRule, rulesForScope, commonRulesText |
 | `brand.ts` | 왼쪽 위 로고 (아이콘 글자·이름·색) — settings 'brand' | Brand, DEFAULT_BRAND, getBrand, saveBrand |
 | `calendar.ts` | 📅 마케팅 달력 | CalCat, CalEvent, CAT_LABEL, krHolidays, monthEvents, addCalendarEvent, deleteCalendarEvent |
+| `caption-styles.ts` | 캐러셀 캡션 스타일 (화면·서버 공용) | CAPTION_STYLES, CaptionStyleId, captionStyleRule, hashtagTokens, formatHashtags |
 | `captured-post-views.ts` | 블로그 진단과 캐러셀이 공유: 저장된 최근 7개 일간 기록의 제목별 합계. | capturedPostViews, matchCapturedViews |
 | `carousel-design-types.ts` | 캐러셀 디자인 참고함과 실제 캔버스에 적용하는 값 (브라우저·서버 공용) | DesignRecipe, DesignAnalysis, DesignReference, BASE_RECIPE, cleanRecipe, LEARN_CATEGORIES, LearnCategory, LearningAnalysis … |
+| `carousel-scene.ts` | 🎞 캐러셀 편집 툴 (장마다 요소를 놓고 움직이는 카드) — 화면·서버 공용 | SW, SH, ElType, MockVariant, MotionId, Motion, El, SceneBg … |
 | `carousel-text.ts` |  | CarouselTextInput, rewriteCarouselText |
-| `carousel.ts` | 📱 인스타 캐러셀(카드뉴스) | Slide, CarouselImage, TypeVersion, CarouselStyle, Carousel, CONTENT_TYPES, ContentTypeId, FORMATS … |
+| `carousel-video-types.ts` | 🎬 카드 사진 → AI 영상: 움직임 예시 (화면·서버 공용) | CARD_MOTIONS, CardVideo, CardMotionId, CARD_VIDEO_USD |
+| `carousel-video.ts` | 🎬 캐러셀 카드 사진 → AI 영상 (Higgsfield Wan 2.6, 5초 · 720p · 약 $0.5) | estimateCardVideo, startCardVideo, refreshCardVideos, removeCardVideo |
+| `carousel.ts` | 📱 인스타 캐러셀(카드뉴스) | Slide, CarouselImage, RemovedImage, TypeVersion, CarouselStyle, Carousel, CONTENT_TYPES, ContentTypeId … |
 | `convert.ts` | 📄 문서 → 마크다운 (마이크로소프트 MarkItDown, 맥에서 무료) | CONVERT_EXT, MAX_CONVERT_BYTES, Conversion, createConversion, listConversions, getConversion, runConversion |
 | `coupang.ts` | 쿠팡파트너스 Open API: 이번 달 수익·클릭·주문 자동 집계 | coupangConnected, coupangAuth, syncCoupang, lastCoupangSync |
 | `creator.ts` | 네이버 크리에이터 어드바이저 '유입 트렌드' — 공식 API가 없어 사용자가 화면에서 복사해 붙여 넣은 목록을 저장 | CreatorTrend, cleanCreatorKeyword, parseTrendText, saveCreatorTrend, listCreatorTrends, creatorTrendContext |
@@ -37,6 +42,9 @@
 | `hook-rules.ts` | 후킹은 구체적인 정보 약속. 과장·공포·근거 없는 수치는 제외. | HOOK_RULES, groundedHook |
 | `hot-report.ts` | 📋 블로그 글감 추천 리포트 | Issue, ReportItem, HotReport, googleTrends, createReport, lastReport, approveItem, restoreItem … |
 | `ideas.ts` | 💡 아이디어 노트: 한 줄 메모 + 블로그 + 참고 링크 | Idea, listIdeasNotes, getIdea, createIdea, updateIdea, deleteIdea |
+| `ig-api.ts` | 📊 인스타그램 API (Instagram 로그인 방식, 프로페셔널 계정) | igConnected, IgProfile, IgPost, IgDay, IgDashboard, syncInstagram, igDashboard, igDailyTick |
+| `ig-ops-types.ts` | 📱 인스타 운영 도구 (화면·서버 공용 정의) | IG_TOOLS, IgTool, isIgTool, HOOKS, PROFILE_RUBRIC, ViralRow, median, parseViralRows … |
+| `ig-ops.ts` | 📱 인스타 운영: 릴스 대본 · 댓글 답글 · 프로필 점수 · 주간 계획 · 잘 된 영상 찾기 | IgRun, getVoice, saveVoice, listIgRuns, runIgTool |
 | `image-gen.ts` | ChatGPT(OpenAI Images API)·Gemini(이미지 출력) 로 바로 생성 → DB에 저장 → /api/img/<아이디> 로 공개 | ImageGenError, generateDirect, getGeneratedImage |
 | `image-models.ts` | refs: 레퍼런스 이미지를 몇 장까지 받는지 (0 = 못 받음, 스타일 문구만 반영) · soul: Higgsfield Soul ID(내 캐릭터) 사용 가능 | ImageModel, IMAGE_MODELS, IMAGE_PROVIDER_NAMES, imageModel |
 | `image-plan.ts` | 🎨 이미지 기획 (글을 다 쓴 뒤, 이미지 만들기 전에 한 번) | planImages, replanImages |
@@ -46,6 +54,7 @@
 | `inline-images.ts` | 편집기에서 직접 올린·붙여넣은 사진(data:image/...;base64,…)을 따로 저장하고 본문에는 주소만 남김 | externalizeImages, bodyImageIds |
 | `instagram-design.ts` | 게시물 본문·캐러셀을 함께 읽음. 대표 이미지 메타데이터는 부분 수집으로 표시. | instagramPostUrl, referenceUrl, parseInstagramPost, importInstagramImages |
 | `jobs.ts` | 서버 측 작업 큐 | enqueue, ensureWorker, VIDEO_JOBS, MAC_ONLY_JOBS, jobLabel |
+| `keepalive.ts` | ☕ Render 무료 요금제 잠들지 않게 하기 | startKeepAlive |
 | `keystore.ts` | 설정 화면에서 직접 넣는 API 키 | KEY_FIELDS, KeyEnv, applyStoredKeys, startKeySync, keyStatus, canSaveKeys, saveKey, removeKey |
 | `keywords.ts` | 60일 안에 준비하거나 진행 중인 시즌 | KeywordPick, recommendKeywords, addUserKeyword, listPicks |
 | `learning-context.ts` | 최근·선호 자료를 우선 참고. 원문의 사실을 새 글의 근거로 쓰지 않음. | learningContext |
@@ -61,8 +70,10 @@
 | `radar-sources.ts` |  | RadarPost, sourceAddress, radarFetch, collectRadarSource |
 | `radar.ts` | 관심 계정 바로가기. 외부 사이트 수집·AI 호출 없이 기존 계정도 그대로 표시. | RadarSource, radarState, saveRadarSource |
 | `readiness.ts` | 발행 준비 판정 (서버·화면 공용) — 항상 '지금 원고' 기준 | ReadyState, READY_LABEL, Readiness, placeholderNumbers, readiness |
+| `reel-fonts.ts` | 릴스 글꼴 파일 (구글 폰트 무료 한글 글꼴) | fontFile, ensureFont |
+| `reel-script.ts` | 릴스 AI 대본 | SCRIPT_FIELDS, ReelScriptInput, ReelScript, trendContext, writeReelScript |
 | `reel-study.ts` | 🔍 릴스 분석기 (맥 전용 처리, AI는 무료 Gemini) | StudyReel, StudyAnalysis, STUDY_CATEGORIES, listStudies, getStudy, addStudies, deleteStudy, setCategory … |
-| `reels.ts` | ✂️ 릴스 편집기 (맥 전용 처리) | ReelProject, FONT_FILE, listReels, getReel, createReel, deleteReel, saveDoc, run … |
+| `reels.ts` | ✂️ 릴스 편집기 (맥 전용 처리) | ReelProject, FONT_FILE, listReels, getReel, createBlankReel, addReelPhoto, createReel, deleteReel … |
 | `remote-read-limit.ts` | 웹사이트가 보낸 429를 존중. 같은 서버·계정들의 반복 읽기도 함께 잠시 멈춤. | remoteReadHost, RemoteReadLimited, assertRemoteReadAllowed, stopOnRemote429, remoteReadLimits |
 | `repo.ts` | 말투 예시 파일(사용 중인 것)을 붙인 블로그 — AI 작업 전용 | listBlogs, getBlog, getBlogForAi, getProject, getDocument, getVersion, listVersions, listIdeas … |
 | `repurpose-cards.ts` | 이미 만든 장별 문구를 편집 가능한 슬라이드로 옮김. AI 재생성 없음. | parseRepurposeCards |
@@ -74,12 +85,13 @@
 | `searchad.ts` | 네이버 검색광고 API - 키워드 도구 (월간 검색량·경쟁도·연관 키워드) | naverAdConnected, signature, KeywordStat, keywordStats, cachedStats |
 | `seasons.ts` | y년 m월의 n번째 요일(0=일) | SeasonTag, SeasonEvent, addDays, seasonEvents, LUNAR_YEARS, blogTags, seedsFor, KIND_LABEL |
 | `seed.ts` | 기본 역할 배정: 기획=Gemini, 원고=Claude, 검수=ChatGPT, 부분수정=Claude, 글감추천=Gemini | DEFAULT_MODELS, DEFAULT_ROLES, seedIfEmpty |
-| `seoichoo.ts` |  | SeoJob, seoJobs, queueSeo |
 | `series.ts` | 📺 시리즈 기획: 주인공·친구·주제 → N화를 한 번에 (화마다 제목·줄거리 3줄·8초 장면 프롬프트·유튜브 설명 2줄) | Episode, Series, listSeries, getSeries, createSeries, continueSeries, editEpisode, setCharacters … |
 | `settings.ts` | 기본 단가 (USD / 100만 토큰). 설정에서 직접 고치면 그 값이 우선합니다. | AppSettings, DEFAULT_PRICING, getSettings, saveSettings |
 | `steps.ts` | 글(프로젝트) 진행 단계 | StepKey, STEP_AI_LABEL, DEFAULT_STEP_AI, FALLBACK_MODELS, POST_STAGES, STEP_NAMES, stageLabel, stageStep |
 | `studio.ts` | 🎬 영상 제작 스튜디오 (쇼츠·릴스) | StudioImage, StudioClip, StudioScene, StudioPlan, StudioCharacter, StudioOptions, StudioProject, STUDIO_STYLES … |
 | `telegram.ts` | 💬 텔레그램 메시지함: 앱이 보낸 메시지(보낸 메시지함)와 봇에게 온 메시지·버튼(받은 메시지함)을 기록 | TgMessage, TG_KIND, tgBase, logTg, listTg, tgCounts, markInboxSeen, sendManual |
+| `thumb-types.ts` | 보드 위 요소. x·y 는 가운데 위치(0~1, 가로·세로 비율), w 는 가로 대비 너비(스티커·모양), size 는 글자 크기(px, 가로 1080 기준) | ThumbRatio, THUMB_RATIOS, THUMB_W, thumbH, ThumbShape, ThumbEl, ThumbGuides, ThumbDoc … |
+| `thumbs.ts` | 🖼 썸네일 공장 저장소 | thumbState, uploadThumbImage, saveThumbs |
 | `title-rules.ts` | 기호 금지는 공백으로 정리하고, 단어 금지를 어긴 후보는 사용하지 않음. 유료 재호출 없음. | DEFAULT_TITLE_FORBIDDEN, DEFAULT_TITLE_RULES, titleLists, parseTitleList, titleRulesText, forbiddenInTitle, cleanTitleCandidate |
 | `todos.ts` | ✅ 할 일 + 🔔 텔레그램 알림 | TODO_CATEGORIES, TodoCategory, categoryOf, Todo, kstToday, kstToDate, telegramConnected, listTodos … |
 | `top-posts.ts` | 블로그별 인기 글 TOP 10 | ViewItem, ViewKind, ViewsBlock, ReactionTop, viewsOf, captureDays, viewsOnDay, viewsInRange … |
@@ -123,9 +135,11 @@
 | `api/carousels/[id]/rewrite/route.ts` |  | GET, POST |
 | `api/carousels/[id]/route.ts` | 장면·캡션·해시태그·디자인 저장 | GET, PUT, POST, DELETE |
 | `api/carousels/[id]/sources/route.ts` |  | GET |
+| `api/carousels/[id]/video/[job]/route.ts` | 카드 AI 영상을 같은 주소로 전달 (브라우저 캔버스에 그려 MP4로 내보내려면 같은 출처여야 함) | GET |
 | `api/carousels/ideas/route.ts` | 알고리즘 타기 쉬운 캐러셀 주제 추천 | POST |
 | `api/carousels/route.ts` | 새 캐러셀: { projectId } 블로그 글에서 · { topic, niche, format, blogId } 주제로 | GET, POST |
 | `api/carousels/sources/refresh/route.ts` |  | POST |
+| `api/carousels/sources/search/route.ts` | 새 캐러셀 만들기: 고른 블로그의 예전 글 검색 ?blogId=&query=&start= | GET |
 | `api/convert/[id]/route.ts` | 결과 보기 · ?download=1 이면 .md 파일로 받기 | GET, DELETE |
 | `api/convert/route.ts` | 파일 올리기 (폼 'file', 여러 개 가능) → 맥에서 마크다운으로 | GET, POST |
 | `api/dashboard/balances/route.ts` | 충전 기록 추가: { provider, usd, at?, note? } · 지우기: { provider, remove: index } | GET, POST |
@@ -141,13 +155,14 @@
 | `api/export/route.ts` | 전체 백업 내보내기 (API 키는 DB에 저장하지 않으므로 포함되지 않음) | GET |
 | `api/ext/inbox/route.ts` | 🧩 확장 프로그램: ChatGPT·제미나이에서 보낸 글·사진 받기 {projectId, kind, html?, text?, image?(data URL), source} | POST |
 | `api/ext/posts/route.ts` | 🧩 확장 프로그램: 보낼 글 고르기 (최근 글 40개) — 연결 코드 확인은 proxy.ts | GET |
-| `api/ext/seoichoo/route.ts` | /api/ext/는 proxy.ts에서 기존 앱 연결 코드로 인증. 비밀번호/네이버 쿠키 전송 없음. | POST |
 | `api/extension-zip/route.ts` | 🧩 크롬 확장 프로그램 내려받기 (zip) — 윈도우 등 맥 폴더가 없는 컴퓨터용. 로그인한 사람만 (proxy.ts) | GET |
-| `api/health/route.ts` |  | GET |
+| `api/health/route.ts` | version: 지금 돌고 있는 배포의 커밋 (Render가 넣어 주는 RENDER_GIT_COMMIT) — "업데이트 됐나?" 확인용 | GET |
 | `api/hot/route.ts` | action: report(새 리포트) · approve(승인 → 글 만들기 시작) · skip(넘기기) | GET, POST |
 | `api/ideas/[id]/route.ts` |  | GET, PUT, DELETE |
 | `api/ideas/route.ts` | 아이디어 저장 (AI 호출 없음) | GET, POST |
 | `api/img/[id]/route.ts` | ChatGPT·Gemini로 만든 이미지 (로그인 없이 공개 — 블로그 글에 넣어도 보이도록. 아이디는 추측하기 어려움) | GET |
+| `api/instagram/insights/route.ts` | 📊 인스타 대시보드: 저장된 인사이트 (API 호출 없음) | GET, POST |
+| `api/instagram/route.ts` | GET ?estimate=reel → 예상 비용 · 그 외 → 기록 목록 + 내 말투 | GET, POST |
 | `api/keywords/route.ts` | recommend(① AI 추천) / add(직접 입력) / dismiss(목록에서 빼기) | GET, POST |
 | `api/learn/[id]/image/route.ts` |  | GET |
 | `api/learn/[id]/route.ts` |  | POST, PATCH |
@@ -165,10 +180,13 @@
 | `api/projects/[id]/versions/[vid]/route.ts` | 이 버전으로 되돌리기 | GET, POST |
 | `api/projects/[id]/versions/route.ts` | 원고 버전 목록 (내용 미리보기는 앞부분만) | GET, POST |
 | `api/radar/route.ts` |  | GET, POST |
+| `api/reels/[id]/photo/route.ts` | 릴스에 사진 올리기 { dataUrl } → { url } | POST |
 | `api/reels/[id]/render/route.ts` | 내보내기 (맥에서 Remotion으로 만들어 영상공장에 저장) | POST |
 | `api/reels/[id]/route.ts` | { doc, title? } 편집 저장 | GET, PUT, DELETE |
-| `api/reels/font/route.ts` | 미리보기용 글꼴 (내보내기와 같은 Noto Sans KR) | GET |
+| `api/reels/font/route.ts` | 미리보기용 글꼴 (내보내기와 같은 파일) ?f=글꼴id&w=굵기 — 처음 쓰는 글꼴은 이때 받아 둠 | GET |
 | `api/reels/route.ts` | { videoId } 영상공장 영상으로 릴스 편집 시작 (맥이 받아쓰기로 초안) | GET, POST |
+| `api/reels/script/route.ts` | 예상 비용 + 고른 분야에 저장된 트렌드 수 (AI 호출 없음) | GET, POST |
+| `api/reels/sources/route.ts` | 릴스 대본용 블로그 글 목록 — 캐러셀 '블로그 글에서 만들기'와 같은 목록 | GET |
 | `api/refs/route.ts` | 🎨 레퍼런스 사진 저장: 폼 'files'(최대 5장) 또는 JSON { url } (만든 이미지에서 고르기) → { ids } | POST |
 | `api/repurpose/[id]/route.ts` |  | GET, DELETE, POST |
 | `api/repurpose/route.ts` | action: load {postId/url} → 글 미리보기 · make {id?, title, text, blogId, postId, url, channels} → 초안 | GET, POST |
@@ -181,7 +199,6 @@
 | `api/routines/route.ts` | 새 루틴 · { action: "tick" } 지금 바로 한 번 처리 (실행 만들기·마감·발송) | GET, POST |
 | `api/routines/runs/[id]/route.ts` | JSON { action: item {itemId, done} / complete / snooze } · 폼 { itemId, file } 캡처 등록 | GET, POST |
 | `api/routines/runs/route.ts` | 실행 기록: ?from=&to=&status=&routine= | GET |
-| `api/seoichoo/route.ts` |  | GET, POST |
 | `api/series/[id]/route.ts` | action: continue {count} · edit {n, request} · characters {text} · queue {ns?} | GET, POST, DELETE |
 | `api/series/route.ts` | { hero, friend, theme, style, count } → N화 한 번에 | GET, POST |
 | `api/settings/brand/route.ts` | { name, mark, color } 저장 · { reset: true } 기본값으로 | GET, POST |
@@ -196,6 +213,8 @@
 | `api/study/[id]/route.ts` |  | GET, PUT, DELETE |
 | `api/study/route.ts` | { urls: [...], mine } 릴스 링크 넣기 (맥에서 받아쓰기·장면 사진 → 무료 Gemini 분석) | GET, POST |
 | `api/telegram/route.ts` | ?box=in/out → 메시지함 · 없으면 연결 상태 | GET, POST |
+| `api/thumbs/route.ts` | 썸네일 공장: 사진 목록·스티커·템플릿 | GET, PUT |
+| `api/thumbs/upload/route.ts` | 사진·스티커 올리기 { dataUrl, kind: photo/sticker } → { url } | POST |
 | `api/todos/[id]/route.ts` | 수정 · 완료(done: true/false) · 알림 켜기/끄기 | PUT, DELETE |
 | `api/todos/route.ts` |  | GET, POST |
 | `api/trash/route.ts` | action: trash(휴지통으로) / restore(되살리기) / purge(완전 삭제) / empty(휴지통 비우기) | GET, POST |
@@ -211,14 +230,14 @@
 | `calendar/CalendarView.tsx` | 연간 시즌 행사는 행사마다 확실히 다른 색 (그 달에 보이는 순서대로 하나씩 → 같이 보이는 행사끼리는 안 겹침) |  |
 | `calendar/page.tsx` |  | dynamic |
 | `carousels/BlogPostPicker.tsx` |  |  |
-| `carousels/CardZoom.tsx` |  |  |
 | `carousels/CarouselTextAI.tsx` |  |  |
-| `carousels/DesignPicker.tsx` |  |  |
 | `carousels/NewCarousel.tsx` |  |  |
-| `carousels/[id]/CarouselEditor.tsx` |  |  |
 | `carousels/[id]/page.tsx` |  | dynamic |
+| `carousels/motion-video.ts` | 그리기 함수(t: 0~1)로 seconds초 영상 만들기 | FPS, makeMotionVideo |
 | `carousels/page.tsx` |  | dynamic |
-| `carousels/render.ts` | 글자 너비에 맞춰 줄바꿈 (띄어쓰기 우선, 긴 단어는 글자 단위) | W, H, FONT, renderSlide, canvasBlob |
+| `carousels/studio/Studio.tsx` | 🎞 캐러셀 편집 툴 |  |
+| `carousels/studio/mockups.ts` | 회색 막대 (스켈레톤) — 반짝이는 빛이 지나감 | drawMockup, drawCursor |
+| `carousels/studio/scene-render.ts` | ==글자== 형광펜 표시를 빼고, 표시된 글자 위치를 함께 돌려줌 | FONT, layoutText, drawBackground, drawScene |
 | `convert/ConvertBoard.tsx` | 📄 문서 → 마크다운: 올리기 · 목록 · 결과 보기(복사·.md 받기·채널 변환으로) |  |
 | `convert/page.tsx` |  | dynamic |
 | `diagnose/DiagnoseView.tsx` | 네이버 홈피드(홈판) 체크포인트 — 네이버 공식 기준이 아니라 운영자들 사이에서 공통으로 말하는 요소 |  |
@@ -231,6 +250,9 @@
 | `hot/page.tsx` |  | dynamic |
 | `ideas/IdeaBoard.tsx` | 아이디어 → 할 일: 메모를 할 일 이름으로, 링크를 메모로 | todoHref, planHref, IDEA_CAT_LABEL |
 | `ideas/page.tsx` |  | dynamic |
+| `instagram/IgDashboard.tsx` | 팔로워 추이 (날짜별 저장된 숫자로 그린 작은 선 그래프) |  |
+| `instagram/IgOps.tsx` |  |  |
+| `instagram/page.tsx` |  | dynamic |
 | `layout.tsx` | 발행 대기(검수까지 끝난) 글 수 | dynamic, generateMetadata, viewport |
 | `learn/LearningBoard.tsx` |  |  |
 | `learn/[category]/page.tsx` |  | dynamic |
@@ -252,19 +274,19 @@
 | `posts/[id]/PostView.tsx` |  |  |
 | `posts/[id]/page.tsx` |  | dynamic |
 | `posts/page.tsx` |  | dynamic |
-| `reels/NewReel.tsx` | 새 릴스 편집: 영상공장 영상 고르기 또는 내 영상 올리기 |  |
-| `reels/[id]/ReelEditor.tsx` | 문서 바꾸기 (되돌리기 기록) |  |
+| `reels/AiScriptBox.tsx` | ✨ AI로 대본 만들기 — 저장된 트렌드를 넣어 Claude 최상위 모델로 대본 작성 (누를 때만, 예상 비용 확인 후) | AiScript |
+| `reels/BlogSourcePicker.tsx` | 릴스 대본용 블로그 글 고르기 — 캐러셀 '블로그 글에서 만들기'와 같은 모양·검색 방식 | BlogSource |
+| `reels/NewReel.tsx` | + 새 프로젝트: 빈 편집기로 바로 시작 (대본을 붙여넣으면 한 줄 = 장면 + 자막) — 영상·사진·음악은 편집기 '내 파일'에서 |  |
+| `reels/[id]/ReelEditor.tsx` | ✂️ 릴스 편집기 |  |
 | `reels/[id]/ops.ts` | 시각 a 이후 자막을 d초만큼 밀기 (d<0 이면 당김) | nid, sceneAt, splitScene, deleteScene, duplicateScene, resizeScene, patchScenes, setBg … |
 | `reels/[id]/page.tsx` |  | dynamic |
 | `reels/page.tsx` |  | dynamic |
-| `repurpose/RepurposeBoard.tsx` |  |  |
+| `repurpose/RepurposeBoard.tsx` | 릴스 대본(장면·화면·대사·자막)에서 자막 줄만 뽑기 — 자막이 없으면 대사, 그것도 없으면 일반 줄 |  |
 | `repurpose/page.tsx` | 내 블로그에 이미 올린 글 (RSS 최근 글) + 이 앱에서 만든 글 | dynamic |
 | `routines/RoutineBoard.tsx` | 재알림 횟수만큼 시각 칸 (모자라면 앞 시각 +2시간으로 채움, 넘치면 자름) | scheduleText |
 | `routines/page.tsx` |  | dynamic |
 | `routines/run/[id]/RunView.tsx` |  |  |
 | `routines/run/[id]/page.tsx` |  | dynamic |
-| `seoichoo/SeoBoard.tsx` |  |  |
-| `seoichoo/page.tsx` |  | dynamic |
 | `settings/BrandCard.tsx` | 왼쪽 위 로고 아이콘·이름 바꾸기 |  |
 | `settings/CopyText.tsx` | 값 + 복사 버튼 |  |
 | `settings/ExtensionCard.tsx` | 🧩 크롬 확장 프로그램 연결: 앱 주소 + 연결 코드 + 설치 방법 (로그인한 사람만 보는 설정 화면) |  |
@@ -286,6 +308,9 @@
 | `telegram/NotifyCard.tsx` | 알림 설정: 텔레그램 연결 상태 · 시험 메시지 · 방해 금지 · 아침 브리핑 · 발송 기록 |  |
 | `telegram/TelegramSetup.tsx` | 텔레그램 연결 도우미: 채팅 ID 찾기(메시지 안 보냄) · 시험 메시지(누를 때만) |  |
 | `telegram/page.tsx` |  | dynamic |
+| `thumbs/ThumbFactory.tsx` | 파일 → dataURL (사진은 긴 변 2400px JPG로 줄여서, 스티커는 투명 그대로 PNG) |  |
+| `thumbs/page.tsx` |  | dynamic |
+| `thumbs/render.ts` | 썸네일 그리기 (보드 미리보기와 PNG 저장이 같은 함수 → 보이는 그대로 저장) | injectFonts, ensureFonts, getImg, loadImg, Box, drawThumb, thumbPng |
 | `todos/TodoBoard.tsx` |  |  |
 | `todos/page.tsx` |  | dynamic |
 | `trash/TrashList.tsx` | 30일 자동 완전 삭제까지 남은 날 | TrashRow, MediaTrashRow |
@@ -309,16 +334,20 @@
 | `DocEditor.tsx` | 문서의 from~to 를 HTML 로 (표·목록·굵게 그대로) | EditorDoc |
 | `FeatureGate.tsx` | 설정에서 끈 기능의 페이지로 들어오면 내용 대신 안내 (데이터는 그대로 남아 있음) |  |
 | `FileToMarkdown.tsx` | 파일 올리기 → 맥에서 마크다운으로 바꿔질 때까지 기다림 | CONVERT_ACCEPT, convertFiles |
+| `FontPicker.tsx` | 공용: 무료 한글 글꼴 38종 고르기(팝업 미리보기) · HEX 색 입력 — 릴스 편집·썸네일 공장 | GLOWS, ColorField, FontPicker |
+| `HashtagInput.tsx` | 스페이스·쉼표·엔터를 누르면 태그가 확정되고 다음 # 이 자동으로 열려요. 여러 개를 붙여넣어도 같아요. |  |
 | `KitCard.tsx` | 🎨 블로그 이미지 컨셉 키트: 레퍼런스 사진 + 스타일 문구 + 내 캐릭터 → 이미지 만들 때마다 자동으로 붙음 |  |
 | `Nav.tsx` |  |  |
 | `PostedButton.tsx` | ✅ 게시함 표시: 인스타·유튜브에 실제로 올린 뒤 직접 누름 (앱이 대신 올리지 않음) |  |
 | `RefPicker.tsx` | 🎨 레퍼런스 사진 고르기: 올리기 · 만든 이미지에서 고르기 · 빼기 (사진은 /api/refs 에 저장되고 아이디만 돌려받음) | uploadRefs, refFromUrl |
 | `StyleSamples.tsx` |  |  |
+| `TextMotionPicker.tsx` | 글자 움직임 고르기 (릴스 편집·영상 편집 공용): 등장 · 계속 · 사라질 때 + ▶ 효과 보기 |  |
 | `TitleRulesEditor.tsx` |  | TitleRulesFields |
 | `TodayCost.tsx` | 오늘 쓴 AI 비용 (한국 시간 0시부터) — 단계별·모델별 (대시보드) |  |
 | `TrashButton.tsx` | 상세 화면의 🗑 휴지통으로 버튼 → 옮긴 뒤 목록으로 |  |
 | `TrashableList.tsx` | 목록 + 체크박스 → 🗑 휴지통으로 (휴지통에서 되살리기·완전 삭제) | TrashableItem |
 | `client-utils.tsx` | AI 선택기 (다른 AI로 재실행/재검수) | PROVIDERS, api, htmlToText, Diff, Modal, useToast, AiPicker |
+| `shortcuts.ts` | 글자를 치는 중인지 (글 상자·숫자 칸·편집 가능한 영역). 슬라이더·체크박스·버튼은 아님 | isTyping, undoKey, keyIs |
 | `ui.tsx` | 원화 환산 기준 환율 | fmtDate, KRW_PER_USD, REVENUE_KRW_PER_USD, fmtUsd, BlogTag, Steps |
 
 ## scripts
@@ -340,6 +369,6 @@
 | `fake-esrgan.sh` |  |  |
 | `fake-rife.sh` |  |  |
 | `mock-ai-server.mjs` | 개발·테스트용 모의 AI 서버: OpenAI / Anthropic / Google 공식 API의 요청·응답 형식을 흉내 냅니다. |  |
+| `post-images.test.mjs` | 블로그 글 사진 고르기: 링크 카드(다른 글 미리보기) 썸네일·본문 아래 다른 글 사진은 빼기 |  |
 | `run-isolated.sh` |  |  |
-| `seo-extension.test.mjs` |  |  |
 | `workflow.test.mjs` | 통합 테스트 (AI 미연결 상태): 7단계 흐름이 끊기지 않고, 데이터를 지어내지 않는지 확인 |  |

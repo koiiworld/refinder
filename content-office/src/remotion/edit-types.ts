@@ -50,7 +50,7 @@ export type EditDoc = {
   texts: ReelText[];
   muteClips: boolean; // 클립 오디오 음소거
 };
-export type EditProps = { doc: EditDoc; srcs: Record<string, string>; fontUrl: string; scale?: number };
+export type EditProps = { doc: EditDoc; srcs: Record<string, string>; fontUrl: string; fontUrls?: Record<string, string>; scale?: number };
 /** 내보낼 크기 (짝수 정수): 720p 2/3 · 1080p 1 · 2K 4/3 · 4K 2 배 */
 export const outSize = (ratio: Ratio, scale = 1): [number, number] => {
   const [w, h] = RATIO_SIZE[ratio] ?? [1080, 1920];
