@@ -1,3 +1,4 @@
+import fs from "node:fs";
 // 개발·테스트용 모의 AI 서버: OpenAI / Anthropic / Google 공식 API의 요청·응답 형식을 흉내 냅니다.
 // 실제 API 키 없이 앱의 'AI 연결됨' 경로(요청 형식, 응답 파싱, 재시도, 토큰·비용 기록)를 검증합니다.
 // 사용법: node tests/mock-ai-server.mjs  (기본 포트 4010)
@@ -140,6 +141,22 @@ http
       });
     }
     // 한국 공휴일 달력(ICS) — 선거일 포함
+    // 모의 Openverse (무료 음원 검색)
+    if (url.pathname.startsWith("/openverse/")) {
+      const ovj = (code, obj) => { res.writeHead(code, { "content-type": "application/json" }); return res.end(JSON.stringify(obj)); };
+      const base = `http://localhost:${PORT}`;
+      const items = [
+        { id: "aaaaaaaa-0000-0000-0000-000000000001", title: "Happy Piano", creator: "Kim", license: "by", license_version: "4.0", license_url: "https://creativecommons.org/licenses/by/4.0/", source: "jamendo", url: `${base}/openverse-file/a.mp3`, duration: 95000, foreign_landing_url: "https://www.jamendo.com/track/1" },
+        { id: "aaaaaaaa-0000-0000-0000-000000000002", title: "Free Rain", creator: "Lee", license: "cc0", license_version: "1.0", source: "freesound", url: `${base}/openverse-file/a.mp3`, duration: 30000, foreign_landing_url: "https://freesound.org/s/2" },
+        { id: "aaaaaaaa-0000-0000-0000-000000000003", title: "No Derivs", creator: "Park", license: "by-nd", license_version: "4.0", source: "jamendo", url: `${base}/openverse-file/a.mp3`, duration: 60000 },
+        { id: "aaaaaaaa-0000-0000-0000-000000000004", title: "Share Alike", creator: "Choi", license: "by-sa", license_version: "3.0", source: "jamendo", url: `${base}/openverse-file/a.mp3`, duration: 60000 },
+      ];
+      if (url.pathname === "/openverse/v1/audio/") return ovj(200, { result_count: items.length, page_count: 1, results: items });
+      const m = /^\/openverse\/v1\/audio\/([0-9a-f-]+)\/$/.exec(url.pathname);
+      if (m) { const it = items.find((x) => x.id === m[1]); return it ? ovj(200, it) : ovj(404, { detail: "not found" }); }
+      return ovj(404, {});
+    }
+    if (url.pathname === "/openverse-file/a.mp3") { res.writeHead(200, { "content-type": "audio/mpeg" }); return res.end(fs.readFileSync(process.env.SAMPLE_MP4)); }
     // 모의 인스타그램 API (Instagram 로그인 방식)
     if (url.pathname.startsWith("/ig/")) {
       const igj = (code, obj) => { res.writeHead(code, { "content-type": "application/json" }); return res.end(JSON.stringify(obj)); };

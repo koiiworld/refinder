@@ -10,6 +10,7 @@ import { docDuration, faceKey, fontFaces, fontRoute, fontFamily, GUIDE_BOX, REEL
 import * as op from "./ops";
 import { ColorField, FontPicker, GLOWS } from "@/components/FontPicker";
 import TextMotionPicker from "@/components/TextMotionPicker";
+import MusicSearch from "@/components/MusicSearch";
 import AiScriptBox from "../AiScriptBox";
 
 /**
@@ -55,6 +56,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
   const [quality, setQuality] = useState<"720" | "1080">("720");
   const [projects, setProjects] = useState<{ id: string; title: string; created_at: string }[]>([]);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
   const player = useRef<PlayerRef>(null), out = useRef<PlayerRef>(null);
   const overlay = useRef<HTMLDivElement>(null), tl = useRef<HTMLDivElement>(null);
 
@@ -398,6 +400,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
         </div>
       </div>
       {(err || info.status === "error") && <div className="notice notice-bad small">{err || info.message}</div>}
+      {note && <div className="notice small" role="status">{note} <button className="btn btn-sm btn-ghost" onClick={() => setNote("")}>닫기</button></div>}
       {info.output_video_id && info.status !== "rendering" && <div className="notice notice-ok small row between">마지막으로 뽑은 영상이 영상공장에 있어요. <Link style={{ color: "var(--accent)" }} href={`/videos/${info.output_video_id}`}>열기 · 받기 →</Link></div>}
 
       <div style={{ display: "grid", gridTemplateColumns: "270px minmax(0, 1fr) 320px", gap: 10, alignItems: "start" }} className="reel-main3">
@@ -414,6 +417,21 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
                   <div className="tiny muted">눌러서 고르거나 끌어다 놓기, Ctrl+V</div>
                   <input type="file" accept="video/*,audio/*,image/*" hidden onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} />
                 </label>
+                <details className="card" style={{ padding: 8 }}>
+                  <summary className="small"><b>🔍 무료 음원 찾기</b> <span className="tiny muted">(CC0·CC BY만)</span></summary>
+                  <div style={{ marginTop: 8 }}>
+                    <MusicSearch onPick={async (m) => {
+                      try {
+                        const list = await api<{ videos: (FileVideo & { status: string; thumb_path: string | null })[] }>("/api/videos");
+                        setFiles(list.videos.filter((v) => v.status === "ready").map((v) => ({ id: v.id, title: v.title, kind: v.kind, duration: v.duration, thumb: !!v.thumb_path })));
+                      } catch { /* 목록은 다음에 */ }
+                      setPickFile(m.videoId);
+                      // 소리 트랙으로 바로 넣고, 출처가 필요하면 메모에 출처 문구를 붙여 둠
+                      setDoc((d) => ({ ...d, music: { videoId: m.videoId, from: 0, volume: 0.8 }, ...(m.credit ? { memo: `${d.memo ? d.memo + "\n" : ""}[캡션에 넣을 음원 출처] ${m.credit}` } : {}) }));
+                      setErr(""); setNote(m.credit ? `🎵 '${m.title}'을(를) 소리 트랙에 넣었어요. CC BY 라서 캡션에 출처를 적어야 해요 — 오른쪽 '메모' 탭에 출처 문구를 붙여 뒀어요.` : `🎵 '${m.title}'을(를) 소리 트랙에 넣었어요 (CC0, 출처 안 적어도 돼요).`);
+                    }} />
+                  </div>
+                </details>
                 {upload && <div className="tiny">올리는 중 {upload.pct}% · {upload.name}</div>}
                 <span className="tiny muted">올린 파일은 원본 그대로 써요. 파일을 고른 뒤 아래 버튼으로 쓰세요.</span>
                 {!!(doc.photos ?? []).length && <b className="tiny">이 릴스 사진</b>}

@@ -2578,3 +2578,17 @@ test('🔤 글꼴: 구글이 조각으로 나눠 주면(한글 빠진 조각) �
  const r=await fetch(`${BASE}/api/reels/font?f=hahmlet&w=400&v=2`);const n=(await r.arrayBuffer()).byteLength;
  assert.notEqual(n,4096,'조각 파일을 저장해 쓰면 안 됨');
 });
+
+test('🔍 무료 음원 찾기: CC0·CC BY만 보이고, 가져오면 저장소에 음악으로 · CC BY는 출처 문구', async()=>{
+ const s=await call('/api/music/search?q=piano&kind=music');assert.equal(s.status,200,JSON.stringify(s.data));
+ assert.deepEqual(s.data.hits.map(h=>h.license).sort(),['by','cc0'],'ND·SA는 걸러짐');
+ const sent=(await mockLog()).filter(l=>String(l.path).startsWith('/openverse/v1/audio')).at(-1);assert.ok(sent);
+ assert.equal((await call('/api/music/search?q=')).status,502,'빈 검색어');
+ const by=s.data.hits.find(h=>h.license==='by');
+ const im=await call('/api/music/import','POST',{id:by.id});assert.equal(im.status,200,JSON.stringify(im.data));
+ assert.match(im.data.videoId,/^vid_/);assert.match(im.data.credit,/Happy Piano.*Kim.*CC BY 4\.0/);
+ const v=(await call('/api/videos')).data.videos.find(x=>x.id===im.data.videoId);assert.ok(v);assert.equal(v.status,'ready');assert.match(v.title,/^🎵 Happy Piano/);
+ const cc0=await call('/api/music/import','POST',{id:'aaaaaaaa-0000-0000-0000-000000000002'});assert.equal(cc0.status,200);assert.equal(cc0.data.credit,'','CC0는 출처 필요 없음');
+ const nd=await call('/api/music/import','POST',{id:'aaaaaaaa-0000-0000-0000-000000000003'});assert.equal(nd.status,502,'ND는 가져오기도 막음');
+ assert.equal((await call('/api/music/import','POST',{id:'../../etc'})).status,502);
+});

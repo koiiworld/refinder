@@ -63,6 +63,7 @@
 | `media.ts` | 모델별 요청 본문 (공식 문서 스키마 기준: docs.higgsfield.ai 모델별 generate 페이지) | MediaJob, buildBody, pathFor, estimateMedia, createMediaJob, getMediaJob, listMediaJobs, refreshMediaJob … |
 | `menu.ts` | 끈 기능 목록: 그룹은 'g:insta', 페이지는 '/hot' 처럼 | MenuItem, MenuGroup, MENU_TOP, MENU_GROUPS, MENU_BOTTOM, FeatureOff, isOffPath, itemOff |
 | `model-catalog.ts` | 이미지 모델 단가 (USD / 100만 토큰, 각 사 가격표 2026-11 확인) — 이미지 출력 토큰이 비용 대부분 | CatalogModel, MODEL_CATALOG, IMAGE_PRICING, catalogPricing |
+| `music-search.ts` | 🔍 무료 음원 찾기 (Openverse — 키 없이 쓰는 공개 검색. 음악은 Jamendo, 효과음은 Freesound) | OK_LICENSES, MusicLicense, LICENSE_LABEL, MusicHit, searchMusic, importMusic |
 | `official-images.ts` | 제조사 공식 페이지에서 제품 이미지 후보 찾기 | extractImages, findOfficialImages, checkImageUrl |
 | `post-bundle.ts` | 글 상세 화면 데이터. 생성 중인 이미지는 Higgsfield 에 상태를 물어 갱신 | postBundle, PostBundle |
 | `posts-types.ts` | 📰 핫이슈 리포트에서 승인한 글감 (제목·글 작성에 함께 전달) | PostPlan, PostOutline, PostBrief, PostImage, PostExtras, ImageConcept |
@@ -171,6 +172,8 @@
 | `api/login/route.ts` |  | POST |
 | `api/media/[id]/route.ts` | 상태 조회 (진행 중이면 Higgsfield 에 물어 갱신) | GET, POST |
 | `api/media/route.ts` | Higgsfield 생성 요청 (크레딧 차감) | GET, POST |
+| `api/music/import/route.ts` | 고른 음원 가져오기 { id } → { videoId, credit } (영상공장 저장소에 저장) | POST |
+| `api/music/search/route.ts` | 무료 음원 찾기 ?q=&kind=music/sfx&license=all/cc0/by&page= (CC0·CC BY만) | GET |
 | `api/posts/[id]/inbox/route.ts` | 📥 이 글로 받은 내용 | GET, POST |
 | `api/posts/[id]/route.ts` |  | GET, POST, DELETE |
 | `api/posts/route.ts` | ② 선택한 키워드로 글 만들기 → ③④⑥ 자동 진행 | GET, POST |
@@ -337,6 +340,7 @@
 | `FontPicker.tsx` | 공용: 무료 한글 글꼴 38종 고르기(팝업 미리보기) · HEX 색 입력 — 릴스 편집·썸네일 공장 | GLOWS, ColorField, FontPicker |
 | `HashtagInput.tsx` | 스페이스·쉼표·엔터를 누르면 태그가 확정되고 다음 # 이 자동으로 열려요. 여러 개를 붙여넣어도 같아요. |  |
 | `KitCard.tsx` | 🎨 블로그 이미지 컨셉 키트: 레퍼런스 사진 + 스타일 문구 + 내 캐릭터 → 이미지 만들 때마다 자동으로 붙음 |  |
+| `MusicSearch.tsx` | 🔍 무료 음원 찾기 (릴스 편집·영상 편집 공용) | PickedMusic |
 | `Nav.tsx` |  |  |
 | `PostedButton.tsx` | ✅ 게시함 표시: 인스타·유튜브에 실제로 올린 뒤 직접 누름 (앱이 대신 올리지 않음) |  |
 | `RefPicker.tsx` | 🎨 레퍼런스 사진 고르기: 올리기 · 만든 이미지에서 고르기 · 빼기 (사진은 /api/refs 에 저장되고 아이디만 돌려받음) | uploadRefs, refFromUrl |

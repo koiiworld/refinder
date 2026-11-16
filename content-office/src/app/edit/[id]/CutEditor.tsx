@@ -9,6 +9,7 @@ import { Edit } from "@/remotion/Edit";
 import { DEFAULT_TEXT_STYLE, faceKey, fontFaces, fontRoute, type ReelText } from "@/remotion/types";
 import { FontPicker } from "@/components/FontPicker";
 import TextMotionPicker from "@/components/TextMotionPicker";
+import MusicSearch from "@/components/MusicSearch";
 import { clipLen, clipStarts, editDuration, FILTERS, RATIO_SIZE, TRANSITIONS, type AudioClip, type Clip, type EditDoc, type Filter, type Overlay, type Ratio, type Transition } from "@/remotion/edit-types";
 
 type Media = { id: string; title: string; duration: number | null; thumb: boolean; kind: string };
@@ -77,6 +78,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   const [pickFor, setPickFor] = useState<"append" | "overlay" | "audio" | null>(null);
   const [res, setRes] = useState<(typeof RES)[number]>("1080p");
   const [err, setErr] = useState("");
+  const [musicCredit, setMusicCredit] = useState("");
   const [pps, setPps] = useState(60); // 1초 = px
   const player = useRef<PlayerRef>(null);
   const fontUrls = useMemo(() => Object.fromEntries(fontFaces().map(({ id, w }) => [faceKey(id, w), fontRoute(id, w)])), []);
@@ -588,6 +590,30 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
                 <button className="cut-btn" onClick={() => setDoc((d) => ({ ...d, muteClips: !d.muteClips }))}>{doc.muteClips ? "🔊 클립 소리 켜기" : "🔇 클립 소리 끄기"}</button>
               </div>
               <span className="cut-hint">영상공장에 있는 영상의 소리나 올린 음악(mp3·m4a·wav)을 넣어요. 글을 읽어 주는 목소리는 아래 'AI 음성'에서.</span>
+              <details>
+                <summary style={{ cursor: "pointer", fontSize: 13 }}><b>🔍 무료 음원 찾기</b> <span className="cut-hint">(CC0·CC BY만)</span></summary>
+                <div style={{ marginTop: 8 }}>
+                  <MusicSearch dark onPick={async (m) => {
+                    try {
+                      const list = await api<{ videos: { id: string; title: string; duration: number | null; thumb_path: string | null; kind: string; status: string }[] }>("/api/videos");
+                      setMedia(list.videos.filter((v) => v.status === "ready").map((v) => ({ id: v.id, title: v.title, duration: v.duration, thumb: !!v.thumb_path, kind: v.kind })));
+                    } catch { /* 목록은 다음에 */ }
+                    // 지금 재생 위치에 오디오로 넣기
+                    const id = sid();
+                    const len = Math.max(1, Math.min(600, m.duration ?? 30));
+                    setDoc((d) => ({ ...d, audios: [...d.audios, { id, src: m.videoId, start: r2(t), in: 0, dur: r2(len), volume: 0.8, label: `🎵 ${m.title}` }] }));
+                    setSel({ kind: "audio", id }); setErr("");
+                    setMusicCredit(m.credit);
+                  }} />
+                  {musicCredit && (
+                    <div className="stack" style={{ gap: 4, marginTop: 8 }}>
+                      <span className="cut-hint">CC BY 음원이라 <b>릴스 캡션에 아래 출처를 적어야</b> 해요.</span>
+                      <textarea className="cut-input" readOnly rows={2} value={musicCredit} aria-label="음원 출처 문구" />
+                      <button className="cut-btn" style={{ alignSelf: "flex-start" }} onClick={async () => { try { await navigator.clipboard.writeText(musicCredit); } catch { /* 직접 복사 */ } }}>📋 출처 복사</button>
+                    </div>
+                  )}
+                </div>
+              </details>
             </div>
           )}
           {panel === "caption" && (
