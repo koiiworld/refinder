@@ -168,6 +168,47 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
     setFrame(f);
   };
   const seek = (sec: number) => { const f = Math.max(0, Math.min(frames - 1, Math.round(sec * fps))); player.current?.seekTo(f); setFrame(f); };
+  /**
+   * 재생 위치 옮기기 (마우스로도 쉽게)
+   * - 타임라인 빈 곳·눈금을 잡고 좌우로 끌기 → 재생 위치가 따라감 (재생 중이면 멈춤)
+   * - 눈금(시간 줄)을 누르면 그 시간으로 바로 이동
+   * - 마우스 휠을 굴려도 좌우로 이동
+   */
+  const scrub = useRef<{ x: number; left: number; moved: boolean; ruler: boolean } | null>(null);
+  const justScrubbed = useRef(false);
+  const scrubDown = (e: React.PointerEvent) => {
+    const el = tl.current;
+    if (!el || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest(".cut-clip, .cut-blk, .cut-add, .cut-addrow, .cut-h, button")) return;
+    if (player.current?.isPlaying()) player.current.pause();
+    scrub.current = { x: e.clientX, left: el.scrollLeft, moved: false, ruler: !!(e.target as HTMLElement).closest(".cut-ruler") };
+    el.setPointerCapture?.(e.pointerId);
+  };
+  const scrubMove = (e: React.PointerEvent) => {
+    const s = scrub.current, el = tl.current;
+    if (!s || !el) return;
+    const dx = e.clientX - s.x;
+    if (Math.abs(dx) > 3) s.moved = true;
+    if (s.moved) el.scrollLeft = s.left - dx; // onScroll 이 재생 위치를 맞춤
+  };
+  const scrubUp = (e: React.PointerEvent) => {
+    const s = scrub.current, el = tl.current;
+    scrub.current = null;
+    if (!s || !el) return;
+    if (s.moved) { justScrubbed.current = true; setTimeout(() => (justScrubbed.current = false), 0); return; }
+    if (s.ruler) {
+      // 눈금을 누른 곳의 시간으로 (가운데 고정선이 그 시간에 오게)
+      const r = el.getBoundingClientRect();
+      const sec = (e.clientX - r.left + el.scrollLeft - el.clientWidth / 2) / pps;
+      seek(Math.max(0, Math.min(total, sec)));
+      justScrubbed.current = true; setTimeout(() => (justScrubbed.current = false), 0);
+    }
+  };
+  const onWheel = (e: React.WheelEvent) => {
+    const el = tl.current;
+    if (!el || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    el.scrollLeft += e.deltaY;
+  };
   const toggle = () => (player.current?.isPlaying() ? player.current.pause() : player.current?.play());
   // 구간만 재생 (글자 효과 보기): 끝나면 멈춤
   const playRange = (from: number, to: number) => {
@@ -315,6 +356,8 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (["INPUT", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
       if (e.key === " ") { e.preventDefault(); toggle(); }
+      // ←/→ 한 프레임, Shift 누르면 1초 (재생 중이면 멈추고 이동)
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); if (player.current?.isPlaying()) player.current.pause(); seek(t + (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 1 : 1 / fps)); }
       if (keyIs(e, "s")) split();
       if (e.key === "Delete" || e.key === "Backspace") remove();
     };
@@ -382,7 +425,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
           <div className="cut-side-ic"><Ico n="audio" s={16} /></div>
           <div className="cut-side-ic"><Ico n="text" s={16} /></div>
         </div>
-        <div className="cut-tl" ref={tl} onScroll={onScroll} onPointerMove={move} onPointerUp={up} onClick={() => { setSel(null); setPanel(null); }}>
+        <div className="cut-tl" ref={tl} onScroll={onScroll} onWheel={onWheel} onPointerDown={scrubDown} onPointerMove={(e) => { scrubMove(e); move(e); }} onPointerUp={(e) => { scrubUp(e); up(); }} onClick={() => { if (justScrubbed.current) return; setSel(null); setPanel(null); }} title="빈 곳을 잡고 좌우로 끌거나, 위 시간 눈금을 누르거나, 휠을 굴려 재생 위치를 옮겨요">
           <div style={{ width: total * pps + half * 2, position: "relative", paddingLeft: half }}>
             <div className="cut-ruler" style={{ marginLeft: -half }}>{Array.from({ length: Math.ceil(total) + 1 }, (_, s) => (pps >= 40 || s % 2 === 0) && <span key={s} style={{ left: half + s * pps }}>{s % 2 === 0 ? fmt(s) : "·"}</span>)}</div>
             <div className="cut-row main" style={{ marginLeft: -half }}>

@@ -7,7 +7,7 @@ export default function TextMotionPicker({ s, onStyle, onPreview, chip = "seg" }
   const row = (label: string, list: [string, string][], cur: string, set: (v: string) => void) => (
     <div className="stack" style={{ gap: 3 }}>
       <span className="tiny muted">{label}</span>
-      <div className={chip} style={{ flexWrap: "wrap" }}>
+      <div className={chip === "cut-chips" ? "cut-chips scroll" : chip} style={chip === "cut-chips" ? undefined : { flexWrap: "wrap" }}>
         {list.map(([v, l]) => <button key={v} type="button" className={cur === v ? "on" : ""} onClick={() => set(v)}>{l}</button>)}
       </div>
     </div>

@@ -640,7 +640,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cut-blk.tx { background: #c2552f; }
 .cut-playhead { position: absolute; top: 0; bottom: 0; left: calc(84px + (100% - 84px) / 2); width: 2px; background: #fff; pointer-events: none; z-index: 3; }
 .cut-panel { background: var(--cut-panel); border-top: 1px solid var(--cut-line); padding: 10px 14px; max-height: 26vh; overflow-y: auto; flex-shrink: 0; }
-.cut.has-panel .cut-tl-wrap { height: 150px; }
+/* 편집 칸이 열려도 타임라인(글자·오디오 줄)은 가리지 않고, 대신 미리보기 화면을 조금 줄임 */
+.cut.has-panel .cut-stage { min-height: 22vh; }
+.cut-ruler { cursor: pointer; }
+.cut-tl { cursor: grab; }
+.cut-tl:active { cursor: grabbing; }
+.cut-chips.scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+.cut-chips.scroll > * { flex: 0 0 auto; }
 .cut-stage { min-height: 30vh; }
 .cut-icon svg, .cut-side-btn svg { display: block; }
 .cut-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
