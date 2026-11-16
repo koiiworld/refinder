@@ -2573,3 +2573,8 @@ test('🪽 글자 움직임: 나타날 때·떠 있는 동안·사라질 때·�
  const st=(await call('/api/reels/'+r.data.id)).data.doc.texts[0].style;
  assert.equal(st.anim,'letters');assert.equal(st.loop,'wave');assert.equal(st.out,'flyRight');assert.equal(st.font,'gaegu');
 });
+
+test('🔤 글꼴: 구글이 조각으로 나눠 주면(한글 빠진 조각) 그 파일은 쓰지 않음', async()=>{
+ const r=await fetch(`${BASE}/api/reels/font?f=hahmlet&w=400&v=2`);const n=(await r.arrayBuffer()).byteLength;
+ assert.notEqual(n,4096,'조각 파일을 저장해 쓰면 안 됨');
+});

@@ -97,6 +97,9 @@ export const fontFaces = (ids?: Iterable<string>) => {
   return REEL_FONTS.filter((f) => !want || want.has(f.id)).flatMap((f) => (f.file ? [{ id: f.id, w: 0 }] : (f.weights ?? [400]).map((w) => ({ id: f.id, w }))));
 };
 export const faceKey = (id: string, w: number) => (w ? `${id}-${w}` : id);
+/** 미리보기용 글꼴 주소 (v 를 올리면 브라우저가 예전에 받아 둔 글꼴을 버리고 새로 받음) */
+export const FONT_VER = 2;
+export const fontRoute = (id: string, w: number) => `/api/reels/font?f=${id}${w ? `&w=${w}` : ""}&v=${FONT_VER}`;
 
 /** 글자 꾸미기 한 번에 (속성 칸 위 버튼들) */
 export const TEXT_PRESETS: { id: string; label: string; style: Partial<ReelTextStyle> }[] = [

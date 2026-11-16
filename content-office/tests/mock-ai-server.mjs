@@ -160,6 +160,8 @@ http
       }
       return igj(404, { error: { message: "not found" } });
     }
+    // 한글 글꼴을 조각(unicode-range)으로 주는 경우 → 앱이 이 파일을 쓰면 안 됨
+    if (url.pathname === "/fonts-css" && /Hahmlet/.test(url.search)) { log.push({ path: url.pathname + url.search }); res.writeHead(200, { "content-type": "text/css" }); return res.end(`@font-face { src: url(http://localhost:${PORT}/fontfile/x.ttf) format('truetype'); unicode-range: U+0-ff; }\n@font-face { src: url(http://localhost:${PORT}/fontfile/y.ttf) format('truetype'); unicode-range: U+ac00-d7a3; }`); }
     if (url.pathname === "/fonts-css") { log.push({ path: url.pathname + url.search }); res.writeHead(200, { "content-type": "text/css" }); return res.end(`@font-face { font-family: 'X'; src: url(http://localhost:${PORT}/fontfile/x.ttf) format('truetype'); }`); }
     if (url.pathname === "/fontfile/x.ttf") { res.writeHead(200, { "content-type": "font/ttf" }); return res.end(Buffer.alloc(4096, 7)); }
     if (url.pathname === "/kr-holidays.ics") {

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { api, Modal } from "@/components/client-utils";
 import { Edit } from "@/remotion/Edit";
-import { DEFAULT_TEXT_STYLE, faceKey, fontFaces, type ReelText } from "@/remotion/types";
+import { DEFAULT_TEXT_STYLE, faceKey, fontFaces, fontRoute, type ReelText } from "@/remotion/types";
 import { FontPicker } from "@/components/FontPicker";
 import TextMotionPicker from "@/components/TextMotionPicker";
 import { clipLen, clipStarts, editDuration, FILTERS, RATIO_SIZE, TRANSITIONS, type AudioClip, type Clip, type EditDoc, type Filter, type Overlay, type Ratio, type Transition } from "@/remotion/edit-types";
@@ -79,7 +79,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   const [err, setErr] = useState("");
   const [pps, setPps] = useState(60); // 1초 = px
   const player = useRef<PlayerRef>(null);
-  const fontUrls = useMemo(() => Object.fromEntries(fontFaces().map(({ id, w }) => [faceKey(id, w), `/api/reels/font?f=${id}${w ? `&w=${w}` : ""}`])), []);
+  const fontUrls = useMemo(() => Object.fromEntries(fontFaces().map(({ id, w }) => [faceKey(id, w), fontRoute(id, w)])), []);
   const tl = useRef<HTMLDivElement>(null);
   const programmatic = useRef(false);
   const [tlW, setTlW] = useState(600);

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { api } from "@/components/client-utils";
 import { Reel } from "@/remotion/Reel";
-import { docDuration, faceKey, fontFaces, fontFamily, GUIDE_BOX, REEL_FONTS, sceneStarts, TEXT_PRESETS, type ReelBg, type ReelDoc, type ReelOverlay, type ReelText, type ReelTextStyle } from "@/remotion/types";
+import { docDuration, faceKey, fontFaces, fontRoute, fontFamily, GUIDE_BOX, REEL_FONTS, sceneStarts, TEXT_PRESETS, type ReelBg, type ReelDoc, type ReelOverlay, type ReelText, type ReelTextStyle } from "@/remotion/types";
 import * as op from "./ops";
 import { ColorField, FontPicker, GLOWS } from "@/components/FontPicker";
 import TextMotionPicker from "@/components/TextMotionPicker";
@@ -67,7 +67,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
     const ids = new Set<string>([doc.baseVideoId, ...doc.scenes.map((s) => s.video.videoId), ...(doc.overlays ?? []).map((o) => o.videoId)].filter(Boolean) as string[]);
     return Object.fromEntries(Array.from(ids).map((id) => [id, `/api/videos/${id}/file`]));
   }, [doc]);
-  const fontUrls = useMemo(() => Object.fromEntries(fontFaces().map(({ id, w }) => [faceKey(id, w), `/api/reels/font?f=${id}${w ? `&w=${w}` : ""}`])), []);
+  const fontUrls = useMemo(() => Object.fromEntries(fontFaces().map(({ id, w }) => [faceKey(id, w), fontRoute(id, w)])), []);
   const inputProps = useMemo(() => ({ doc, srcs, fontUrl: "/api/reels/font", fontUrls }), [doc, srcs, fontUrls]);
   const busy = info.status === "analyzing" || info.status === "rendering";
 

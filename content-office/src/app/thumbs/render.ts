@@ -1,6 +1,6 @@
 "use client";
 
-import { faceKey, fontFaces, fontFamily } from "@/remotion/types";
+import { faceKey, fontFaces, fontFamily, fontRoute } from "@/remotion/types";
 import { THUMB_W, thumbH, type ThumbDoc, type ThumbEl } from "@/lib/thumb-types";
 
 /** 썸네일 그리기 (보드 미리보기와 PNG 저장이 같은 함수 → 보이는 그대로 저장) */
@@ -10,7 +10,7 @@ let fontsInjected = false;
 export function injectFonts() {
   if (fontsInjected || typeof document === "undefined") return;
   fontsInjected = true;
-  const css = fontFaces().map(({ id, w }) => `@font-face { font-family: '${fontFamily(id)}'; src: url('/api/reels/font?f=${id}${w ? `&w=${w}` : ""}'); font-weight: ${w || "100 900"}; font-display: swap; }`).join("\n");
+  const css = fontFaces().map(({ id, w }) => `@font-face { font-family: '${fontFamily(id)}'; src: url('${fontRoute(id, w)}'); font-weight: ${w || "100 900"}; font-display: swap; }`).join("\n");
   const st = document.createElement("style");
   st.id = "thumb-fonts";
   st.textContent = css;
