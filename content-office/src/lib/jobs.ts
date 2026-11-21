@@ -78,9 +78,9 @@ export function ensureWorker() {
 }
 
 /** 영상 작업(다운로드·인코딩): 맥이 켜져 있으면 맥이 먼저 맡음 (Render 무료 서버는 CPU가 아주 약함) */
-export const VIDEO_JOBS = ["video_fetch", "video_edit", "studio_plan", "studio_character", "studio_scene", "studio_render"];
+export const VIDEO_JOBS = ["video_fetch", "video_fetch_mac", "video_edit", "studio_plan", "studio_character", "studio_scene", "studio_render"];
 const ON_RENDER = !!process.env.RENDER;
-export const MAC_ONLY_JOBS = ["reel_analyze", "reel_render", "reel_study", "edit_render", "edit_captions", "edit_reverse", "edit_fx", "edit_tts", "doc_convert"];
+export const MAC_ONLY_JOBS = ["video_fetch_mac", "reel_analyze", "reel_render", "reel_study", "edit_render", "edit_captions", "edit_reverse", "edit_fx", "edit_tts", "doc_convert"];
 const hb = globalThis as unknown as { __macAlive?: { at: number; alive: boolean }; __macBeat?: number };
 /** 맥이 켜져 있고, 영상을 같은 저장소(Supabase)에 넣을 수 있을 때만 맥에 영상 작업을 맡김 */
 async function macAlive() {
@@ -232,6 +232,11 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
   },
   // 🎬 영상공장: 링크에서 받기 · 편집본 만들기
   async video_fetch(job) {
+    const { runVideoFetch } = await import("./videos");
+    await runVideoFetch(String(job.payload.videoId), job.payload.removeSubs !== false);
+  },
+  // 유튜브가 인터넷 서버(Render)를 막았을 때: 맥에서만 받기
+  async video_fetch_mac(job) {
     const { runVideoFetch } = await import("./videos");
     await runVideoFetch(String(job.payload.videoId), job.payload.removeSubs !== false);
   },

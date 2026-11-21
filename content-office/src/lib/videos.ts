@@ -259,6 +259,16 @@ export async function runVideoFetch(videoId: string, removeSubs: boolean) {
     const { markFail, markOk } = await import("./health");
     if (r.code !== 0 || !src) {
       const why = r.err.split("\n").filter((l) => /ERROR/.test(l)).pop() ?? r.err.trim().split("\n").pop() ?? "";
+      // 유튜브가 '로봇 아닌지 확인(로그인)'을 요구 = 데이터센터 서버(Render)를 막은 것. 비공개 영상과 구분
+      const bot = /confirm you.?re not a bot|Sign in to confirm|not a bot/i.test(r.err);
+      if (bot && process.env.RENDER) {
+        // 인터넷 서버에서는 막힘 → 맥(집 인터넷)에서 받도록 넘김. 맥이 켜지면 자동으로 받음
+        await setVideo(videoId, { status: "queued", message: "유튜브가 인터넷 서버를 로봇으로 의심해 막았어요. 맥이 켜지면 맥에서 자동으로 받아요 (맥을 켜 두세요)." });
+        const { enqueue } = await import("./jobs");
+        await enqueue("video_fetch_mac", { payload: { videoId, removeSubs }, maxAttempts: 2 });
+        return;
+      }
+      if (bot) throw new Error("영상을 받지 못했어요. 유튜브가 '로봇이 아닌지 확인'을 요구했어요. 잠시 뒤 다시 해 보거나, 공유 주소(youtu.be/...)로 다시 넣어 보세요.");
       const privateVideo = /login|private|비공개|cookies|not available|removed/i.test(why);
       if (!privateVideo && /^https?:\/\/(www\.)?(instagram|youtube|youtu\.be|tiktok)/i.test(v.source_url)) await markFail("video_download", why.slice(0, 200));
       throw new Error(`영상을 받지 못했어요. ${privateVideo ? "비공개이거나 로그인이 필요한 영상이에요." : why.replace(/^ERROR:\s*/, "").slice(0, 200)}`);
