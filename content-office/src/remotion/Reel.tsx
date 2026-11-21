@@ -194,7 +194,7 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
             {s.image && <Photo src={srcs[s.image] ?? s.image} fit={s.fit} kenburns={s.kenburns} card={card} dur={dur} />}
             {!s.image && src && (
               <AbsoluteFill style={card ? { padding: "12% 8%", justifyContent: "center", alignItems: "center" } : undefined}>
-                <OffthreadVideo
+                <OffthreadVideo pauseWhenBuffering
                   src={src}
                   muted
                   startFrom={Math.round((s.video.videoId ? s.video.from : s.audioFrom) * fps)}
@@ -202,7 +202,7 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
                 />
               </AbsoluteFill>
             )}
-            {doc.audio === "base" && baseSrc && <Audio src={baseSrc} startFrom={Math.round(s.audioFrom * fps)} />}
+            {doc.audio === "base" && baseSrc && <Audio pauseWhenBuffering src={baseSrc} startFrom={Math.round(s.audioFrom * fps)} />}
           </Sequence>
         );
       })}
@@ -214,12 +214,12 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
         return (
           <Sequence key={o.id} from={from} durationInFrames={dur} name="위에 얹기">
             <div style={{ position: "absolute", left: o.x, top: o.y, width: o.w, height: o.h, borderRadius: o.radius, overflow: "hidden" }}>
-              {o.image ? <Img src={src} style={{ width: "100%", height: "100%", objectFit: o.fit }} /> : <OffthreadVideo src={src} muted style={{ width: "100%", height: "100%", objectFit: o.fit }} />}
+              {o.image ? <Img src={src} style={{ width: "100%", height: "100%", objectFit: o.fit }} /> : <OffthreadVideo pauseWhenBuffering src={src} muted style={{ width: "100%", height: "100%", objectFit: o.fit }} />}
             </div>
           </Sequence>
         );
       })}
-      {doc.music?.videoId && srcs[doc.music.videoId] && <Audio src={srcs[doc.music.videoId]} startFrom={Math.round((doc.music.from || 0) * fps)} volume={doc.music.volume ?? 0.8} />}
+      {doc.music?.videoId && srcs[doc.music.videoId] && <Audio pauseWhenBuffering src={srcs[doc.music.videoId]} startFrom={Math.round((doc.music.from || 0) * fps)} volume={doc.music.volume ?? 0.8} />}
       {doc.texts.map((t) => {
         const from = Math.max(0, Math.round(t.start * fps));
         const dur = Math.max(1, Math.min(total - from, Math.round((t.end - t.start) * fps)));

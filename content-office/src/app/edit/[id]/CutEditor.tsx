@@ -401,7 +401,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       <div className="cut-stage">
         <div className="cut-frame" style={{ aspectRatio: `${W} / ${H}` }}>
           {doc.clips.length || doc.overlays.length ? (
-            <Player ref={player} component={Edit} inputProps={{ doc, srcs, fontUrl: "/api/reels/font", fontUrls }} durationInFrames={frames} fps={fps} compositionWidth={W} compositionHeight={H} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense />
+            <Player ref={player} showPosterWhenBuffering showPosterWhenBufferingAndPaused renderPoster={({ isBuffering }: { isBuffering: boolean }) => (isBuffering ? <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(0,0,0,.35)", color: "#fff", fontSize: 14, fontWeight: 700 }}><span><span className="spinner" /> 영상 불러오는 중…</span></div> : null)} component={Edit} inputProps={{ doc, srcs, fontUrl: "/api/reels/font", fontUrls }} durationInFrames={frames} fps={fps} compositionWidth={W} compositionHeight={H} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense />
           ) : (
             <button className="cut-empty" onClick={() => setPickFor("append")}>＋ 영상 추가</button>
           )}

@@ -531,7 +531,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
             <div>
               <span className="tiny" style={{ color: "#aab" }}>편집 화면</span>
               <div className="reel-frame" style={{ position: "relative" }}>
-                <Player ref={player} component={Reel} inputProps={inputProps} durationInFrames={totalFrames} fps={fps} compositionWidth={doc.width} compositionHeight={doc.height} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense />
+                <Player ref={player} showPosterWhenBuffering showPosterWhenBufferingAndPaused renderPoster={({ isBuffering }: { isBuffering: boolean }) => (isBuffering ? <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(0,0,0,.35)", color: "#fff", fontSize: 14, fontWeight: 700 }}><span><span className="spinner" /> 영상 불러오는 중…</span></div> : null)} component={Reel} inputProps={inputProps} durationInFrames={totalFrames} fps={fps} compositionWidth={doc.width} compositionHeight={doc.height} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense />
                 <div ref={overlay} className="reel-overlay" onPointerMove={onMove} onPointerUp={onUp} onClick={() => setSel(null)}>
                   {showGuide && <div style={{ position: "absolute", ...stageBox(GUIDE_BOX), border: "2px dashed rgba(255,255,255,0.85)", borderRadius: 4, pointerEvents: "none" }}><span className="tiny" style={{ position: "absolute", top: -18, left: 0, color: "#fff", textShadow: "0 1px 2px #000" }}>가이드 박스 · 밖은 배경만</span></div>}
                   {activeOvs.map((o) => (
@@ -557,7 +557,7 @@ export default function ReelEditor({ initial, initialDoc, files: initialFiles }:
               <div>
                 <span className="tiny" style={{ color: "#aab" }}>출력 미리보기</span>
                 <div className="reel-frame">
-                  <Player ref={out} component={Reel} inputProps={inputProps} durationInFrames={totalFrames} fps={fps} compositionWidth={doc.width} compositionHeight={doc.height} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense initiallyMuted />
+                  <Player ref={out} showPosterWhenBuffering showPosterWhenBufferingAndPaused renderPoster={({ isBuffering }: { isBuffering: boolean }) => (isBuffering ? <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(0,0,0,.35)", color: "#fff", fontSize: 14, fontWeight: 700 }}><span><span className="spinner" /> 영상 불러오는 중…</span></div> : null)} component={Reel} inputProps={inputProps} durationInFrames={totalFrames} fps={fps} compositionWidth={doc.width} compositionHeight={doc.height} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense initiallyMuted />
                 </div>
               </div>
             )}
