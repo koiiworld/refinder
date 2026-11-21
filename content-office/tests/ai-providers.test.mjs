@@ -2592,3 +2592,27 @@ test('🔍 무료 음원 찾기: CC0·CC BY만 보이고, 가져오면 저장소
  const nd=await call('/api/music/import','POST',{id:'aaaaaaaa-0000-0000-0000-000000000003'});assert.equal(nd.status,502,'ND는 가져오기도 막음');
  assert.equal((await call('/api/music/import','POST',{id:'../../etc'})).status,502);
 });
+
+test('🔲 영상 편집 나란히 놓기: 칸 크기(세로)·채우기 방식이 저장되고, 칸 계산이 화면 안에 맞음', async()=>{
+ const vid=(await call('/api/videos')).data.videos.find(v=>v.status==='ready'&&v.kind==='upload')?.id ?? (await call('/api/videos')).data.videos.find(v=>v.status==='ready').id;
+ const ed=(await call('/api/edit','POST',{videoIds:[vid],title:'나란히 시험'})).data.id;
+ const e=(await call(`/api/edit/${ed}`)).data;
+ const { layoutCells } = await import('../src/remotion/edit-grid.ts');
+ // 9:16 화면에 가로 한 줄 5칸, 정사각형, 간격 2%
+ const cells=layoutCells({n:5,dir:'row',shape:'square',gap:2,margin:1,W:1080,H:1920});
+ assert.equal(cells.length,5);
+ for(const c of cells){assert.ok(c.x-c.w/2>=-0.01&&c.x+c.w/2<=100.01,'가로 안');assert.ok(Math.abs(c.w*1080-c.h*1920)<300,'정사각형');assert.equal(c.y,50,'세로 가운데');}
+ assert.ok(cells[1].x>cells[0].x,'왼쪽부터');
+ const g=layoutCells({n:5,dir:'grid',shape:'fill',gap:0,margin:0,W:1080,H:1920});
+ assert.equal(g.length,5);assert.ok(Math.abs(g[3].x+g[4].x-100)<0.1,'덜 찬 마지막 줄은 가운데로');assert.equal(g[3].y,g[4].y);
+ const doc=e.doc;
+ doc.overlays=cells.map((c,i)=>({id:'g'+i,src:vid,kind:'video',start:0,dur:1,in:0,...c,opacity:1,volume:0,radius:0,fit:i===0?'contain':'cover'}));
+ doc.overlays.push({id:'auto',src:vid,kind:'video',start:0,dur:1,in:0,x:50,y:50,w:40,opacity:1,volume:0,radius:0});
+ doc.overlays.push({id:'bad',src:vid,kind:'video',start:0,dur:1,in:0,x:50,y:50,w:40,h:9999,fit:'weird',opacity:1,volume:0,radius:0});
+ const sv=await call(`/api/edit/${ed}`,'PUT',{doc,title:'나란히 시험'});
+ assert.equal(sv.status,200,JSON.stringify(sv.data));
+ const ov=Object.fromEntries(sv.data.doc.overlays.map(o=>[o.id,o]));
+ assert.equal(ov.g0.fit,'contain');assert.equal(ov.g1.fit,'cover');assert.equal(ov.g1.h,cells[1].h);
+ assert.equal(ov.auto.h,undefined,'세로 크기 없으면 원래 비율');assert.equal(ov.auto.fit,undefined);
+ assert.equal(ov.bad.h,100,'세로 크기는 100%까지');assert.equal(ov.bad.fit,'cover');
+});

@@ -10,12 +10,13 @@ import { DEFAULT_TEXT_STYLE, faceKey, fontFaces, fontRoute, type ReelText } from
 import { FontPicker } from "@/components/FontPicker";
 import TextMotionPicker from "@/components/TextMotionPicker";
 import MusicSearch from "@/components/MusicSearch";
+import { GRID_DIR, GRID_SHAPE, layoutCells, type GridDir, type GridShape } from "@/remotion/edit-grid";
 import { clipLen, clipStarts, editDuration, FILTERS, RATIO_SIZE, TRANSITIONS, type AudioClip, type Clip, type EditDoc, type Filter, type Overlay, type Ratio, type Transition } from "@/remotion/edit-types";
 
 type Media = { id: string; title: string; duration: number | null; thumb: boolean; kind: string };
 type Info = { id: string; title: string; status: string; message: string; output_video_id: string | null };
 type Sel = { kind: "clip" | "text" | "overlay" | "audio"; id: string } | null;
-type Panel = null | "media" | "audio" | "text" | "effect" | "overlay" | "caption" | "filter" | "ratio" | "bg" | "speed" | "volume" | "zoom" | "export" | "hd" | "slow" | "tts";
+type Panel = null | "media" | "audio" | "text" | "effect" | "overlay" | "caption" | "filter" | "ratio" | "bg" | "speed" | "volume" | "zoom" | "export" | "hd" | "slow" | "tts" | "grid";
 /** AI 음성 목소리 (서버 lib/edit.ts VOICES 와 같게) */
 const VOICE_LIST = [
   { id: "ko-KR-SunHiNeural", label: "선희 (여성)" },
@@ -57,6 +58,7 @@ const IC: Record<string, string> = {
   hd: "M3 5h18v14H3zM7 9v6M7 12h3M10 9v6M14 9v6h2a3 3 0 0 0 0-6h-2z",
   slow: "M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 7v5l-3 2",
   voice: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
+  grid: "M3 6h4v12H3zM10 6h4v12h-4zM17 6h4v12h-4z",
 };
 function Ico({ n, s = 24 }: { n: string; s?: number }) {
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={IC[n]} /></svg>;
@@ -75,7 +77,12 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   const [frame, setFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [media, setMedia] = useState(initialMedia);
-  const [pickFor, setPickFor] = useState<"append" | "overlay" | "audio" | null>(null);
+  const [pickFor, setPickFor] = useState<"append" | "overlay" | "audio" | "grid" | null>(null);
+  // 🔲 나란히 놓기 설정 + 칸에 넣을 것 (기존 오버레이 id 또는 새 영상 m:<미디어id>)
+  const [grid, setGrid] = useState<{ n: number; dir: GridDir; shape: GridShape; gap: number; margin: number; same: boolean }>({ n: 4, dir: "row", shape: "fill", gap: 1, margin: 0, same: true });
+  const [slots, setSlots] = useState<string[]>([]);
+  const frameEl = useRef<HTMLDivElement>(null);
+  const [boxes, setBoxes] = useState<Record<string, { l: number; t: number; w: number; h: number }>>({});
   const [res, setRes] = useState<(typeof RES)[number]>("1080p");
   const [err, setErr] = useState("");
   const [musicCredit, setMusicCredit] = useState("");
@@ -275,6 +282,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
     setPanel("text");
   }
   function pick(m: Media) {
+    if (pickFor === "grid") { const k = `m:${m.id}`; setSlots((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k])); return; }
     const kind = m.id.startsWith("img_") ? "image" : "video";
     const len = kind === "image" ? 3 : r2(m.duration ?? 5);
     if (pickFor === "append") setDoc((d) => ({ ...d, clips: [...d.clips, { id: sid(), src: m.id, kind, in: 0, out: len, speed: 1, volume: 1, filter: "none", transition: "none", zoom: null, fit: "cover" }] }));
@@ -315,6 +323,108 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       setInfo(await api<Info>(`/api/edit/${info.id}`, "POST", body));
       setPanel(null);
     } catch (e) { setErr((e as Error).message); }
+  }
+
+  // ▣ 미리보기 위 오버레이 상자: 실제 그려진 위치를 재서 (%) 끌어 옮기기·모서리로 크기 조절
+  const ovNow = doc.overlays.filter((o) => t >= o.start - 1e-6 && t < o.start + o.dur);
+  const ovKey = ovNow.map((o) => `${o.id}:${o.x}:${o.y}:${o.w}:${o.h}:${o.fit}`).join("|");
+  useEffect(() => {
+    let alive = true;
+    const measure = () => {
+      const f = frameEl.current;
+      if (!alive || !f) return;
+      const fr = f.getBoundingClientRect();
+      if (!fr.width || !fr.height) return;
+      const out: Record<string, { l: number; t: number; w: number; h: number }> = {};
+      f.querySelectorAll<HTMLElement>("[data-ov]").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        out[el.dataset.ov!] = { l: ((r.left - fr.left) / fr.width) * 100, t: ((r.top - fr.top) / fr.height) * 100, w: (r.width / fr.width) * 100, h: (r.height / fr.height) * 100 };
+      });
+      setBoxes(out);
+    };
+    const a = requestAnimationFrame(measure);
+    const b = setTimeout(measure, 250); // 영상이 늦게 뜨면 한 번 더
+    const ro = new ResizeObserver(measure);
+    if (frameEl.current) ro.observe(frameEl.current);
+    return () => { alive = false; cancelAnimationFrame(a); clearTimeout(b); ro.disconnect(); };
+  }, [ovKey, frame, doc.ratio]);
+  const ovDrag = useRef<{ id: string; mode: string; sx: number; sy: number; fw: number; fh: number; base: EditDoc; o: Overlay; h0: number } | null>(null);
+  function ovDown(e: React.PointerEvent, o: Overlay, mode: string) {
+    e.stopPropagation(); e.preventDefault();
+    const fr = frameEl.current?.getBoundingClientRect();
+    if (!fr) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (player.current?.isPlaying()) player.current.pause();
+    setSel({ kind: "overlay", id: o.id }); setPanel((p) => (p === "grid" ? p : "overlay"));
+    ovDrag.current = { id: o.id, mode, sx: e.clientX, sy: e.clientY, fw: fr.width, fh: fr.height, base: doc, o, h0: o.h ?? boxes[o.id]?.h ?? o.w };
+  }
+  function ovMove(e: React.PointerEvent) {
+    const d = ovDrag.current;
+    if (!d) return;
+    const dx = ((e.clientX - d.sx) / d.fw) * 100, dy = ((e.clientY - d.sy) / d.fh) * 100;
+    const o = d.o;
+    let p: Partial<Overlay>;
+    if (d.mode === "move") {
+      // 화면 가장자리·가운데, 다른 칸 가장자리에 붙기 (1%)
+      const h = o.h ?? d.h0;
+      let x = o.x + dx, y = o.y + dy;
+      if (!e.altKey) {
+        const others = d.base.overlays.filter((q) => q.id !== o.id && boxes[q.id]);
+        // 가장자리끼리(화면 끝·다른 칸 끝), 가운데는 화면 가운데에만
+        const xs = [0, 100, ...others.flatMap((q) => [boxes[q.id].l, boxes[q.id].l + boxes[q.id].w])];
+        const ys = [0, 100, ...others.flatMap((q) => [boxes[q.id].t, boxes[q.id].t + boxes[q.id].h])];
+        const snap = (c: number, half: number, list: number[]) => { if (Math.abs(c - 50) < 1) return 50; for (const v of list) for (const edge of [-half, half]) if (Math.abs(c + edge - v) < 1) return v - edge; return c; };
+        x = snap(x, o.w / 2, xs); y = snap(y, h / 2, ys);
+      }
+      p = { x: r2(x), y: r2(y) };
+    } else {
+      const sxs = d.mode.includes("e") ? 1 : -1, sys = d.mode.includes("s") ? 1 : -1;
+      let w = Math.max(3, o.w + sxs * dx), h = Math.max(3, d.h0 + sys * dy);
+      if (e.shiftKey) { const k = Math.max(w / o.w, h / d.h0); w = o.w * k; h = d.h0 * k; }
+      w = Math.min(100, w); h = Math.min(100, h);
+      p = { w: r2(w), h: r2(h), x: r2(o.x + (sxs * (w - o.w)) / 2), y: r2(o.y + (sys * (h - d.h0)) / 2), fit: o.fit ?? "cover" };
+    }
+    setDocRaw({ ...d.base, overlays: d.base.overlays.map((q) => (q.id === o.id ? { ...q, ...p } : q)) });
+    setSave("dirty");
+  }
+  function ovUp() {
+    const d = ovDrag.current;
+    ovDrag.current = null;
+    if (d) { hist.current.past = [...hist.current.past.slice(-80), d.base]; hist.current.future = []; }
+  }
+  /** 칸 크기를 정해진 상자로 (지금 보이는 크기 그대로 시작) */
+  const boxH = (o: Overlay) => r2(o.h ?? boxes[o.id]?.h ?? o.w);
+
+  // 🔲 나란히 놓기
+  const cells = layoutCells({ ...grid, W, H });
+  function openGrid() {
+    const now = doc.overlays.filter((o) => t >= o.start - 1e-6 && t < o.start + o.dur).map((o) => o.id);
+    setSlots((s) => { const keep = s.filter((k) => k.startsWith("m:") || doc.overlays.some((o) => o.id === k)); return keep.length ? keep : now; });
+    setGrid((g) => ({ ...g, n: Math.max(2, Math.min(12, now.length >= 2 ? now.length : g.n)) }));
+    setPanel("grid");
+  }
+  function applyGrid() {
+    const use = slots.slice(0, cells.length);
+    if (!use.length) { setErr("칸에 넣을 영상을 먼저 골라 주세요."); return; }
+    setErr("");
+    setDoc((d) => {
+      const lenOf = (k: string) => { if (k.startsWith("m:")) { const m = media.find((x) => x.id === k.slice(2)); return m?.id.startsWith("img_") ? 5 : r2(m?.duration ?? 5); } const o = d.overlays.find((x) => x.id === k); return o ? o.dur : 5; };
+      const room = editDuration(d) - t;
+      const same = grid.same ? r2(Math.max(0.5, Math.min(...use.map(lenOf), room > 0.5 ? room : Infinity))) : 0;
+      let ovs = [...d.overlays];
+      use.forEach((k, i) => {
+        const c = cells[i];
+        const pos = { x: c.x, y: c.y, w: c.w, h: c.h, fit: "cover" as const };
+        if (k.startsWith("m:")) {
+          const m = media.find((x) => x.id === k.slice(2));
+          if (!m) return;
+          const kind = m.id.startsWith("img_") ? "image" as const : "video" as const;
+          ovs.push({ id: sid(), src: m.id, kind, start: r2(t), dur: same || Math.min(lenOf(k), 5), in: 0, opacity: 1, volume: 0, radius: 0, ...pos });
+        } else ovs = ovs.map((o) => (o.id === k ? { ...o, ...pos, ...(grid.same ? { start: r2(t), dur: same } : {}) } : o));
+      });
+      return { ...d, overlays: ovs };
+    });
+    setSlots([]);
   }
 
   // 타임라인 끌기 (클립 양 끝 자르기 · 텍스트·오버레이·오디오 옮기기/길이)
@@ -377,7 +487,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   const mainTools: [string, string, () => void][] = [
     ["edit", "편집", () => { if (doc.clips[clipAt(t)]) setSel({ kind: "clip", id: doc.clips[clipAt(t)].id }); }],
     ["audio", "오디오", () => setPanel("audio")], ["voice", "AI 음성", () => setPanel("tts")], ["text", "텍스트", addText], ["effect", "편집효과", () => { if (doc.clips[clipAt(t)]) { setSel({ kind: "clip", id: doc.clips[clipAt(t)].id }); setPanel("effect"); } }],
-    ["overlay", "오버레이", () => setPickFor("overlay")], ["caption", "캡션", () => setPanel("caption")], ["filter", "필터", () => setPanel("filter")], ["ratio", "비율", () => setPanel("ratio")], ["bg", "배경", () => setPanel("bg")],
+    ["overlay", "오버레이", () => setPickFor("overlay")], ["grid", "나란히", openGrid], ["caption", "캡션", () => setPanel("caption")], ["filter", "필터", () => setPanel("filter")], ["ratio", "비율", () => setPanel("ratio")], ["bg", "배경", () => setPanel("bg")],
   ];
 
   return (
@@ -399,12 +509,25 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
 
       {/* 미리보기 */}
       <div className="cut-stage">
-        <div className="cut-frame" style={{ aspectRatio: `${W} / ${H}` }}>
+        <div className="cut-frame" ref={frameEl} style={{ aspectRatio: `${W} / ${H}` }}>
           {doc.clips.length || doc.overlays.length ? (
             <Player ref={player} showPosterWhenBuffering showPosterWhenBufferingAndPaused renderPoster={({ isBuffering }: { isBuffering: boolean }) => (isBuffering ? <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(0,0,0,.35)", color: "#fff", fontSize: 14, fontWeight: 700 }}><span><span className="spinner" /> 영상 불러오는 중…</span></div> : null)} component={Edit} inputProps={{ doc, srcs, fontUrl: "/api/reels/font", fontUrls }} durationInFrames={frames} fps={fps} compositionWidth={W} compositionHeight={H} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense />
           ) : (
             <button className="cut-empty" onClick={() => setPickFor("append")}>＋ 영상 추가</button>
           )}
+          {/* 오버레이 상자: 눌러서 고르기 · 끌어서 옮기기 · 모서리로 크기 (Shift 비율 유지, Alt 자석 끄기) */}
+          {!playing && ovNow.map((o) => {
+            const b = boxes[o.id];
+            if (!b) return null;
+            const on = sel?.kind === "overlay" && sel.id === o.id;
+            const n = panel === "grid" ? slots.indexOf(o.id) : -1;
+            return (
+              <div key={o.id} className={`cut-ovbox${on ? " on" : ""}`} style={{ left: `${b.l}%`, top: `${b.t}%`, width: `${b.w}%`, height: `${b.h}%` }} title="끌어서 옮기기 · 모서리를 끌면 크기 조절 (Shift: 비율 유지)" onPointerDown={(e) => ovDown(e, o, "move")} onPointerMove={ovMove} onPointerUp={ovUp} onPointerCancel={ovUp}>
+                {n >= 0 && <span className="cut-ovnum">{n + 1}</span>}
+                {on && (["nw", "ne", "sw", "se"] as const).map((c) => <i key={c} className={`cut-ovh ${c}`} aria-label="크기 조절" onPointerDown={(e) => ovDown(e, o, c)} onPointerMove={ovMove} onPointerUp={ovUp} onPointerCancel={ovUp} />)}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -474,7 +597,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       {/* 아래 패널 */}
       {panel && (
         <div className="cut-panel">
-          <div className="cut-panel-head"><b>{{ media: "", audio: "오디오", text: "텍스트", effect: "전환 효과", overlay: "오버레이", caption: "캡션", filter: "필터", ratio: "비율", bg: "배경", speed: "속도", volume: "볼륨", zoom: "줌 · 키프레임", export: "", hd: "화질 업 (AI)", slow: "슬로모션 (AI)", tts: "AI 음성" }[panel]}</b><button className="cut-icon" onClick={() => setPanel(null)}>✓</button></div>
+          <div className="cut-panel-head"><b>{{ media: "", audio: "오디오", text: "텍스트", effect: "전환 효과", overlay: "오버레이", caption: "캡션", filter: "필터", ratio: "비율", bg: "배경", speed: "속도", volume: "볼륨", zoom: "줌 · 키프레임", export: "", hd: "화질 업 (AI)", slow: "슬로모션 (AI)", tts: "AI 음성", grid: "🔲 나란히 놓기 (한 화면에 여러 영상)" }[panel]}</b><button className="cut-icon" onClick={() => setPanel(null)}>✓</button></div>
           {panel === "speed" && selClip && (
             <div className="stack" style={{ gap: 8 }}>
               <div className="cut-chips">{[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4].map((v) => <button key={v} className={selClip.speed === v ? "on" : ""} onClick={() => patchClip(selClip.id, { speed: v })}>{v}x</button>)}</div>
@@ -539,7 +662,15 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
             <div className="stack" style={{ gap: 6 }}>
               <label className="cut-row-ctl">가로 <input type="range" min={0} max={100} value={selOv.x} onChange={(e) => patchOv(selOv.id, { x: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">세로 <input type="range" min={0} max={100} value={selOv.y} onChange={(e) => patchOv(selOv.id, { y: Number(e.target.value) })} /></label>
-              <label className="cut-row-ctl">크기 <input type="range" min={5} max={100} value={selOv.w} onChange={(e) => patchOv(selOv.id, { w: Number(e.target.value) })} /></label>
+              <span className="cut-hint">💡 미리보기에서 영상을 끌어 옮기고, 모서리 점을 끌어 크기를 바꿔요 (Shift 누르면 비율 유지)</span>
+              <div className="cut-chips">
+                <span className="cut-hint">모양</span>
+                <button className={!selOv.h ? "on" : ""} onClick={() => patchOv(selOv.id, { h: undefined, fit: undefined })}>원래 비율</button>
+                <button className={selOv.h && selOv.fit !== "contain" ? "on" : ""} onClick={() => patchOv(selOv.id, { h: boxH(selOv), fit: "cover" })}>칸 꽉 채우기 (넘치면 잘림)</button>
+                <button className={selOv.h && selOv.fit === "contain" ? "on" : ""} onClick={() => patchOv(selOv.id, { h: boxH(selOv), fit: "contain" })}>칸 안에 전체 보이기</button>
+              </div>
+              <label className="cut-row-ctl">가로 크기 <input type="range" min={2} max={100} step={0.5} value={selOv.w} onChange={(e) => patchOv(selOv.id, { w: Number(e.target.value) })} /><input className="cut-num" type="number" min={2} max={100} step={0.5} value={selOv.w} onChange={(e) => patchOv(selOv.id, { w: Math.max(2, Math.min(100, Number(e.target.value) || 2)) })} aria-label="가로 크기 %" />%</label>
+              {selOv.h != null && <label className="cut-row-ctl">세로 크기 <input type="range" min={3} max={100} step={0.5} value={selOv.h} onChange={(e) => patchOv(selOv.id, { h: Number(e.target.value) })} /><input className="cut-num" type="number" min={3} max={100} step={0.5} value={selOv.h} onChange={(e) => patchOv(selOv.id, { h: Math.max(3, Math.min(100, Number(e.target.value) || 3)) })} aria-label="세로 크기 %" />%</label>}
               <label className="cut-row-ctl">투명도 <input type="range" min={0} max={1} step={0.05} value={selOv.opacity} onChange={(e) => patchOv(selOv.id, { opacity: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">둥글게 <input type="range" min={0} max={100} value={selOv.radius} onChange={(e) => patchOv(selOv.id, { radius: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">소리 <input type="range" min={0} max={2} step={0.05} value={selOv.volume} onChange={(e) => patchOv(selOv.id, { volume: Number(e.target.value) })} /></label>
@@ -548,7 +679,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
                 <button className="cut-btn" disabled={busy} onClick={() => setPanel("hd")}>✨ 화질 업</button>
                 {selOv.kind === "video" && <button className="cut-btn" disabled={busy} onClick={() => setPanel("slow")}>🐢 슬로모션</button>}
               </div>
-              <div className="row" style={{ gap: 6 }}><button className="cut-btn" onClick={() => setPickFor("overlay")}>＋ 하나 더</button><button className="cut-btn" onClick={duplicate}>⧉ 복제</button><button className="cut-btn" onClick={remove}>🗑 삭제</button></div>
+              <div className="row" style={{ gap: 6 }}><button className="cut-btn" onClick={() => setPickFor("overlay")}>＋ 하나 더</button><button className="cut-btn" onClick={openGrid}>🔲 나란히 놓기</button><button className="cut-btn" onClick={duplicate}>⧉ 복제</button><button className="cut-btn" onClick={remove}>🗑 삭제</button></div>
             </div>
           )}
           {(panel === "hd" || panel === "slow") && (selClip || selOv) && (() => {
@@ -623,6 +754,44 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
             </div>
           )}
           {panel === "ratio" && <div className="cut-chips">{(Object.keys(RATIO_SIZE) as Ratio[]).map((r) => <button key={r} className={doc.ratio === r ? "on" : ""} onClick={() => setDoc((d) => ({ ...d, ratio: r }))}>{r}</button>)}<span className="cut-hint">9:16 릴스·쇼츠 · 16:9 유튜브 · 1:1·4:5 피드</span></div>}
+          {panel === "grid" && (
+            <div className="stack" style={{ gap: 8 }}>
+              <div className="cut-chips"><span className="cut-hint">몇 칸</span>{[2, 3, 4, 5, 6, 8, 9].map((n) => <button key={n} className={grid.n === n ? "on" : ""} onClick={() => setGrid((g) => ({ ...g, n }))}>{n}컷</button>)}</div>
+              <div className="cut-chips"><span className="cut-hint">놓는 방향</span>{GRID_DIR.map(([k, l]) => <button key={k} className={grid.dir === k ? "on" : ""} onClick={() => setGrid((g) => ({ ...g, dir: k }))}>{l}</button>)}</div>
+              <div className="cut-chips"><span className="cut-hint">칸 모양</span>{GRID_SHAPE.map(([k, l]) => <button key={k} className={grid.shape === k ? "on" : ""} onClick={() => setGrid((g) => ({ ...g, shape: k }))}>{l}</button>)}</div>
+              <label className="cut-row-ctl">칸 사이 <input type="range" min={0} max={10} step={0.5} value={grid.gap} onChange={(e) => setGrid((g) => ({ ...g, gap: Number(e.target.value) }))} /><span className="cut-hint">{grid.gap}%</span></label>
+              <label className="cut-row-ctl">바깥 여백 <input type="range" min={0} max={15} step={0.5} value={grid.margin} onChange={(e) => setGrid((g) => ({ ...g, margin: Number(e.target.value) }))} /><span className="cut-hint">{grid.margin}%</span></label>
+              <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <svg viewBox={`0 0 ${W} ${H}`} style={{ height: 120, background: "#111", borderRadius: 4, flexShrink: 0 }} aria-label="칸 나누기 미리보기">
+                  {cells.map((c, i) => <g key={i}><rect x={((c.x - c.w / 2) / 100) * W} y={((c.y - c.h / 2) / 100) * H} width={(c.w / 100) * W} height={(c.h / 100) * H} fill={slots[i] ? "#7c5cff" : "#3a3a44"} stroke="#fff" strokeWidth={W / 200} /><text x={(c.x / 100) * W} y={(c.y / 100) * H} fill="#fff" fontSize={Math.min(W, H) / 10} textAnchor="middle" dominantBaseline="middle">{i + 1}</text></g>)}
+                </svg>
+                <div className="stack" style={{ gap: 4, flex: 1, minWidth: 180 }}>
+                  <span className="cut-hint">칸에 넣을 영상 (순서대로 1, 2, 3…)</span>
+                  {slots.map((k, i) => {
+                    const ov = k.startsWith("m:") ? null : doc.overlays.find((o) => o.id === k);
+                    const name = media.find((m) => m.id === (ov ? ov.src : k.slice(2)))?.title ?? "영상";
+                    return (
+                      <div key={k} className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
+                        <b style={{ width: 18, opacity: i < cells.length ? 1 : 0.4 }}>{i + 1}</b>
+                        <span className="ellipsis" style={{ flex: 1, fontSize: 12, opacity: i < cells.length ? 1 : 0.4 }}>{ov ? "▣ " : "＋ "}{name}</span>
+                        <button className="cut-btn" style={{ padding: "2px 6px" }} disabled={i === 0} onClick={() => setSlots((s) => { const n = [...s]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; })} aria-label="앞으로">↑</button>
+                        <button className="cut-btn" style={{ padding: "2px 6px" }} onClick={() => setSlots((s) => s.filter((x) => x !== k))} aria-label="빼기">✕</button>
+                      </div>
+                    );
+                  })}
+                  {!slots.length && <span className="cut-hint">아직 없어요. 아래에서 영상을 골라 주세요.</span>}
+                  {slots.length > cells.length && <span className="cut-hint">칸보다 {slots.length - cells.length}개 많아요 — 흐린 건 안 들어가요.</span>}
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                    <button className="cut-btn" onClick={() => setPickFor("grid")}>＋ 영상 고르기 (여러 개)</button>
+                    {ovNow.some((o) => !slots.includes(o.id)) && <button className="cut-btn" onClick={() => setSlots((s) => [...s, ...ovNow.map((o) => o.id).filter((id) => !s.includes(id))])}>지금 화면의 오버레이 넣기</button>}
+                  </div>
+                  <label className="cut-hint" style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={grid.same} onChange={(e) => setGrid((g) => ({ ...g, same: e.target.checked }))} /> 모두 같은 때 시작·같은 길이로 (가장 짧은 영상에 맞춤)</label>
+                  <button className="cut-btn primary" disabled={!slots.length} onClick={applyGrid}>✅ {Math.min(slots.length, cells.length) || grid.n}칸으로 놓기 ({fmt(t)}부터)</button>
+                  <span className="cut-hint">놓은 뒤에도 칸마다 미리보기에서 끌어 옮기고 모서리로 크기를 바꿀 수 있어요.</span>
+                </div>
+              </div>
+            </div>
+          )}
           {panel === "bg" && <div className="cut-chips">{BGS.map((c) => <button key={c} className={doc.bg === c ? "on" : ""} style={{ background: c, width: 34, height: 34, padding: 0 }} onClick={() => setDoc((d) => ({ ...d, bg: c }))} aria-label={c} />)}<span className="cut-hint">&apos;전체 보이기&apos; 클립의 남는 자리에 보여요</span></div>}
         </div>
       )}
@@ -647,12 +816,13 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       </div>
 
       {pickFor && (
-        <Modal title={{ append: "영상·사진 추가", overlay: "오버레이 추가", audio: "오디오 추가" }[pickFor]} onClose={() => setPickFor(null)}>
+        <Modal title={{ append: "영상·사진 추가", overlay: "오버레이 추가", audio: "오디오 추가", grid: "칸에 넣을 영상 고르기 (여러 개 눌러도 돼요)" }[pickFor]} onClose={() => setPickFor(null)}>
           <div className="stack" style={{ gap: 10 }}>
             <label className="btn btn-primary btn-sm" style={{ alignSelf: "flex-start" }}>📁 내 파일 올리기<input type="file" hidden accept={pickFor === "audio" ? "audio/*,video/*" : "video/*,image/*"} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} /></label>
             <div className="reel-files wide">
               {media.filter((m) => pickFor === "audio" || !m.title.startsWith("🎵")).map((m) => (
-                <button key={m.id} className="reel-file" onClick={() => pick(m)}>
+                <button key={m.id} className="reel-file" style={pickFor === "grid" && slots.includes(`m:${m.id}`) ? { outline: "3px solid #7c5cff", position: "relative" } : { position: "relative" }} onClick={() => pick(m)}>
+                  {pickFor === "grid" && slots.includes(`m:${m.id}`) && <span className="cut-ovnum">{slots.indexOf(`m:${m.id}`) + 1}</span>}
                   {m.thumb ? <img src={`/api/videos/${m.id}/file?kind=thumb`} alt="" /> : m.id.startsWith("img_") ? <img src={`/api/img/${m.id}.jpg`} alt="" /> : <span className="reel-file-ph">{m.title.startsWith("🎵") ? "🎵" : "🎞"}</span>}
                   <span className="tiny ellipsis">{m.title}</span>
                   {m.duration != null && <span className="tiny muted">{Math.round(m.duration)}초</span>}
@@ -660,6 +830,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
               ))}
             </div>
             {err && <div className="notice notice-bad small">{err}</div>}
+            {pickFor === "grid" && <button className="btn btn-primary btn-sm" style={{ alignSelf: "flex-end" }} onClick={() => setPickFor(null)}>다 골랐어요 ({slots.filter((k) => k.startsWith("m:")).length}개)</button>}
           </div>
         </Modal>
       )}
