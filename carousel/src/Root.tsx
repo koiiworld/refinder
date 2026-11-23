@@ -58,7 +58,7 @@ export const RemotionRoot: React.FC = () => {
           name: '갤럭시 Z플립7',
           returnPrice: 1119990,
           newPrice: 1643400,
-          photo: '',
+          photo: 'products/zflip7.png',
           page: 2,
           total: 7,
         }}

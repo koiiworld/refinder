@@ -8,3 +8,5 @@ out
 
 # 레퍼런스 스크린샷에서 잘라낸 데모 사진 (게시 금지, 커밋 안 함)
 public/demo
+# 브랜드 공식 이미지 (커밋 안 함)
+public/products
