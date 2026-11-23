@@ -76,7 +76,7 @@ export const RemotionRoot: React.FC = () => {
           name: '갤럭시 링',
           returnPrice: 318110,
           newPrice: 499400,
-          photo: '',
+          photo: 'products/galaxy-ring.png',
           page: 3,
           total: 7,
         }}
@@ -94,7 +94,7 @@ export const RemotionRoot: React.FC = () => {
           name: '부스트업 프로 3in1 맥세이프 스탠드',
           returnPrice: 68000,
           newPrice: 135990,
-          photo: '',
+          photo: 'products/belkin-wiz017.png',
           page: 4,
           total: 7,
         }}
@@ -112,7 +112,7 @@ export const RemotionRoot: React.FC = () => {
           name: '212W 초고속 보조배터리',
           returnPrice: 95610,
           newPrice: 129000,
-          photo: '',
+          photo: 'products/xiaomi-212w.png',
           page: 5,
           total: 7,
         }}

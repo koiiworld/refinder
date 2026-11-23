@@ -24,7 +24,6 @@ const PhotoBox: React.FC<{photo: string}> = ({photo}) => {
         height: 590,
         borderRadius: 36,
         overflow: 'hidden',
-        background: '#fff',
         position: 'relative',
         opacity: interpolate(f, [0, 14], [0, 1], clamp),
         scale: interpolate(f, [0, 22], [0.96, 1], {...clamp, easing: ease, output: 'perceptual-scale'}),
@@ -44,7 +43,8 @@ const PhotoBox: React.FC<{photo: string}> = ({photo}) => {
             width: '100%',
             height: '100%',
             objectFit: 'contain',
-            padding: 40,
+            padding: 30,
+            filter: 'drop-shadow(0 30px 40px rgba(0,0,0,0.18))',
             scale: interpolate(f, [0, 180], [1.08, 1], {...clamp, easing: ease}),
           }}
         />
