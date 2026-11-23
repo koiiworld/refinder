@@ -45,6 +45,7 @@
 - `goldbox.mjs`: 골드박스 API 하루 1회 → goldbox-YYYYMMDD.json (가격 기록 = 이 파일들)
 - `goldbox-post.mjs [--pick 1,4,7]`: 스레드 초안(threads.txt). 사실 기반 문구만: 지난 기록 대비 내림 / 기록 중 최저가 / 직접 확인한 정가(list-prices.json) 대비 -%
   - 짧은 링크: 링크 생성 API 하루 1회(일반 상품 주소로 변환해야 됨), short-links.json
+- `candidates.mjs`: keywords.txt(지금 '애플 맥미니') 키워드마다 검색 API 1회 → 반품 확인 후보 + 일반 쿠팡 링크(내 파트너스 링크는 내가 누르면 안 됨) → 텔레그램
 - 매일 08:10 자동: launchd `com.refinder.daily-goldbox` → daily-goldbox.sh → 텔레그램에 "오늘 모은 데이터" 보고 (로그 daily.log)
 - API는 정가·할인율을 안 줌. 정가 짐작 금지(표시광고법)
 
