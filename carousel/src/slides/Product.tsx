@@ -1,5 +1,6 @@
 import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
+import {Video} from '@remotion/media';
 import {C, manwon, won} from '../theme';
 import {clamp, ease, Frame, Rise, TopBar} from './common';
 
@@ -7,7 +8,7 @@ export type ProductProps = {
   rank: number;
   brand: string;
   name: string;
-  /** public/ 기준 경로 또는 https URL. 비우면 사진 자리 표시 */
+  /** public/ 기준 경로 또는 https URL. 이미지(png/jpg) 또는 영상(mp4/mov/webm). 비우면 사진 자리 표시 */
   photo: string;
   returnPrice: number;
   newPrice: number;
@@ -29,7 +30,14 @@ const PhotoBox: React.FC<{photo: string}> = ({photo}) => {
         scale: interpolate(f, [0, 22], [0.96, 1], {...clamp, easing: ease, output: 'perceptual-scale'}),
       }}
     >
-      {photo ? (
+      {/\.(mp4|mov|webm)$/i.test(photo) ? (
+        // 영상 소재: 소리 없이 재생, 박스를 꽉 채움
+        <Video
+          src={/^https?:/.test(photo) ? photo : staticFile(photo)}
+          muted
+          style={{width: '100%', height: '100%', objectFit: 'cover'}}
+        />
+      ) : photo ? (
         <Img
           src={/^https?:/.test(photo) ? photo : staticFile(photo)}
           style={{
