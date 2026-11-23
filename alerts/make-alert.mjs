@@ -4,7 +4,7 @@
 // 사용법 (refinder 폴더에서):
 //   node alerts/make-alert.mjs                      # 링크 없이 글만 미리보기
 //   node alerts/make-alert.mjs --links              # 파트너스 링크까지 생성 (API 1회)
-//   옵션: --count 5  --min-disc 30  --env content-office/.env.local
+//   옵션: --count 5  --min-disc 30  --hook 0~4  --env content-office/.env.local
 //
 // - 데이터: index.html 의 RAW (반품가 | 쿠팡 새 상품가)
 // - 이미 보낸 상품은 alerts/sent.json 에 기록해 다음 번엔 빼요.
@@ -133,26 +133,49 @@ const kakao = [
     `   👉 ${linkOf(it)}`,
     '',
   ]),
-  '※ 반품 상품은 재고가 1~2개라 금방 품절돼요. 가격·상태는 구매 전 꼭 확인하세요.',
+  '※ 반품 상품은 수량이 적어 금방 품절될 수 있어요. 가격·상태는 구매 전 꼭 확인하세요.',
 ].join('\n');
 
+// 스레드: 첫 줄은 손가락 멈추게(훅) → 둘째 줄 [광고] → 본문(링크 없음) → 링크는 첫 댓글
 const top = picks.slice(0, 3);
+const hero = top[0];
+const heroName = shortName(hero.name).replace(/^(삼성전자|애플|Apple)\s+/, '').slice(0, 24);
+const HOOKS = [
+  `${heroName} 정가 주고 산 사람 손 🙋 반품마켓엔 ${man(hero.gap)} 싸게 떠 있었음`,
+  `쿠팡에서 ${man(hero.gap)} 아끼는 법, 아는 사람만 조용히 씀`,
+  `"반품"이라 찝찝하다고? ${heroName} -${hero.disc}%면 얘기가 다르지`,
+  `${heroName} ${won(hero.ret)}원. 오타 아님`,
+  `새 상품이랑 같은 모델을 ${hero.disc}% 싸게 사는 곳, 아직도 모르는 사람 많더라`,
+];
+const day = Math.floor(Date.now() / 864e5);
+const hook = opt('hook', null) !== null ? HOOKS[Number(opt('hook', 0)) % HOOKS.length] : HOOKS[day % HOOKS.length];
+
 const threads = [
-  '[광고] ' + DISCLOSURE,
+  hook,
+  '[광고] 쿠팡 파트너스 활동으로 수수료를 받아요',
   '',
-  `쿠팡 반품마켓 오늘 특가 ${top.length}개 (${when})`,
-  '',
-  ...top.flatMap((it) => [
-    `· ${shortName(it.name).slice(0, 40)}`,
-    `  ${won(it.ret)}원 (-${it.disc}%, 새 상품가 ${won(it.newp)}원) · ${bestState(it.states)}`,
-    `  ${linkOf(it)}`,
+  ...top.flatMap((it, i) => [
+    `${i + 1}) ${shortName(it.name).slice(0, 40)}`,
+    `   ${won(it.newp)}원 → ${won(it.ret)}원 (-${it.disc}%)`,
+    `   상태: ${bestState(it.states)}`,
   ]),
+  '',
+  `반품은 수량이 적어서 금방 빠질 수 있어요 (${when} 기준)`,
+  '링크는 댓글에 👇',
 ].join('\n');
+
+const threadsReply = [
+  '[광고] ' + DISCLOSURE,
+  ...top.map((it, i) => `${i + 1}) ${linkOf(it)}`),
+].join('\n');
+
+const threadsAll = `${threads}\n\n----- 첫 댓글 -----\n${threadsReply}`;
 
 writeFileSync(join(HERE, 'kakao.txt'), kakao + '\n');
-writeFileSync(join(HERE, 'threads.txt'), threads + '\n');
+writeFileSync(join(HERE, 'threads.txt'), threadsAll + '\n');
 console.log('===== 카카오톡 알림방 (alerts/kakao.txt) =====\n' + kakao);
-console.log(`\n===== 스레드 (alerts/threads.txt, ${[...threads].length}/500자) =====\n` + threads);
+console.log(`\n===== 스레드 (alerts/threads.txt, 본문 ${[...threads].length}/500자) =====\n` + threadsAll);
+console.log('\n(다른 첫 줄: --hook 0~' + (HOOKS.length - 1) + ')');
 
 if (args.includes('--mark-sent')) {
   const at = new Date().toISOString();
