@@ -19,15 +19,15 @@ export const Outro: React.FC<OutroProps> = ({title1, title2, cta, tips, disclosu
       <TopBar page={total} total={total} />
       <div style={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center'}}>
         <Rise at={4}>
-          <div style={{fontSize: 96, fontWeight: 900, lineHeight: 1.15}}>{title1}</div>
+          <div style={{fontSize: 72, fontWeight: 900, lineHeight: 1.15}}>{title1}</div>
         </Rise>
         <Rise at={12}>
-          <div style={{fontSize: 96, fontWeight: 900, lineHeight: 1.15, color: C.accent}}>{title2}</div>
+          <div style={{fontSize: 72, fontWeight: 900, lineHeight: 1.15, color: C.accent}}>{title2}</div>
         </Rise>
-        <div style={{marginTop: 60, display: 'flex', flexDirection: 'column', gap: 22}}>
+        <div style={{marginTop: 48, display: 'flex', flexDirection: 'column', gap: 22}}>
           {tips.map((t, i) => (
             <Rise key={t} at={26 + i * 8} dist={24}>
-              <div style={{fontSize: 42, fontWeight: 700, display: 'flex', gap: 18}}>
+              <div style={{fontSize: 32, fontWeight: 700, display: 'flex', gap: 14}}>
                 <span style={{color: C.accent}}>✓</span>
                 {t}
               </div>
@@ -40,9 +40,9 @@ export const Outro: React.FC<OutroProps> = ({title1, title2, cta, tips, disclosu
             alignSelf: 'flex-start',
             background: C.ink,
             color: '#fff',
-            fontSize: 46,
+            fontSize: 34,
             fontWeight: 800,
-            padding: '30px 46px',
+            padding: '22px 36px',
             borderRadius: 999,
             opacity: interpolate(f, [56, 68], [0, 1], clamp),
             scale: interpolate(f, [56, 72], [0.8, 1], {...clamp, easing: ease, output: 'perceptual-scale'}) *
@@ -55,7 +55,7 @@ export const Outro: React.FC<OutroProps> = ({title1, title2, cta, tips, disclosu
       </div>
       <div
         style={{
-          fontSize: 24,
+          fontSize: 20,
           fontWeight: 500,
           color: C.muted,
           lineHeight: 1.5, whiteSpace: "pre-line",
