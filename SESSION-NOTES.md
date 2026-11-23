@@ -38,6 +38,7 @@
 - 맥: 보내기 `node ~/.ai-content-office/report.mjs <파일>` · 답장 읽기 `node ~/.ai-content-office/inbox.mjs` (처리 후 `--ack`)
 - 키: 맥 `content-office/.env.local` 의 REPORT_TELEGRAM_BOT_TOKEN / REPORT_TELEGRAM_CHAT_ID (출력 금지)
 - **보고 규칙 (사용자 지정 11/24)**: 매번 보고 X. ① 그날 모은 데이터 ② 업무 마칠 때 ③ 스레드 게시 직전 — 이때만 보고
+- 반품 담기: 사용자가 쿠팡 앱 '반품 상품' 화면 캡처 + 공유 링크를 @upmoo3bot 에 보냄 → inbox.mjs 가 사진을 ~/.ai-content-office/inbox/ 에 저장 → 캡처 읽어서 상품명·반품가·등급·새 상품가 추출 (북마클릿은 앱에서 안 돼서 이 방식)
 - 이 세션은 예약 작업 불가(컴퓨터 연결 세션) → 사용자가 여기서 "확인"하면 텔레그램 답장 읽고 진행
 
 ## 골드박스 (맥 ~/.ai-content-office, 맥이 원본)
