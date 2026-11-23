@@ -47,7 +47,7 @@
 
 - 애플 반품: 일반 검색·상품 페이지·반품마켓 코너 어디에도 안 뜸. USED_DETAIL 링크는 '반품 매물 번호'로만 열림(신상품 번호로는 일반 페이지). 검색 필터 '상품 상태: 반품'으로 일부 뜸(신제품은 거의 없음)
 - 반품파인더(refinder.xyz)는 다른 사람의 경쟁 사이트
-- **운영 B안 (11/24 결정)**: 매일 08:10 텔레그램에 '반품 필터 루틴'(filter-routine.txt, 검색 5개 높은 가격순) → 사용자가 2분 확인·캡처 → 1~2주 해보고 자동화(A안: 새 대화 + Claude in Chrome, 하루 2번·검색 5개·사람 속도) 검토
+- **운영 B안 (11/24 결정)**: 매일 08:10 텔레그램에 '반품 필터 루틴'(filter-routine.txt, 검색 5개 높은 가격순, 필터 주소: offerCondition=PACKAGE_DAMAGED,NON_ACTIVATED,REPACKAGING,REFURBISHED,RETURN) → 사용자가 2분 확인·캡처 → 1~2주 해보고 자동화(A안: 새 대화 + Claude in Chrome, 하루 2번·검색 5개·사람 속도) 검토
 
 ## 골드박스 (맥 ~/.ai-content-office, 맥이 원본)
 - `goldbox.mjs`: 골드박스 API 하루 1회 → goldbox-YYYYMMDD.json (가격 기록 = 이 파일들)
