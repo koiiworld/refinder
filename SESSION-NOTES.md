@@ -34,9 +34,18 @@
 - `alerts/post-threads.mjs`: 미리보기 → `--yes` 로 본문+첫 댓글 게시 (THREADS_ACCESS_TOKEN 필요, Meta 개발자 앱에서 발급)
 
 ## 텔레그램 업무 보고
-- 새 봇 @upmoo3bot → 받는 사람 "Mh"
-- 맥에서: `node ~/.ai-content-office/report.mjs <메시지파일>`
+- 새 봇 @upmoo3bot → 받는 사람 "Mh". 답장 = 다음 업무 지시
+- 맥: 보내기 `node ~/.ai-content-office/report.mjs <파일>` · 답장 읽기 `node ~/.ai-content-office/inbox.mjs` (처리 후 `--ack`)
 - 키: 맥 `content-office/.env.local` 의 REPORT_TELEGRAM_BOT_TOKEN / REPORT_TELEGRAM_CHAT_ID (출력 금지)
+- **보고 규칙 (사용자 지정 11/24)**: 매번 보고 X. ① 그날 모은 데이터 ② 업무 마칠 때 ③ 스레드 게시 직전 — 이때만 보고
+- 이 세션은 예약 작업 불가(컴퓨터 연결 세션) → 사용자가 여기서 "확인"하면 텔레그램 답장 읽고 진행
+
+## 골드박스 (맥 ~/.ai-content-office, 맥이 원본)
+- `goldbox.mjs`: 골드박스 API 하루 1회 → goldbox-YYYYMMDD.json (가격 기록 = 이 파일들)
+- `goldbox-post.mjs [--pick 1,4,7]`: 스레드 초안(threads.txt). 사실 기반 문구만: 지난 기록 대비 내림 / 기록 중 최저가 / 직접 확인한 정가(list-prices.json) 대비 -%
+  - 짧은 링크: 링크 생성 API 하루 1회(일반 상품 주소로 변환해야 됨), short-links.json
+- 매일 08:10 자동: launchd `com.refinder.daily-goldbox` → daily-goldbox.sh → 텔레그램에 "오늘 모은 데이터" 보고 (로그 daily.log)
+- API는 정가·할인율을 안 줌. 정가 짐작 금지(표시광고법)
 
 ## 다음 할 일
 1. 스레드 프로필 입력 + 고정 게시물
