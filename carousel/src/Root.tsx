@@ -4,6 +4,7 @@ import './theme';
 import {Cover} from './slides/Cover';
 import {Outro} from './slides/Outro';
 import {Product} from './slides/Product';
+import {PhotoSlide} from './photo/PhotoSlide';
 
 // 인스타그램 세로 캐러셀 4:5 (1080x1350)
 const W = 1080;
@@ -12,6 +13,21 @@ const FPS = 30;
 
 export const RemotionRoot: React.FC = () => {
   return (
+    <>
+    {/* 사진 꽉 채우는 제품 나열형. posts/*.json 으로 렌더링 (render-post.mjs) */}
+    <Composition
+      id="PhotoSlide"
+      component={PhotoSlide}
+      durationInFrames={5 * FPS}
+      fps={FPS}
+      width={W}
+      height={H}
+      calculateMetadata={({props}) => ({durationInFrames: (props.slide.kind === 'outro' ? 4 : 5) * FPS})}
+      defaultProps={{
+        account: 'refinder',
+        slide: {kind: 'item', media: 'demo/item1.jpg', brand: '오이코이홈', product: '조각별을 품은 고양이 냄비받침', price: '19,000원', comment: '고양이 수염도 조각 별도 귀여운 냄비받침, 냉장고에 톡 걸어보세요!'},
+      }}
+    />
     <Folder name="Carousel-Digital">
       <Composition
         id="S01-Cover"
@@ -152,5 +168,6 @@ export const RemotionRoot: React.FC = () => {
         }}
       />
     </Folder>
+    </>
   );
 };
