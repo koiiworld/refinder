@@ -34,7 +34,9 @@
 - `alerts/post-threads.mjs`: 미리보기 → `--yes` 로 본문+첫 댓글 게시 (THREADS_ACCESS_TOKEN 필요, Meta 개발자 앱에서 발급)
 
 ## 텔레그램 업무 보고
-- 콘텐츠 오피스 앱(Render)의 `/api/telegram` {action:"send"} 로 보냄. 로그인 쿠키 = sha256("content-office:"+APP_PASSWORD). 맥 앱(localhost:3000)엔 봇 토큰 없음
+- 새 봇 @upmoo3bot → 받는 사람 "Mh"
+- 맥에서: `node ~/.ai-content-office/report.mjs <메시지파일>`
+- 키: 맥 `content-office/.env.local` 의 REPORT_TELEGRAM_BOT_TOKEN / REPORT_TELEGRAM_CHAT_ID (출력 금지)
 
 ## 다음 할 일
 1. 스레드 프로필 입력 + 고정 게시물
