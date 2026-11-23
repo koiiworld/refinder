@@ -41,11 +41,15 @@
 - 반품 담기: 사용자가 쿠팡 앱 '반품 상품' 화면 캡처 + 공유 링크를 @upmoo3bot 에 보냄 → inbox.mjs 가 사진을 ~/.ai-content-office/inbox/ 에 저장 → 캡처 읽어서 상품명·반품가·등급·새 상품가 추출 (북마클릿은 앱에서 안 돼서 이 방식)
 - 이 세션은 예약 작업 불가(컴퓨터 연결 세션) → 사용자가 여기서 "확인"하면 텔레그램 답장 읽고 진행
 
+## 애플 반품 메모
+- 애플 반품은 신상품(브랜드 직매입) 페이지엔 안 뜨고 "Apple 정품 ○○" 같은 옛 상품 페이지에 붙음. 예전 데이터(index.html)에 애플 반품 67개 있음 (새 상품가는 전부 비어 있음)
+- 체크리스트: 맥 ~/.ai-content-office/apple-check.txt (가격 큰 순 15개, 반품 탭 바로 열리는 일반 링크)
+
 ## 골드박스 (맥 ~/.ai-content-office, 맥이 원본)
 - `goldbox.mjs`: 골드박스 API 하루 1회 → goldbox-YYYYMMDD.json (가격 기록 = 이 파일들)
 - `goldbox-post.mjs [--pick 1,4,7]`: 스레드 초안(threads.txt). 사실 기반 문구만: 지난 기록 대비 내림 / 기록 중 최저가 / 직접 확인한 정가(list-prices.json) 대비 -%
   - 짧은 링크: 링크 생성 API 하루 1회(일반 상품 주소로 변환해야 됨), short-links.json
-- `candidates.mjs`: keywords.txt(지금 '애플 맥미니') 키워드마다 검색 API 1회 → 반품 확인 후보 + 일반 쿠팡 링크(내 파트너스 링크는 내가 누르면 안 됨) → 텔레그램
+- `candidates.mjs`: keywords.txt(지금: Apple 정품 아이폰 / Apple 정품 아이패드 / 애플워치 / 에어팟) 키워드마다 검색 API 1회 → 반품 확인 후보 + 일반 쿠팡 링크(내 파트너스 링크는 내가 누르면 안 됨) → 텔레그램
 - 매일 08:10 자동: launchd `com.refinder.daily-goldbox` → daily-goldbox.sh → 텔레그램에 "오늘 모은 데이터" 보고 (로그 daily.log)
 - API는 정가·할인율을 안 줌. 정가 짐작 금지(표시광고법)
 
