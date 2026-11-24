@@ -49,6 +49,9 @@
 - 반품파인더(refinder.xyz)는 다른 사람의 경쟁 사이트
 - **운영 B안 (11/24 결정)**: 매일 08:10 텔레그램에 '반품 필터 루틴'(filter-routine.txt, 검색 5개 높은 가격순, 필터 주소: offerCondition=PACKAGE_DAMAGED,NON_ACTIVATED,REPACKAGING,REFURBISHED,RETURN) → 사용자가 2분 확인·캡처 → 1~2주 해보고 자동화(A안: 새 대화 + Claude in Chrome, 하루 2번·검색 5개·사람 속도) 검토
 
+- ⛔ 11/24 새벽: 사용자가 사파리에서 필터 검색 링크 여러 개를 연달아 열자 쿠팡이 '요청하신 페이지의 사용권한이 없습니다'로 차단. → 루틴에서 링크 전부 제거, 앱에서 직접 필터 체크만. candidates(후보 링크)도 매일 보고에서 뺌
+- 맥 디스크 여유 거의 없음(약 0.9GB)
+
 ## 골드박스 (맥 ~/.ai-content-office, 맥이 원본)
 - `goldbox.mjs`: 골드박스 API 하루 1회 → goldbox-YYYYMMDD.json (가격 기록 = 이 파일들)
 - `goldbox-post.mjs [--pick 1,4,7]`: 스레드 초안(threads.txt). 사실 기반 문구만: 지난 기록 대비 내림 / 기록 중 최저가 / 직접 확인한 정가(list-prices.json) 대비 -%
