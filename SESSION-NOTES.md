@@ -31,6 +31,8 @@
 📢 [광고] 이 계정은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
 
 ## 스레드 게시
+- ✅ 11/25 연결 완료: 메타 앱 '콘텐츠오피스'(Threads API 액세스, 테스터 koi._.world 수락) → 토큰을 맥 .env.local THREADS_ACCESS_TOKEN 에 저장. 맥 `node ~/.ai-content-office/post-threads.mjs` (--check 토큰 확인 / 미리보기 / --yes 게시). 토큰 약 60일 유효 → 만료 전 갱신 필요
+- 본문 첫 줄에 #광고, 첫 댓글에 정식 대가성 문구 + 링크
 - `alerts/post-threads.mjs`: 미리보기 → `--yes` 로 본문+첫 댓글 게시 (THREADS_ACCESS_TOKEN 필요, Meta 개발자 앱에서 발급)
 
 ## 텔레그램 업무 보고
