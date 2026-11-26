@@ -67,6 +67,10 @@ export function ensureWorker() {
   const ig = () => void import("./ig-api").then((m) => m.igDailyTick()).catch(() => {});
   setTimeout(ig, 120_000).unref?.();
   setInterval(ig, 60 * 60 * 1000).unref?.();
+  // 🧹 반품특가: 매일 08:10 골드박스 수집 + 업무 보고 (Render 에서만, 하루 1번)
+  const dl = () => void import("./deals").then((m) => m.dealsTick()).catch(() => {});
+  setTimeout(dl, 45_000).unref?.();
+  setInterval(dl, 5 * 60 * 1000).unref?.();
   // 🗑 휴지통 30일 지난 것 자동 완전 삭제 (1시간마다)
   const tp = () => void import("./trash").then((m) => m.purgeExpired()).catch(() => {});
   setTimeout(tp, 90_000).unref?.();

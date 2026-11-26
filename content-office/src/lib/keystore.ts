@@ -26,6 +26,10 @@ export const KEY_FIELDS = [
   { env: "COUPANG_SECRET_KEY", label: "쿠팡파트너스 · Secret Key", group: "기타", feature: "coupang" },
   { env: "TELEGRAM_BOT_TOKEN", label: "텔레그램 봇 토큰", group: "기타" },
   { env: "TELEGRAM_CHAT_ID", label: "텔레그램 채팅 ID", group: "기타" },
+  { env: "THREADS_ACCESS_TOKEN", label: "스레드 액세스 토큰 (반품특가 게시용)", group: "기타" },
+  { env: "REPORT_TELEGRAM_BOT_TOKEN", label: "업무 보고 텔레그램 봇 토큰", group: "기타" },
+  { env: "REPORT_TELEGRAM_CHAT_ID", label: "업무 보고 텔레그램 채팅 ID", group: "기타" },
+  { env: "DEALS_AGENT_TOKEN", label: "반품특가 API 전용 토큰 (Claude 연결용)", group: "기타" },
   { env: "INSTAGRAM_ACCESS_TOKEN", label: "인스타그램 액세스 토큰 (메타 개발자 앱 → Instagram 로그인 API 설정 → 토큰 생성)", group: "기타" },
 ] as const;
 export type KeyEnv = (typeof KEY_FIELDS)[number]["env"];

@@ -24,6 +24,8 @@ export async function proxy(req: NextRequest) {
     return NextResponse.json({ error: "확장 프로그램 연결 코드가 맞지 않아요. 앱 설정의 코드를 다시 넣어 주세요." }, { status: 401 });
   }
   if (pathname === "/login" || pathname === "/api/login") return NextResponse.next();
+  // 🧹 반품특가 API: x-co-agent-token 헤더가 있으면 라우트에서 DEALS_AGENT_TOKEN 과 비교 (틀리면 401)
+  if (pathname.startsWith("/api/deals") && req.headers.get("x-co-agent-token")) return NextResponse.next();
   const token = req.cookies.get("co_auth")?.value;
   if (token && token === (await hash(pw))) return NextResponse.next();
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
