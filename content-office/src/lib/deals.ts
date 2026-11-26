@@ -247,16 +247,9 @@ export const FILTER_ROUTINE = [
 ].join("\n");
 
 export async function runDaily(day = kstDay(), force = false) {
-  const items = await goldbox(day, force);
-  const facts = await priceFacts(day, items);
-  const lines = [`📦 오늘 모은 데이터 (${day.slice(4, 6)}/${day.slice(6)} 골드박스 ${items.length}개)`, ""];
-  items.slice(0, 30).forEach((p, i) => {
-    const u = unitPrice(p.productName, p.productPrice);
-    const extra = [u ? `${u.count}개 · 개당 ${won(u.each)}원` : "", ...facts[i]].filter(Boolean);
-    lines.push(`${i + 1}. ${p.productName.split(",")[0].slice(0, 34)} | ${won(p.productPrice)}원${extra.length ? " | " + extra.join(" / ") : ""}`);
-  });
-  lines.push("", "※ 쿠팡 API는 정가·할인율을 안 줘요. 비교는 개당 가격 + 지난 골드박스 기록(쌓이는 중)으로만 해요.", "올릴 번호(예: 1,4)를 답장하면 스레드 초안을 만들어요.");
-  await report(lines.join("\n"));
+  // 골드박스는 가격 기록용으로 조용히 저장만 (보고 X, 11/27 사용자 지시). 실패해도 보고는 계속
+  const items = await goldbox(day, force).catch(() => [] as GoldItem[]);
+  await report(await insightsReport(day), false);
   const yday = kstDay(new Date(Date.parse(`${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}T00:00:00+09:00`) - 3600_000));
   const sum = await replySummary(yday).catch(() => "");
   if (sum) await report(sum);
@@ -416,5 +409,52 @@ export async function replySummary(day: string) {
   const check = y.filter((l) => l.action !== "replied");
   const lines = [`💬 ${day.slice(4, 6)}/${day.slice(6)} 댓글: 답글 ${replied.length}개 · 확인 필요 ${check.length}개`];
   for (const l of check.slice(0, 10)) lines.push(`- @${l.user}: ${l.text.slice(0, 60)} → ${l.reason ?? l.action}`);
+  return lines.join("\n");
+}
+
+// ---------- 인사이트 보고 (아침 보고의 중심, 11/27 사용자 지시) ----------
+const POST_METRICS = ["views", "likes", "replies", "reposts", "quotes", "shares"] as const;
+type Metrics = Partial<Record<(typeof POST_METRICS)[number], number>>;
+
+async function postInsights(id: string): Promise<Metrics> {
+  const d = (await threadsGet(`/${id}/insights`, { metric: POST_METRICS.join(",") })) as { data?: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] };
+  return Object.fromEntries((d.data ?? []).map((x) => [x.name, x.values?.[0]?.value ?? x.total_value?.value ?? 0])) as Metrics;
+}
+
+async function accountInsights() {
+  const d = (await threadsGet("/me/threads_insights", { metric: "views,likes,replies,reposts,quotes,followers_count" }).catch(() => ({ data: [] }))) as { data?: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] };
+  const m: Record<string, number> = {};
+  for (const x of d.data ?? []) m[x.name] = x.total_value?.value ?? (x.values ?? []).reduce((a, v) => a + (v.value ?? 0), 0);
+  return m;
+}
+
+export async function insightsReport(day = kstDay()) {
+  const posts = ((await getSetting<PostLog[]>("deals_threads_log")) ?? []).filter((p) => Date.now() - Date.parse(p.at) < 7 * 86400_000);
+  const prev = (await getSetting<Record<string, Metrics>>("deals_insights_prev")) ?? {};
+  const now: Record<string, Metrics> = {};
+  const rows: { p: PostLog; m: Metrics; dv: number }[] = [];
+  for (const p of posts) {
+    const m = await postInsights(p.id).catch(() => null);
+    if (!m) continue; // 지워진 글 등
+    now[p.id] = m;
+    rows.push({ p, m, dv: (m.views ?? 0) - (prev[p.id]?.views ?? 0) });
+  }
+  await setSetting("deals_insights_prev", now);
+  const acc = await accountInsights();
+  const lines = [`📊 ${day.slice(4, 6)}/${day.slice(6)} 스레드 인사이트`];
+  if (acc.followers_count !== undefined) lines.push(`팔로워 ${won(acc.followers_count)}명`);
+  lines.push("");
+  if (!rows.length) lines.push("최근 7일 글이 없어요.");
+  rows.sort((a, b) => (b.m.views ?? 0) - (a.m.views ?? 0));
+  rows.forEach((r, i) => {
+    const m = r.m;
+    lines.push(`${i + 1}. ${r.p.first.replace(/\s*\[광고\]\s*/, " ").trim().slice(0, 40)}`);
+    lines.push(`   조회 ${won(m.views ?? 0)}${r.dv > 0 ? ` (+${won(r.dv)})` : ""} · 좋아요 ${m.likes ?? 0} · 댓글 ${m.replies ?? 0} · 리포스트 ${m.reposts ?? 0} · 공유 ${m.shares ?? 0}`);
+  });
+  if (rows.length >= 2) {
+    const top = rows[0], low = rows[rows.length - 1];
+    lines.push("", `👍 가장 많이 본 첫 줄: "${top.p.first.replace(/\s*\[광고\]\s*/, " ").trim().slice(0, 40)}"`, `👎 가장 적게 본 첫 줄: "${low.p.first.replace(/\s*\[광고\]\s*/, " ").trim().slice(0, 40)}"`);
+  }
+  lines.push("", "※ 댓글 수에는 우리가 단 링크 댓글도 포함돼요.");
   return lines.join("\n");
 }
