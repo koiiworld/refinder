@@ -11,7 +11,7 @@ import { FontPicker } from "@/components/FontPicker";
 import TextMotionPicker from "@/components/TextMotionPicker";
 import MusicSearch from "@/components/MusicSearch";
 import { GRID_DIR, GRID_SHAPE, layoutCells, type GridDir, type GridShape } from "@/remotion/edit-grid";
-import { clipLen, clipStarts, editDuration, FILTERS, RATIO_SIZE, TRANSITIONS, type AudioClip, type Clip, type EditDoc, type Filter, type Overlay, type Ratio, type Transition } from "@/remotion/edit-types";
+import { clipLen, clipStarts, docSize, editDuration, FILTERS, RATIO_SIZE, TRANSITIONS, type AudioClip, type Clip, type EditDoc, type Filter, type Overlay, type Ratio, type Transition } from "@/remotion/edit-types";
 
 type Media = { id: string; title: string; duration: number | null; thumb: boolean; kind: string };
 type Info = { id: string; title: string; status: string; message: string; output_video_id: string | null };
@@ -106,7 +106,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   const frames = Math.max(1, Math.round(total * fps));
   const t = frame / fps;
   const starts = useMemo(() => clipStarts(doc), [doc]);
-  const [W, H] = RATIO_SIZE[doc.ratio];
+  const [W, H] = docSize(doc);
   const durOf = useCallback((src: string) => media.find((m) => m.id === src)?.duration ?? 3600, [media]);
   const srcs = useMemo(() => {
     const ids = new Set([...doc.clips.map((c) => c.src), ...doc.overlays.map((o) => o.src), ...doc.audios.map((a) => a.src)]);
@@ -286,7 +286,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
     const kind = m.id.startsWith("img_") ? "image" : "video";
     const len = kind === "image" ? 3 : r2(m.duration ?? 5);
     if (pickFor === "append") setDoc((d) => ({ ...d, clips: [...d.clips, { id: sid(), src: m.id, kind, in: 0, out: len, speed: 1, volume: 1, filter: "none", transition: "none", zoom: null, fit: "cover" }] }));
-    if (pickFor === "overlay") { const id = sid(); setDoc((d) => ({ ...d, overlays: [...d.overlays, { id, src: m.id, kind, start: r2(t), dur: Math.min(len, 5), in: 0, x: 70, y: 30, w: 40, opacity: 1, volume: 0, radius: 10 }] })); setSel({ kind: "overlay", id }); setPanel("overlay"); }
+    if (pickFor === "overlay") { const id = sid(); setDoc((d) => { const spot = emptySpot(d); const room = editDuration(d) - t; return { ...d, overlays: [...d.overlays, spot ? { id, src: m.id, kind, start: r2(t), dur: r2(Math.max(0.5, Math.min(len, room > 0.5 ? room : len))), in: 0, opacity: 1, volume: 0, radius: 0, ...spot } : { id, src: m.id, kind, start: r2(t), dur: Math.min(len, 5), in: 0, x: 70, y: 30, w: 40, opacity: 1, volume: 0, radius: 10 }] }; }); setSel({ kind: "overlay", id }); setPanel("overlay"); }
     if (pickFor === "audio") { const id = sid(); setDoc((d) => ({ ...d, audios: [...d.audios, { id, src: m.id, start: r2(t), in: 0, dur: len, volume: 1, label: m.title }] })); setSel({ kind: "audio", id }); setPanel("volume"); }
     setPickFor(null);
   }
@@ -347,7 +347,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
     const ro = new ResizeObserver(measure);
     if (frameEl.current) ro.observe(frameEl.current);
     return () => { alive = false; cancelAnimationFrame(a); clearTimeout(b); ro.disconnect(); };
-  }, [ovKey, frame, doc.ratio]);
+  }, [ovKey, frame, doc.ratio, W, H]);
   const ovDrag = useRef<{ id: string; mode: string; sx: number; sy: number; fw: number; fh: number; base: EditDoc; o: Overlay; h0: number } | null>(null);
   function ovDown(e: React.PointerEvent, o: Overlay, mode: string) {
     e.stopPropagation(); e.preventDefault();
@@ -407,6 +407,77 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
   }
   /** 칸 크기를 정해진 상자로 (지금 보이는 크기 그대로 시작) */
   const boxH = (o: Overlay) => r2(o.h ?? boxes[o.id]?.h ?? o.w);
+
+  // ⇔ 화면 자체를 끌어 늘리기: 본 영상은 원래 자리에 두고, 늘어난 곳은 빈 자리(배경색) → 오버레이로 채움
+  const stageEl = useRef<HTMLDivElement>(null);
+  const [stage, setStage] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = stageEl.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => { const cs = getComputedStyle(el); setStage({ w: el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), h: el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) }); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const fitK = stage.w > 0 && stage.h > 0 ? Math.min(stage.w / W, stage.h / H) : 0;
+  const cvDrag = useRef<{ side: "l" | "r" | "t" | "b"; sx: number; sy: number; k: number; base: EditDoc; W0: number; H0: number } | null>(null);
+  const [cvLabel, setCvLabel] = useState("");
+  function cvDown(e: React.PointerEvent, side: "l" | "r" | "t" | "b") {
+    e.stopPropagation(); e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (player.current?.isPlaying()) player.current.pause();
+    const fr = frameEl.current?.getBoundingClientRect();
+    if (!fr) return;
+    cvDrag.current = { side, sx: e.clientX, sy: e.clientY, k: W / fr.width, base: doc, W0: W, H0: H };
+  }
+  function cvMove(e: React.PointerEvent) {
+    const d = cvDrag.current;
+    if (!d) return;
+    const horiz = d.side === "l" || d.side === "r";
+    const delta = (horiz ? e.clientX - d.sx : e.clientY - d.sy) * d.k * (d.side === "l" || d.side === "t" ? -1 : 1);
+    const len0 = horiz ? d.W0 : d.H0;
+    let len = Math.max(240, Math.min(3840, len0 + delta));
+    // 원래 길이의 1.5배·2배·3배 근처면 딱 맞춤 (두 영상이 같은 크기로 나란히)
+    for (const m of [1, 1.5, 2, 2.5, 3]) if (Math.abs(len - len0 * m) < len0 * 0.04) len = len0 * m;
+    len = Math.round(len / 2) * 2;
+    const nW = horiz ? len : d.W0, nH = horiz ? d.H0 : len;
+    const sx = d.side === "l" ? nW - d.W0 : 0, sy = d.side === "t" ? nH - d.H0 : 0; // 왼쪽·위로 늘리면 내용이 그만큼 밀림
+    const b = d.base;
+    const cb0 = b.clipBox ?? { x: 0, y: 0, w: 100, h: 100 };
+    const px = { x: (cb0.x / 100) * d.W0 + sx, y: (cb0.y / 100) * d.H0 + sy, w: (cb0.w / 100) * d.W0, h: (cb0.h / 100) * d.H0 };
+    const cb = { x: r2((px.x / nW) * 100), y: r2((px.y / nH) * 100), w: r2((px.w / nW) * 100), h: r2((px.h / nH) * 100) };
+    const full = Math.abs(cb.x) < 0.3 && Math.abs(cb.y) < 0.3 && Math.abs(cb.w - 100) < 0.3 && Math.abs(cb.h - 100) < 0.3;
+    const n: EditDoc = {
+      ...b,
+      size: [nW, nH],
+      clipBox: full ? undefined : cb,
+      overlays: b.overlays.map((o) => ({ ...o, x: r2((((o.x / 100) * d.W0 + sx) / nW) * 100), y: r2((((o.y / 100) * d.H0 + sy) / nH) * 100), w: r2((((o.w / 100) * d.W0) / nW) * 100), ...(o.h != null ? { h: r2((((o.h / 100) * d.H0) / nH) * 100) } : {}) })),
+      texts: b.texts.map((t) => ({ ...t, style: { ...t.style, x: t.style.x + sx, y: t.style.y + sy } })),
+    };
+    setDocRaw(n);
+    setSave("dirty");
+    setCvLabel(`${nW} × ${nH}${len === len0 * 2 ? " (2배)" : len === len0 * 3 ? " (3배)" : len === len0 * 1.5 ? " (1.5배)" : ""}`);
+  }
+  function cvUp() {
+    const d = cvDrag.current;
+    cvDrag.current = null;
+    setCvLabel("");
+    if (d) { hist.current.past = [...hist.current.past.slice(-80), d.base]; hist.current.future = []; }
+  }
+  /** 화면을 늘려서 생긴 빈 자리 중 가장 넓은 곳 (새 오버레이를 거기에 꽉 채워 놓음) */
+  function emptySpot(d: EditDoc) {
+    const c = d.clipBox;
+    if (!c) return null;
+    const spots = [
+      { x: 0, y: 0, w: c.x, h: 100 }, { x: c.x + c.w, y: 0, w: 100 - (c.x + c.w), h: 100 },
+      { x: 0, y: 0, w: 100, h: c.y }, { x: 0, y: c.y + c.h, w: 100, h: 100 - (c.y + c.h) },
+    ].filter((r) => r.w > 3 && r.h > 3);
+    const [cw, ch] = docSize(d);
+    const best = spots.sort((a, b) => b.w * cw * b.h * ch - a.w * cw * a.h * ch)[0];
+    if (!best) return null;
+    // 이미 오버레이가 그 자리를 덮고 있으면 null (겹쳐 쌓지 않게)
+    if (d.overlays.some((o) => o.h != null && Math.abs(o.x - (best.x + best.w / 2)) < 2 && Math.abs(o.y - (best.y + best.h / 2)) < 2 && t >= o.start && t < o.start + o.dur)) return null;
+    return { x: r2(best.x + best.w / 2), y: r2(best.y + best.h / 2), w: r2(best.w), h: r2(best.h), fit: "cover" as const };
+  }
 
   // 🔲 나란히 놓기
   const cells = layoutCells({ ...grid, W, H });
@@ -521,13 +592,18 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       )}
 
       {/* 미리보기 */}
-      <div className="cut-stage">
-        <div className="cut-frame" ref={frameEl} style={{ aspectRatio: `${W} / ${H}` }}>
+      <div className="cut-stage" ref={stageEl}>
+        <div className="cut-frame" ref={frameEl} style={fitK ? { width: W * fitK, height: H * fitK } : { aspectRatio: `${W} / ${H}` }}>
           {doc.clips.length || doc.overlays.length ? (
             <Player ref={player} showPosterWhenBuffering showPosterWhenBufferingAndPaused renderPoster={({ isBuffering }: { isBuffering: boolean }) => (isBuffering ? <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(0,0,0,.35)", color: "#fff", fontSize: 14, fontWeight: 700 }}><span><span className="spinner" /> 영상 불러오는 중…</span></div> : null)} component={Edit} inputProps={{ doc, srcs, fontUrl: "/api/reels/font", fontUrls }} durationInFrames={frames} fps={fps} compositionWidth={W} compositionHeight={H} style={{ width: "100%", height: "100%" }} acknowledgeRemotionLicense />
           ) : (
             <button className="cut-empty" onClick={() => setPickFor("append")}>＋ 영상 추가</button>
           )}
+          {/* ⇔ 화면 가장자리 손잡이: 끌면 화면이 늘어나고 본 영상은 제자리 */}
+          {!playing && (doc.clips.length > 0 || doc.overlays.length > 0) && (["l", "r", "t", "b"] as const).map((sd) => (
+            <i key={sd} className={`cut-cvh ${sd}`} title="끌어서 화면 늘리기·줄이기 (본 영상은 그 자리에)" aria-label="화면 크기 손잡이" onPointerDown={(e) => cvDown(e, sd)} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} />
+          ))}
+          {cvLabel && <span className="cut-cvlabel">{cvLabel}</span>}
           {/* 오버레이 상자: 눌러서 고르기 · 끌어서 옮기기 · 모서리로 크기 (Shift 비율 유지, Alt 자석 끄기) */}
           {!playing && ovNow.map((o) => {
             const b = boxes[o.id];
@@ -767,7 +843,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
               <span className="cut-hint">맥이 클립의 말소리를 받아써서, 자르고 배속한 위치에 맞춰 자막을 넣어요 (무료). 다시 누르면 자동 자막만 새로 바꿔요. 만든 자막은 텍스트 줄에서 고칠 수 있어요.</span>
             </div>
           )}
-          {panel === "ratio" && <div className="cut-chips">{(Object.keys(RATIO_SIZE) as Ratio[]).map((r) => <button key={r} className={doc.ratio === r ? "on" : ""} onClick={() => setDoc((d) => ({ ...d, ratio: r }))}>{r}</button>)}<span className="cut-hint">9:16 릴스·쇼츠 · 16:9 유튜브 · 1:1·4:5 피드</span></div>}
+          {panel === "ratio" && <div className="cut-chips">{(Object.keys(RATIO_SIZE) as Ratio[]).map((r) => <button key={r} className={doc.ratio === r && !doc.size ? "on" : ""} onClick={() => setDoc((d) => ({ ...d, ratio: r, size: undefined, clipBox: undefined }))}>{r}</button>)}<span className="cut-hint">9:16 릴스·쇼츠 · 16:9 유튜브 · 1:1·4:5 피드 · 미리보기 가장자리의 흰 손잡이를 끌면 화면을 원하는 만큼 늘릴 수 있어요{doc.size ? ` (지금 ${W}×${H})` : ""}</span></div>}
           {panel === "grid" && (
             <div className="stack" style={{ gap: 8 }}>
               <div className="cut-chips"><span className="cut-hint">몇 칸</span>{[2, 3, 4, 5, 6, 8, 9].map((n) => <button key={n} className={grid.n === n ? "on" : ""} onClick={() => setGrid((g) => ({ ...g, n }))}>{n}컷</button>)}</div>

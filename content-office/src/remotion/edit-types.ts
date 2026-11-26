@@ -53,11 +53,17 @@ export type EditDoc = {
   audios: AudioClip[];
   texts: ReelText[];
   muteClips: boolean; // 클립 오디오 음소거
+  /** 화면을 끌어 늘린 크기(기준 px). 없으면 ratio 크기 */
+  size?: [number, number];
+  /** 화면을 늘렸을 때 본 영상(클립)이 놓이는 자리 (화면 대비 %, 왼쪽 위 기준). 없으면 화면 전체 */
+  clipBox?: { x: number; y: number; w: number; h: number };
 };
+/** 실제 화면 크기 (끌어 늘린 크기가 있으면 그것) */
+export const docSize = (doc: Pick<EditDoc, "ratio" | "size">): [number, number] => doc.size ?? RATIO_SIZE[doc.ratio] ?? [1080, 1920];
 export type EditProps = { doc: EditDoc; srcs: Record<string, string>; fontUrl: string; fontUrls?: Record<string, string>; scale?: number };
 /** 내보낼 크기 (짝수 정수): 720p 2/3 · 1080p 1 · 2K 4/3 · 4K 2 배 */
-export const outSize = (ratio: Ratio, scale = 1): [number, number] => {
-  const [w, h] = RATIO_SIZE[ratio] ?? [1080, 1920];
+export const outSize = (r: Ratio | Pick<EditDoc, "ratio" | "size">, scale = 1): [number, number] => {
+  const [w, h] = typeof r === "string" ? RATIO_SIZE[r] ?? [1080, 1920] : docSize(r);
   return [Math.round((w * scale) / 2) * 2, Math.round((h * scale) / 2) * 2];
 };
 

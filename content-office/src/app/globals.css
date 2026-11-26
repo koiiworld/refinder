@@ -606,6 +606,14 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cut-stage { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 4px 12px; }
 .cut-frame { max-height: 100%; max-width: 100%; height: 100%; background: #000; position: relative; }
 /* 미리보기 위 오버레이 상자 (끌어 옮기기·모서리 크기 조절) */
+/* 화면 크기 손잡이 */
+.cut-cvh { position: absolute; z-index: 6; background: #fff; border-radius: 6px; box-shadow: 0 0 0 2px var(--cut-accent, #7c5cff); touch-action: none; opacity: .85; }
+.cut-cvh:hover { opacity: 1; }
+.cut-cvh.l, .cut-cvh.r { top: 50%; width: 10px; height: 48px; margin-top: -24px; cursor: ew-resize; }
+.cut-cvh.l { left: -5px; } .cut-cvh.r { right: -5px; }
+.cut-cvh.t, .cut-cvh.b { left: 50%; height: 10px; width: 48px; margin-left: -24px; cursor: ns-resize; }
+.cut-cvh.t { top: -5px; } .cut-cvh.b { bottom: -5px; }
+.cut-cvlabel { position: absolute; z-index: 7; left: 50%; top: 8px; transform: translateX(-50%); background: rgba(0,0,0,.75); color: #fff; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px; pointer-events: none; }
 .cut-ovbox { position: absolute; z-index: 5; cursor: move; touch-action: none; outline: 1px dashed rgba(255,255,255,.35); }
 .cut-ovbox:hover { outline: 1px solid rgba(255,255,255,.7); }
 .cut-ovbox.on { outline: 2px solid var(--cut-accent, #7c5cff); }

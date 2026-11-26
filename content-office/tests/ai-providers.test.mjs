@@ -2615,4 +2615,9 @@ test('🔲 영상 편집 나란히 놓기: 칸 크기(세로)·채우기 방식�
  assert.equal(ov.g0.fit,'contain');assert.equal(ov.g1.fit,'cover');assert.equal(ov.g1.h,cells[1].h);
  assert.equal(ov.auto.h,undefined,'세로 크기 없으면 원래 비율');assert.equal(ov.auto.fit,undefined);
  assert.equal(ov.bad.h,100,'세로 크기는 100%까지');assert.equal(ov.bad.fit,'cover');
+ // 화면 끌어 늘리기: 크기·본 영상 자리 저장 (범위 정리)
+ const sv2=await call(`/api/edit/${ed}`,'PUT',{doc:{...sv.data.doc,size:[2160.7,1920],clipBox:{x:0,y:0,w:50,h:100}},title:'나란히 시험'});
+ assert.equal(sv2.status,200);assert.deepEqual(sv2.data.doc.size,[2160,1920]);assert.deepEqual(sv2.data.doc.clipBox,{x:0,y:0,w:50,h:100});
+ const sv3=await call(`/api/edit/${ed}`,'PUT',{doc:{...sv.data.doc,size:[99999,'x'],clipBox:null},title:'나란히 시험'});
+ assert.deepEqual(sv3.data.doc.size,[3840,1920],'너무 크면 3840까지');assert.equal(sv3.data.doc.clipBox,undefined);
 });

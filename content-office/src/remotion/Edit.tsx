@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Audio, Img, interpolate, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { TextLayer } from "./Reel";
 import { faceKey, fontFaces, fontFamily } from "./types";
-import { clipLen, clipStarts, editDuration, FILTERS, RATIO_SIZE, type Clip, type EditProps } from "./edit-types";
+import { clipLen, clipStarts, docSize, editDuration, FILTERS, type Clip, type EditProps } from "./edit-types";
 
 const TR = 0.4; // 전환 길이(초)
 
@@ -31,7 +31,8 @@ function ClipLayer({ c, src, mute }: { c: Clip; src: string; mute: boolean }) {
 }
 
 export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, fontUrls, scale = 1 }) => {
-  const [BW, BH] = RATIO_SIZE[doc.ratio] ?? [1080, 1920];
+  const [BW, BH] = docSize(doc);
+  const cb = doc.clipBox;
   const { fps } = useVideoConfig();
   const starts = clipStarts(doc);
   const total = Math.round(editDuration(doc) * fps);
@@ -40,6 +41,8 @@ export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, fontUrls, scale 
       {/* 내용은 기준 크기(1080 폭)로 그리고 내보낼 해상도만큼 키움 */}
       <div style={{ position: "absolute", left: 0, top: 0, width: BW, height: BH, transform: scale !== 1 ? `scale(${scale})` : undefined, transformOrigin: "0 0" }}>
       {fontUrl && <style>{`@font-face { font-family: 'ReelFont'; src: url('${fontUrl}'); font-weight: 100 900; }` + fontFaces().map(({ id, w }) => { const u = fontUrls?.[faceKey(id, w)] ?? (id === "noto" ? fontUrl : ""); return u ? `@font-face { font-family: '${fontFamily(id)}'; src: url('${u}'); font-weight: ${w || "100 900"}; }` : ""; }).join("")}</style>}
+      {/* 화면을 늘렸으면 본 영상은 원래 자리(clipBox)에만 */}
+      <div style={cb ? { position: "absolute", left: `${cb.x}%`, top: `${cb.y}%`, width: `${cb.w}%`, height: `${cb.h}%`, overflow: "hidden" } : { position: "absolute", inset: 0 }}>
       {doc.clips.map((c, i) => {
         const src = srcs[c.src];
         if (!src) return null;
@@ -49,10 +52,11 @@ export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, fontUrls, scale 
           </Sequence>
         );
       })}
+      </div>
       {doc.overlays.map((o) => {
         const src = srcs[o.src];
         if (!src) return null;
-        const [W] = RATIO_SIZE[doc.ratio];
+        const W = BW;
         return (
           <Sequence key={o.id} from={Math.round(o.start * fps)} durationInFrames={Math.max(1, Math.round(o.dur * fps))} name="오버레이">
             <div data-ov={o.id} style={{ position: "absolute", left: `${o.x}%`, top: `${o.y}%`, width: `${o.w}%`, height: o.h ? `${o.h}%` : undefined, transform: "translate(-50%, -50%)", opacity: o.opacity, borderRadius: (o.radius / 100) * W * 0.1, overflow: "hidden" }}>

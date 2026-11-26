@@ -23,7 +23,7 @@ const Root: React.FC = () => (
     defaultProps={emptyEdit as unknown as Record<string, unknown>}
     calculateMetadata={({ props }: { props: Record<string, unknown> }) => {
       const p = props as unknown as EditProps;
-      const [w, h] = outSize(p.doc.ratio, p.scale ?? 1);
+      const [w, h] = outSize(p.doc, p.scale ?? 1);
       return { durationInFrames: Math.max(1, Math.round(editDuration(p.doc) * p.doc.fps)), fps: p.doc.fps, width: w, height: h };
     }}
   />

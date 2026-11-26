@@ -9,7 +9,7 @@ import { getGeneratedImage } from "./image-gen";
 import { fileServer, FONT_FILE, run, videoToTemp } from "./reels";
 import { DEFAULT_TEXT_STYLE, faceKey, fontFaces, type ReelText } from "@/remotion/types";
 import { ensureFont } from "./reel-fonts";
-import { clipLen, clipStarts, emptyEdit, RATIO_SIZE, type EditDoc } from "@/remotion/edit-types";
+import { clipLen, clipStarts, docSize, emptyEdit, RATIO_SIZE, type EditDoc } from "@/remotion/edit-types";
 
 /**
  * 🎞 영상 편집 (캡컷형) — 편집은 화면에서(자동 저장), 무거운 일은 맥에서
@@ -68,6 +68,8 @@ export async function saveEdit(id: string, doc: EditDoc, title?: string) {
   if (!doc || !Array.isArray(doc.clips) || !Array.isArray(doc.texts)) throw new Error("편집 내용 형식이 맞지 않아요.");
   const clean: EditDoc = {
     ratio: doc.ratio in RATIO_SIZE ? doc.ratio : "9:16",
+    ...(Array.isArray(doc.size) && doc.size.length === 2 ? { size: [Math.round(num(doc.size[0], 240, 3840, 1080) / 2) * 2, Math.round(num(doc.size[1], 240, 3840, 1920) / 2) * 2] as [number, number] } : {}),
+    ...(doc.clipBox && typeof doc.clipBox === "object" ? { clipBox: { x: num(doc.clipBox.x, -100, 100, 0), y: num(doc.clipBox.y, -100, 100, 0), w: num(doc.clipBox.w, 1, 400, 100), h: num(doc.clipBox.h, 1, 400, 100) } } : {}),
     fps: 30,
     bg: /^#[0-9a-fA-F]{6}$/.test(String(doc.bg)) ? doc.bg : "#000000",
     muteClips: !!doc.muteClips,
@@ -175,7 +177,7 @@ export async function runCaptions(id: string) {
     const starts = clipStarts(doc);
     const cache = new Map<string, { start: number; end: number; text: string }[]>();
     const texts: ReelText[] = [];
-    const [W, H] = RATIO_SIZE[doc.ratio];
+    const [W, H] = docSize(doc);
     for (const [i, c] of doc.clips.entries()) {
       if (c.kind !== "video") continue;
       if (!cache.has(c.src)) {
@@ -421,7 +423,7 @@ export async function runTts(id: string, p: { text: string; voice: string; rate:
       // 문장마다 자막: 글자 수 비율로 시간 나눔
       const sents = p.text.split(/(?<=[.!?。…])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
       const total = sents.reduce((a, s) => a + s.length, 0) || 1;
-      const [W, H] = RATIO_SIZE[cur.doc.ratio];
+      const [W, H] = docSize(cur.doc);
       let t0 = p.start;
       const add = sents.map((s) => {
         const len = (dur * s.length) / total;
