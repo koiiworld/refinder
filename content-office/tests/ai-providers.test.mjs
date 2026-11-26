@@ -2626,6 +2626,12 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   const fs = await import("node:fs");
   const up = async (name) => { const fd = new FormData(); fd.append("file", new Blob([fs.readFileSync("sample.mp4")], { type: "video/mp4" }), name); return (await (await fetch(`${BASE}/api/videos/upload`, { method: "POST", body: fd })).json()).id; };
   const v1 = await up("클립1.mp4"), v2 = await up("클립2.mp4");
+  // 사진 앱에서 끌어온 파일: 종류 정보가 비어 있어도 확장자(대문자 .MOV)로 받음 · avi 같은 형식은 mp4로 바꿔 저장 · 영상이 아니면 거절
+  const raw = async (name, type = "") => { const fd = new FormData(); fd.append("file", new Blob([fs.readFileSync("sample.mp4")], { type }), name); return fetch(`${BASE}/api/videos/upload`, { method: "POST", body: fd }); };
+  assert.equal((await raw("IMG_1234.MOV")).status, 200);
+  const avi = await (await raw("옛날캠.avi")).json();
+  assert.equal((await call("/api/videos")).data.videos.find((v) => v.id === avi.id).status, "ready");
+  assert.equal((await raw("IMG_1234.HEIC")).status, 400);
   const est = await call("/api/shoots");
   assert.equal(est.data.estimate.steps[0].key, "shoot_script");
   assert.ok(est.data.estimate.steps[0].usd > 0, "대본 예상 비용");

@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/components/client-utils";
 import { fmtUsd } from "@/components/ui";
-import { MAX_SHOOT_CLIPS, SHOOT_KINDS, SHOOT_LENGTHS, type ShootKindId } from "@/lib/shoot-types";
+import { isVideoFile, MAX_SHOOT_CLIPS, SHOOT_KINDS, SHOOT_LENGTHS, type ShootKindId } from "@/lib/shoot-types";
 
 type Est = { model: string; usd: number | null } | null;
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(0)}MB`;
@@ -20,10 +20,35 @@ export default function NewShoot({ estimate }: { estimate: Est }) {
   const [err, setErr] = useState("");
   const k = SHOOT_KINDS.find((x) => x.id === kind)!;
 
-  function pick(list: FileList | null) {
+  const [over, setOver] = useState(false);
+  const [note, setNote] = useState("");
+
+  function pick(list: FileList | File[] | null) {
     if (!list) return;
-    const add = Array.from(list).filter((f) => /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm)$/i.test(f.name));
-    setFiles((cur) => [...cur, ...add.filter((f) => !cur.some((c) => c.name === f.name && c.size === f.size))].slice(0, MAX_SHOOT_CLIPS));
+    const all = Array.from(list);
+    const add = all.filter(isVideoFile);
+    const skipped = all.filter((f) => !isVideoFile(f));
+    const next = [...files, ...add.filter((f) => !files.some((c) => c.name === f.name && c.size === f.size))];
+    setNote([skipped.length ? `영상이 아니라서 뺐어요: ${skipped.map((f) => f.name).slice(0, 3).join(", ")}${skipped.length > 3 ? ` 외 ${skipped.length - 3}개` : ""}` : "", next.length > MAX_SHOOT_CLIPS ? `한 번에 ${MAX_SHOOT_CLIPS}개까지라 뒤의 ${next.length - MAX_SHOOT_CLIPS}개는 뺐어요.` : ""].filter(Boolean).join(" "));
+    setFiles(next.slice(0, MAX_SHOOT_CLIPS));
+  }
+  // 칸 밖에 떨어뜨려도 브라우저가 영상을 새 창으로 열어 버리지 않게
+  useEffect(() => {
+    const stop = (e: DragEvent) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); };
+    window.addEventListener("dragover", stop);
+    window.addEventListener("drop", stop);
+    return () => { window.removeEventListener("dragover", stop); window.removeEventListener("drop", stop); };
+  }, []);
+  function drop(e: React.DragEvent) {
+    e.preventDefault();
+    setOver(false);
+    if (busy) return;
+    // 사진 앱에서 끌어오면 files 가 비고 items 로만 올 때가 있어 둘 다 봄
+    const dt = e.dataTransfer;
+    const fromItems = Array.from(dt.items ?? []).filter((i) => i.kind === "file").map((i) => i.getAsFile()).filter((f): f is File => !!f);
+    const list = dt.files?.length ? Array.from(dt.files) : fromItems;
+    if (!list.length) return setNote("끌어온 것에서 파일을 찾지 못했어요. 사진 앱에서는 영상을 잠깐 누른 채로 끌어오거나, 영상 고르기 버튼을 써 주세요.");
+    pick(list);
   }
 
   async function start() {
@@ -51,7 +76,10 @@ export default function NewShoot({ estimate }: { estimate: Est }) {
   }
 
   return (
-    <section className="card card-pad stack" style={{ gap: 10 }}>
+    <section className="card card-pad stack" style={{ gap: 10, outline: over ? "2px dashed var(--accent)" : undefined, outlineOffset: -4, background: over ? "var(--accent-soft)" : undefined }}
+      onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setOver(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
+      onDrop={drop}>
       <b>새 촬영 올리기</b>
       <div className="row" style={{ gap: 6 }}>
         {SHOOT_KINDS.map((x) => <button key={x.id} className={`chip ${kind === x.id ? "on" : ""}`} onClick={() => setKind(x.id)}>{x.label}</button>)}
@@ -61,10 +89,12 @@ export default function NewShoot({ estimate }: { estimate: Est }) {
         <span className="small muted">길이</span>
         <div className="seg">{SHOOT_LENGTHS.map((n) => <button key={n} className={seconds === n ? "on" : ""} onClick={() => setSeconds(n)}>약 {n}초</button>)}</div>
       </div>
-      <label className="btn" style={{ alignSelf: "flex-start", cursor: "pointer" }}>
-        🎞 영상 고르기 (여러 개)
-        <input type="file" accept="video/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} />
+      <label style={{ border: "2px dashed var(--line)", borderRadius: 12, padding: "18px 12px", textAlign: "center", cursor: "pointer", display: "block" }}>
+        <div><b>{over ? "여기에 놓으세요" : "🎞 영상을 여기로 끌어다 놓거나 눌러서 고르기"}</b></div>
+        <div className="tiny muted" style={{ marginTop: 4 }}>여러 개 한꺼번에 · 사진 앱·폴더에서 바로 끌어와도 돼요 · mp4·mov(아이폰)·m4v·webm·mkv·avi·3gp</div>
+        <input type="file" accept="video/*,.mp4,.mov,.m4v,.qt,.webm,.mkv,.avi,.3gp,.3g2,.mts,.m2ts,.mpg,.mpeg" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} />
       </label>
+      {note && <div className="notice notice-warn small">{note}</div>}
       {files.length > 0 && (
         <div className="stack" style={{ gap: 4 }}>
           {files.map((f, i) => (

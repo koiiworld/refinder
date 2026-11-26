@@ -14,6 +14,9 @@ export const shootKind = (id?: string) => SHOOT_KINDS.find((k) => k.id === id) ?
 
 export const SHOOT_LENGTHS = [15, 20, 30, 45] as const;
 export const MAX_SHOOT_CLIPS = 12;
+/** 올릴 수 있는 영상 확장자 (아이폰 .MOV·갤럭시 .mp4 등 — 사진 앱에서 끌어오면 종류 정보가 비어 올 때가 있어 이름으로도 확인) */
+export const VIDEO_EXT = /\.(mp4|mov|m4v|qt|webm|mkv|avi|3gp|3g2|mts|m2ts|mpg|mpeg)$/i;
+export const isVideoFile = (f: { name: string; type: string }) => /^video\//.test(f.type) || VIDEO_EXT.test(f.name);
 
 export type ShootFrame = { t: number; img: string; desc?: string };
 export type ShootClip = {
