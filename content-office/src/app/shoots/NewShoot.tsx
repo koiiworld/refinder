@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/components/client-utils";
 import { fmtUsd } from "@/components/ui";
 import { isVideoFile, MAX_SHOOT_CLIPS, SHOOT_KINDS, SHOOT_LENGTHS, type ShootKindId } from "@/lib/shoot-types";
@@ -20,6 +20,7 @@ export default function NewShoot({ estimate }: { estimate: Est }) {
   const [err, setErr] = useState("");
   const k = SHOOT_KINDS.find((x) => x.id === kind)!;
 
+  const done = useRef<Record<string, string>>({}); // 올라간 클립 (파일 → 영상 번호)
   const [over, setOver] = useState(false);
   const [note, setNote] = useState("");
 
@@ -61,13 +62,27 @@ export default function NewShoot({ estimate }: { estimate: Est }) {
     try {
       const videoIds: string[] = [];
       for (const [i, f] of files.entries()) {
-        setBusy(`영상 올리는 중 ${i + 1}/${files.length} (${mb(f.size)})`);
-        const fd = new FormData();
-        fd.append("file", f);
-        const res = await fetch("/api/videos/upload", { method: "POST", body: fd });
-        const d = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
-        if (!res.ok || !d.id) throw new Error(`${f.name}: ${d.error ?? `올리기 실패 (${res.status})`}`);
-        videoIds.push(d.id);
+        const key = `${f.name}:${f.size}:${f.lastModified}`;
+        // 이미 올라간 클립은 다시 올리지 않음 (중간에 끊겨 다시 눌렀을 때)
+        if (!done.current[key]) {
+          // 서버가 잠깐 재시작 중이면 연결이 끊김 → 기다렸다가 2번 더 시도
+          for (let attempt = 1; ; attempt++) {
+            setBusy(`영상 올리는 중 ${i + 1}/${files.length} (${mb(f.size)})${attempt > 1 ? ` · 연결이 끊겨 다시 시도 ${attempt}/3` : ""}`);
+            try {
+              const fd = new FormData();
+              fd.append("file", f);
+              const res = await fetch("/api/videos/upload", { method: "POST", body: fd });
+              const d = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+              if (res.ok && d.id) { done.current[key] = d.id; break; }
+              if (res.status < 500) throw Object.assign(new Error(`${f.name}: ${d.error ?? `올리기 실패 (${res.status})`}`), { final: true });
+              throw new Error(`${f.name}: 서버 오류 (${res.status})`);
+            } catch (e) {
+              if ((e as { final?: boolean }).final || attempt >= 3) throw (e as { final?: boolean }).final ? e : new Error(`클립 ${i + 1}(${f.name})을 올리다 서버와 연결이 끊겼어요. 앞의 ${i}개는 올라가 있으니, 잠시 뒤 '올리고 대본 받기'를 다시 누르면 이 클립부터 이어서 올려요.`);
+              await new Promise((r) => setTimeout(r, 15_000));
+            }
+          }
+        }
+        videoIds.push(done.current[key]);
       }
       setBusy("영상 확인 시작하는 중");
       const r = await api<{ id: string }>("/api/shoots", "POST", { videoIds, kind, memo, seconds, confirm: true });

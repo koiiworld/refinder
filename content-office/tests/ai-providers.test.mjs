@@ -2688,7 +2688,7 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   assert.deepEqual(s.variants.map((v) => [v.name, v.hooks[0]]), [["A안 · 음식 먼저", "수정된 후킹"], ["B안 · 궁금증", "여기 뭐가 유명하게?"]], "수정 요청은 고른 안만 바꿈");
   assert.doesNotMatch(await stepPrompt("숏폼 편집 감독"), /\[대본은 2안\]/);
   // 직접 고치기: 후킹 2번 고르기 + 둘째 컷 자막
-  const edited = { ...s.script, hook: 1, cuts: s.script.cuts.map((c, i) => (i === 1 ? { ...c, caption: "직접 고친 자막", from: 0.5, to: 2.5 } : c)) };
+  const edited = { ...s.script, hook: 1, cuts: s.script.cuts.map((c, i) => (i === 1 ? { ...c, caption: "직접 고친 자막", from: 0.5, to: 2.5, speed: 2 } : c)) };
   const sv = await call(`/api/shoots/${id}`, "POST", { action: "save", script: edited });
   assert.equal(sv.status, 200, JSON.stringify(sv.data));
   assert.equal(sv.data.script.cuts[1].caption, "직접 고친 자막");
@@ -2708,14 +2708,16 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   await call("/api/routines", "POST", { action: "tick" });
   assert.equal((await call(`/api/shoots/${id}`)).data.reel_id, ap.data.reel_id);
   const reel = (await call(`/api/reels/${ap.data.reel_id}`)).data;
-  assert.deepEqual(reel.doc.scenes.map((x) => [x.video.videoId, x.video.from, x.dur, x.sound]), [[v2, 0.5, 1.5, true], [v1, 0.5, 2, true]]);
+  assert.deepEqual(reel.doc.scenes.map((x) => [x.video.videoId, x.video.from, x.dur, x.sound]), [[v2, 0.5, 1.5, true], [v1, 0.5, 1, false]], "2배속 컷: 원본 2초 → 화면 1초, 소리 끔");
+  assert.deepEqual(reel.doc.scenes.map((x) => x.speed), [undefined, 2]);
+  assert.match(await stepPrompt("숏폼 편집 감독"), /"speed":1/, "대본 AI에 배속 칸 안내");
   assert.deepEqual(reel.doc.texts.map((x) => x.text), ["줄 서는 이유", "직접 고친 자막"], "첫 컷 자막 = 고른 후킹");
   assert.equal(reel.doc.music, null, "배경음악 없음");
   s = await wait(["rendering"], 480, 1000);
   assert.equal(s.status, "done", s.message);
   assert.ok(s.output_video_id, "완성 영상");
   const out = (await call("/api/videos")).data.videos.find((v) => v.id === s.output_video_id);
-  assert.ok(Math.abs(out.duration - 3.5) < 0.4, `컷 길이 합 = 완성 길이 (${out.duration})`);
+  assert.ok(Math.abs(out.duration - 2.5) < 0.4, `컷 길이 합 = 완성 길이 (${out.duration})`);
   const after = (await mockLog()).slice(calls);
   assert.ok(after.some((l) => l.path.endsWith("/sendMessage") && l.body.text.includes("숏폼이 완성됐어요")), "완성 알림");
   assert.ok(!after.some((l) => JSON.stringify(l.body ?? "").includes("숏폼 편집 감독")), "승인·만들기에는 AI 호출 없음");

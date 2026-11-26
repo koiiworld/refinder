@@ -9,7 +9,9 @@
 - 릴스 장면에 `sound?: boolean` 추가(`remotion/types.ts`, `Reel.tsx`): 켜면 그 장면 영상(`video.videoId`)의 소리를 `video.from` 부터 냄. 현장 숏폼 문서는 `baseVideoId: null` + 장면마다 `sound: true`. 가로 클립은 `contain`, 세로는 `cover`.
 - 사실 규칙: 가격·위치·이름은 메모에 적힌 것만, 없으면 `script.check`(확인이 필요해요)로.
 - **2차(2026-11-27)**: ① 대본 2안 — 대본 AI 한 번에 `variants` 2개(수정 요청은 고른 안만 다시), 표 `shoots.variants`·`pick`(`script = variants[pick]`), 화면에서 눌러 비교(`action: pick`). ② 플랫폼별 올릴 글 — `script.caption/hashtags`(인스타 릴스)·`script.shorts`·`script.clip`(제목+설명), 화면에서 각각 복사. ③ 텔레그램 승인 — 대본 알림에 안별 컷·자막 요약 + 버튼 `sa:<촬영id>:<안 번호>`, `routines.ts pollButtons`(1분마다)가 `shootButton` 호출 → 승인·내보내기. 내 채팅에서 누른 것만, 이미 만드는 중이면 다시 만들지 않음.
-- 올리기 칸: 끌어다 놓기(`NewShoot.tsx`, 사진 앱에서 끌어오면 file.type 이 비어 올 수 있어 `isVideoFile` 이 확장자로도 확인 — `shoot-types.ts VIDEO_EXT`). `/api/videos/upload` 도 같은 확장자를 받고, avi·mkv·3gp 등 브라우저가 못 트는 형식은 mp4로 바꿔 저장(mp4·mov·m4v·webm 은 원본). 맥 사진 앱에서 실제로 끌어오는 것은 미확인(모의 drop 이벤트로만 확인).
+- 올리기 칸: 끌어다 놓기(`NewShoot.tsx`, 사진 앱에서 끌어오면 file.type 이 비어 올 수 있어 `isVideoFile` 이 확장자로도 확인 — `shoot-types.ts VIDEO_EXT`). `/api/videos/upload` 도 같은 확장자를 받고, avi·mkv·3gp 등 브라우저가 못 트는 형식은 mp4로 바꿔 저장(mp4·mov·m4v·webm 은 원본). ⚠️ 맥 사진 앱에서 영상을 브라우저로 끌어오면 사진 앱이 영상 대신 JPEG 미리보기만 넘김(사용자 실제 확인, 웹에서 못 고침) → 화면에서 "눌러서 고르기 → 미디어 → 사진" 또는 "바탕화면으로 먼저 꺼내기"를 안내.
+- 배속: 컷 `speed`(0.5·1·1.5·2·3·4, `SHOOT_SPEEDS`) — AI가 긴 과정은 빠르게·짧은 순간은 느리게 제안, 화면에서 컷마다 고름. 릴스 장면 `speed`(`Reel.tsx` playbackRate, `dur` = 화면 길이, 원본은 dur×speed). 배속 컷은 소리 끔(`sound:false`). 릴스 편집기 화면에는 아직 배속 조절 칸이 없음(저장·나누기는 배속 유지).
+- 올리기 끊김: 클립마다 연결이 끊기면 15초 뒤 2번 더 시도, 그래도 안 되면 올라간 클립은 기억해 두고 다시 누를 때 이어서(`NewShoot.tsx done`). ⚠️ 배포(push)·맥 앱 재시작 중에는 올리기가 끊김 — 두 작업 세션이 같은 브랜치에 번갈아 push 하면 Render가 계속 재시작됨. 다른 세션의 `git add -A` 가 이쪽 작업 중 파일을 같이 커밋한 일이 있었음(6e5e90f) → 커밋은 자기 파일만 골라서.
 - 아직 안 한 것: 텔레그램에서 글로 수정 요청, 썸네일. 사용자 희망: 나중에 대본을 API 없이(무료 Gemini·맥 로컬 AI) — 단계별 AI만 바꾸면 되게 해 둠. 미확인: 실제 휴대폰 원본(HEVC·HDR·4K) 올리기와 Render 메모리(512MB)에서 큰 파일 올리기, 실제 Claude 대본 품질.
 
 ### Claude 작업 (2026-11-10)
