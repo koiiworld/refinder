@@ -250,6 +250,8 @@ export async function runDaily(day = kstDay(), force = false) {
   // 골드박스는 가격 기록용으로 조용히 저장만 (보고 X, 11/27 사용자 지시). 실패해도 보고는 계속
   const items = await goldbox(day, force).catch(() => [] as GoldItem[]);
   await report(await insightsReport(day), false);
+  const tr = await trendsSection().catch(() => "");
+  if (tr) await report(tr);
   const yday = kstDay(new Date(Date.parse(`${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}T00:00:00+09:00`) - 3600_000));
   const sum = await replySummary(yday).catch(() => "");
   if (sum) await report(sum);
@@ -456,5 +458,29 @@ export async function insightsReport(day = kstDay()) {
     lines.push("", `👍 가장 많이 본 첫 줄: "${top.p.first.replace(/\s*\[광고\]\s*/, " ").trim().slice(0, 40)}"`, `👎 가장 적게 본 첫 줄: "${low.p.first.replace(/\s*\[광고\]\s*/, " ").trim().slice(0, 40)}"`);
   }
   lines.push("", "※ 댓글 수에는 우리가 단 링크 댓글도 포함돼요.");
+  return lines.join("\n");
+}
+
+/** 오늘 뜨는 주제: 스레드 인기 주제(한국) → 비어 있으면 구글 트렌드 한국 */
+export async function trendsSection() {
+  const lines: string[] = [];
+  try {
+    const d = (await threadsGet("/trending_topics", { country_code: "KR" })) as { trends?: { title: string; description?: string }[] };
+    const t = d.trends ?? [];
+    if (t.length) {
+      lines.push("🔥 스레드 인기 주제 (한국)");
+      t.slice(0, 10).forEach((x, i) => lines.push(`${i + 1}. ${x.title}${x.description ? ` — ${x.description.slice(0, 50)}` : ""}`));
+      return lines.join("\n");
+    }
+  } catch { /* 구글 트렌드로 */ }
+  try {
+    const { googleTrends } = await import("./hot-report");
+    const g = await googleTrends();
+    if (g.length) {
+      lines.push("🔥 오늘 뜨는 검색어 (구글 트렌드 한국 · 스레드 한국 인기 주제는 아직 비어 있음)");
+      g.slice(0, 10).forEach((x, i) => lines.push(`${i + 1}. ${x.title} (${x.traffic})${x.news[0] ? ` — ${x.news[0].title.slice(0, 40)}` : ""}`));
+      lines.push("", "글감으로 쓸 만한 번호를 답장하면 상황형 첫 줄 후보를 만들어요.");
+    }
+  } catch { /* 없음 */ }
   return lines.join("\n");
 }

@@ -29,7 +29,10 @@ export default function NewShoot({ estimate }: { estimate: Est }) {
     const add = all.filter(isVideoFile);
     const skipped = all.filter((f) => !isVideoFile(f));
     const next = [...files, ...add.filter((f) => !files.some((c) => c.name === f.name && c.size === f.size))];
-    setNote([skipped.length ? `영상이 아니라서 뺐어요: ${skipped.map((f) => f.name).slice(0, 3).join(", ")}${skipped.length > 3 ? ` 외 ${skipped.length - 3}개` : ""}` : "", next.length > MAX_SHOOT_CLIPS ? `한 번에 ${MAX_SHOOT_CLIPS}개까지라 뒤의 ${next.length - MAX_SHOOT_CLIPS}개는 뺐어요.` : ""].filter(Boolean).join(" "));
+    // 맥 사진 앱은 브라우저로 영상을 끌어오면 영상 대신 미리보기 사진(JPEG)만 넘겨줌 → 되는 방법 안내
+    const photoOnly = skipped.some((f) => /^image\//.test(f.type) || /\.(jpe?g|heic|png)$/i.test(f.name));
+    setNote([skipped.length ? `영상이 아니라서 뺐어요: ${skipped.map((f) => f.name).slice(0, 3).join(", ")}${skipped.length > 3 ? ` 외 ${skipped.length - 3}개` : ""}` : "",
+      photoOnly ? "맥 사진 앱에서 영상을 끌어오면 영상 대신 사진(JPEG)만 넘어와요. 점선 칸을 눌러 열리는 창의 왼쪽 '미디어 → 사진'에서 영상을 고르거나, 사진 앱에서 영상을 바탕화면으로 먼저 끌어낸 뒤 그 파일을 끌어오세요." : "", next.length > MAX_SHOOT_CLIPS ? `한 번에 ${MAX_SHOOT_CLIPS}개까지라 뒤의 ${next.length - MAX_SHOOT_CLIPS}개는 뺐어요.` : ""].filter(Boolean).join(" "));
     setFiles(next.slice(0, MAX_SHOOT_CLIPS));
   }
   // 칸 밖에 떨어뜨려도 브라우저가 영상을 새 창으로 열어 버리지 않게
@@ -91,7 +94,7 @@ export default function NewShoot({ estimate }: { estimate: Est }) {
       </div>
       <label style={{ border: "2px dashed var(--line)", borderRadius: 12, padding: "18px 12px", textAlign: "center", cursor: "pointer", display: "block" }}>
         <div><b>{over ? "여기에 놓으세요" : "🎞 영상을 여기로 끌어다 놓거나 눌러서 고르기"}</b></div>
-        <div className="tiny muted" style={{ marginTop: 4 }}>여러 개 한꺼번에 · 사진 앱·폴더에서 바로 끌어와도 돼요 · mp4·mov(아이폰)·m4v·webm·mkv·avi·3gp</div>
+        <div className="tiny muted" style={{ marginTop: 4 }}>여러 개 한꺼번에 · 폴더(Finder·탐색기)에서 끌어오기 · 맥 사진 앱의 영상은 눌러서 고르기 → 미디어 → 사진 · mp4·mov(아이폰)·m4v·webm·mkv·avi·3gp</div>
         <input type="file" accept="video/*,.mp4,.mov,.m4v,.qt,.webm,.mkv,.avi,.3gp,.3g2,.mts,.m2ts,.mpg,.mpeg" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} />
       </label>
       {note && <div className="notice notice-warn small">{note}</div>}
