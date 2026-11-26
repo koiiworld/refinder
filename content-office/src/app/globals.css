@@ -605,6 +605,15 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cut-note a { color: var(--cut-accent); }
 .cut-stage { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 4px 12px; }
 .cut-frame { max-height: 100%; max-width: 100%; height: 100%; background: #000; position: relative; }
+/* 미리보기 위 오버레이 상자 (끌어 옮기기·모서리 크기 조절) */
+.cut-ovbox { position: absolute; z-index: 5; cursor: move; touch-action: none; outline: 1px dashed rgba(255,255,255,.35); }
+.cut-ovbox:hover { outline: 1px solid rgba(255,255,255,.7); }
+.cut-ovbox.on { outline: 2px solid var(--cut-accent, #7c5cff); }
+.cut-ovh { position: absolute; width: 14px; height: 14px; background: #fff; border: 2px solid var(--cut-accent, #7c5cff); border-radius: 50%; touch-action: none; }
+.cut-ovh.nw { left: -7px; top: -7px; cursor: nwse-resize; } .cut-ovh.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.cut-ovh.ne { right: -7px; top: -7px; cursor: nesw-resize; } .cut-ovh.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.cut-ovnum { position: absolute; left: 4px; top: 4px; min-width: 20px; height: 20px; border-radius: 10px; background: #7c5cff; color: #fff; font-size: 12px; font-weight: 800; display: grid; place-items: center; pointer-events: none; z-index: 2; }
+.cut-num { width: 58px; background: #1c1c22; color: inherit; border: 1px solid var(--cut-line, #333); border-radius: 6px; padding: 2px 4px; font: inherit; font-size: 12px; }
 .cut-empty { width: 100%; height: 100%; background: #000; color: var(--cut-text); border: 1px dashed var(--cut-line); font-size: 16px; cursor: pointer; }
 .cut-bar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; }
 .cut-time { font-size: 13px; font-variant-numeric: tabular-nums; }

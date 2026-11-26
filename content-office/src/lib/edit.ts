@@ -75,7 +75,7 @@ export async function saveEdit(id: string, doc: EditDoc, title?: string) {
       ...c, in: num(c.in, 0, 36000, 0), out: Math.max(num(c.in, 0, 36000, 0) + 0.1, num(c.out, 0, 36000, 1)), speed: num(c.speed, 0.25, 4, 1), volume: num(c.volume, 0, 2, 1),
       zoom: c.zoom ? { from: num(c.zoom.from, 1, 3, 1), to: num(c.zoom.to, 1, 3, 1.2), x: num(c.zoom.x, 0, 100, 50), y: num(c.zoom.y, 0, 100, 50) } : null,
     })),
-    overlays: (doc.overlays ?? []).slice(0, 50).map((o) => ({ ...o, start: num(o.start, 0, 36000, 0), dur: num(o.dur, 0.1, 36000, 3), in: num(o.in, 0, 36000, 0), x: num(o.x, 0, 100, 50), y: num(o.y, 0, 100, 50), w: num(o.w, 5, 100, 40), opacity: num(o.opacity, 0, 1, 1), volume: num(o.volume, 0, 2, 0), radius: num(o.radius, 0, 100, 0) })),
+    overlays: (doc.overlays ?? []).slice(0, 50).map((o) => ({ ...o, start: num(o.start, 0, 36000, 0), dur: num(o.dur, 0.1, 36000, 3), in: num(o.in, 0, 36000, 0), x: num(o.x, 0, 100, 50), y: num(o.y, 0, 100, 50), w: num(o.w, 2, 100, 40), opacity: num(o.opacity, 0, 1, 1), volume: num(o.volume, 0, 2, 0), radius: num(o.radius, 0, 100, 0), h: o.h == null ? undefined : num(o.h, 3, 100, 30), fit: o.fit === "contain" ? ("contain" as const) : o.h == null ? undefined : ("cover" as const) })),
     audios: (doc.audios ?? []).slice(0, 50).map((a) => ({ ...a, start: num(a.start, 0, 36000, 0), in: num(a.in, 0, 36000, 0), dur: num(a.dur, 0.1, 36000, 5), volume: num(a.volume, 0, 2, 1), label: String(a.label ?? "").slice(0, 60) })),
     texts: doc.texts.slice(0, 500).map((t) => ({ ...t, text: String(t.text ?? "").slice(0, 300), start: num(t.start, 0, 36000, 0), end: Math.max(num(t.start, 0, 36000, 0) + 0.1, num(t.end, 0, 36000, 1)), style: { ...DEFAULT_TEXT_STYLE, ...t.style } })),
   };

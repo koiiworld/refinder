@@ -55,8 +55,12 @@ export const Edit: React.FC<EditProps> = ({ doc, srcs, fontUrl, fontUrls, scale 
         const [W] = RATIO_SIZE[doc.ratio];
         return (
           <Sequence key={o.id} from={Math.round(o.start * fps)} durationInFrames={Math.max(1, Math.round(o.dur * fps))} name="오버레이">
-            <div style={{ position: "absolute", left: `${o.x}%`, top: `${o.y}%`, width: `${o.w}%`, transform: "translate(-50%, -50%)", opacity: o.opacity, borderRadius: (o.radius / 100) * W * 0.1, overflow: "hidden" }}>
-              {o.kind === "image" ? <Img src={src} style={{ width: "100%", display: "block" }} /> : <OffthreadVideo pauseWhenBuffering src={src} startFrom={Math.round(o.in * fps)} volume={o.volume} muted={o.volume === 0} transparent={!!o.alpha} style={{ width: "100%", display: "block" }} />}
+            <div data-ov={o.id} style={{ position: "absolute", left: `${o.x}%`, top: `${o.y}%`, width: `${o.w}%`, height: o.h ? `${o.h}%` : undefined, transform: "translate(-50%, -50%)", opacity: o.opacity, borderRadius: (o.radius / 100) * W * 0.1, overflow: "hidden" }}>
+              {(() => {
+                // 칸 크기가 정해져 있으면(h) 칸에 맞춰 채움, 아니면 원래 비율
+                const st: React.CSSProperties = o.h ? { width: "100%", height: "100%", display: "block", objectFit: o.fit ?? "cover" } : { width: "100%", display: "block" };
+                return o.kind === "image" ? <Img src={src} style={st} /> : <OffthreadVideo pauseWhenBuffering src={src} startFrom={Math.round(o.in * fps)} volume={o.volume} muted={o.volume === 0} transparent={!!o.alpha} style={st} />;
+              })()}
             </div>
           </Sequence>
         );

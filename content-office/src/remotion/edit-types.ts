@@ -36,7 +36,11 @@ export type Clip = {
   alpha?: boolean; // 배경 제거된 투명 영상(webm)
 };
 /** 오버레이: 메인 위에 겹치는 영상·사진 (화면 속 화면) */
-export type Overlay = { id: string; src: string; kind: "video" | "image"; start: number; dur: number; in: number; x: number; y: number; w: number; opacity: number; volume: number; radius: number; alpha?: boolean };
+export type Overlay = { id: string; src: string; kind: "video" | "image"; start: number; dur: number; in: number; x: number; y: number; w: number; opacity: number; volume: number; radius: number; alpha?: boolean;
+  /** 세로 크기(화면 높이 %). 있으면 정해진 칸 안에 넣음 (나란히 놓기·직접 크기 조절) — 없으면 원래 비율대로 */
+  h?: number;
+  /** 칸 채우는 방식: cover = 꽉 채우고 넘치는 부분 잘라냄 · contain = 전체 보이게 */
+  fit?: "cover" | "contain" };
 /** 오디오: 영상에서 소리만 · 올린 음악 · 음성 */
 export type AudioClip = { id: string; src: string; start: number; in: number; dur: number; volume: number; label: string };
 
