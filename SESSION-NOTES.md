@@ -73,7 +73,9 @@
 - 같은 날 게시: 아이폰 Air 새 흐름(본글→댓글1→마지막 댓글 링크) DgNb-fKG42n
 
 ## 텔레그램 답장 자동 확인
-- 예약 작업 trig_01HvZrhhj7GrY3GFGMgtEnJa: 매일 09:23~23:23(KST) 매시간 새 세션이 Render /api/deals inbox 확인 → 처리 → ack → report. 게시는 텔레그램에서 '게시해' 받은 원고만
+- 예약 작업 trig_01HvZrhhj7GrY3GFGMgtEnJa: 매일 09:23~23:23(KST) 매시간 새 세션 실행. 먼저 ?action=awaiting 확인 → false 면 바로 종료 (사용자 지시 11/27: 내가 보고를 보냈을 때만 답장 확인). true 면 inbox → 처리 → ack → report. 게시는 텔레그램에서 '게시해' 받은 원고만
+- awaiting: report 보내면 24시간 켜짐(noWait:true 면 안 켬), 답장을 ack 처리하면 꺼짐
+- 스레드 인기 주제 API는 KR 빈 결과(US만 나옴). keyword_search 는 403(권한/검수 필요)
 
 ## 글쓰기 플레이북
 - THREADS-PLAYBOOK.md (7단계: 첫 줄 후보 10개·상황 팔기·후기형(메모 있을 때만)·본글→댓글1→마지막 댓글 링크·상품 고르기·시리즈·직전 점검)
