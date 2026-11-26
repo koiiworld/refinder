@@ -180,8 +180,10 @@ export function checkPost(body: string, reply: string) {
   if (!body.trim()) problems.push("본문이 비어 있어요");
   if (len(body) > 500) problems.push(`본문이 500자를 넘어요 (${len(body)}자)`);
   if (len(reply) > 500) problems.push(`댓글이 500자를 넘어요 (${len(reply)}자)`);
-  if (!/\[광고\]|#광고/.test(body.split("\n").slice(0, 2).join("\n"))) problems.push("본문 첫 두 줄 안에 #광고 또는 [광고] 표시가 없어요");
-  if (reply && !/수수료/.test(reply)) problems.push("댓글에 대가성 문구(수수료)가 없어요");
+  // 링크·쿠팡 언급이 전혀 없는 글(공감·정보글)은 광고가 아니므로 광고 표시 검사 생략
+  const isAd = /https?:\/\/|link\.coupang|쿠팡|파트너스/.test(body + "\n" + reply);
+  if (isAd && !/\[광고\]|#광고/.test(body.split("\n").slice(0, 2).join("\n"))) problems.push("본문 첫 두 줄 안에 #광고 또는 [광고] 표시가 없어요");
+  if (isAd && reply && /https?:\/\/|link\.coupang/.test(reply) && !/수수료/.test(reply)) problems.push("링크 댓글에 대가성 문구(수수료)가 없어요");
   if (/링크 필요|링크 생성 전|\(링크\)/.test(reply)) problems.push("댓글에 비어 있는 링크 자리가 있어요");
   return problems;
 }
