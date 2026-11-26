@@ -1,5 +1,5 @@
 import { body, fail, handle, ok } from "@/lib/api";
-import { agentAllowed, attachPostLog, checkPost, replyTick, replySummary, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
+import { agentAllowed, attachPostLog, awaiting, checkPost, replyTick, replySummary, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
 
 /**
  * 🧹 반품특가 줍줍 API
@@ -18,6 +18,7 @@ export async function GET(req: Request) {
     const u = new URL(req.url);
     const action = u.searchParams.get("action") ?? "status";
     if (action === "inbox") return ok(await inbox(false));
+    if (action === "awaiting") return ok({ awaiting: await awaiting() });
     if (action === "photo") {
       const { bytes, type } = await photo(String(u.searchParams.get("id") ?? ""));
       return new Response(new Uint8Array(bytes), { headers: { "content-type": type, "cache-control": "no-store" } });
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
     }
     if (action === "status") {
       const threads = await threadsMe().catch((e: Error) => `연결 안 됨 (${e.message})`);
-      return ok({ threads, report: !!process.env.REPORT_TELEGRAM_BOT_TOKEN?.trim(), today: kstDay() });
+      return ok({ threads, report: !!process.env.REPORT_TELEGRAM_BOT_TOKEN?.trim(), today: kstDay(), awaiting: await awaiting() });
     }
     return fail("알 수 없는 작업이에요.");
   });
@@ -47,11 +48,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   return handle(async () => {
     if (denied(req)) return fail("토큰이 맞지 않아요.", 401);
-    const b = await body<{ action?: string; text?: string; keyword?: string; urls?: string[]; body?: string; reply?: string; force?: boolean; id?: string; replyId?: string; replies?: string[] }>(req);
+    const b = await body<{ action?: string; text?: string; keyword?: string; urls?: string[]; body?: string; reply?: string; force?: boolean; id?: string; replyId?: string; replies?: string[]; noWait?: boolean }>(req);
     try {
       switch (b.action) {
         case "ack": return ok(await inbox(true));
-        case "report": await report(String(b.text ?? "")); return ok({ ok: true });
+        case "report": await report(String(b.text ?? ""), !b.noWait); return ok({ ok: true });
         case "search": return ok({ items: await search(String(b.keyword ?? "")) });
         case "links": {
           const urls = (Array.isArray(b.urls) ? b.urls : []).map(String).filter((x) => /^https:\/\/(www|m)\.coupang\.com\//.test(x));

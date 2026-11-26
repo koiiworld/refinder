@@ -128,13 +128,20 @@ function reportBot() {
   return { token, chat };
 }
 
-export async function report(text: string) {
+/** 보고를 보낸 뒤 24시간 동안만 '답장 기다리는 중' → 이때만 답장 확인 (사용자 지시 11/27) */
+export async function awaiting() {
+  const a = await getSetting<{ until?: string }>("deals_awaiting");
+  return !!a?.until && Date.parse(a.until) > Date.now();
+}
+
+export async function report(text: string, wait = true) {
   const { token, chat } = reportBot();
   const t = String(text ?? "").trim().slice(0, 4000);
   if (!t) throw new Error("보낼 내용이 비어 있어요.");
   const res = await fetch(`${TG()}/bot${token}/sendMessage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: chat, text: t, disable_web_page_preview: true }), signal: AbortSignal.timeout(15_000) });
   const d = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
   if (!res.ok || d.ok === false) throw new Error(`텔레그램 오류: ${d.description ?? res.status}`);
+  if (wait) await setSetting("deals_awaiting", { at: new Date().toISOString(), until: new Date(Date.now() + 24 * 3600_000).toISOString() });
 }
 
 /** 새 답장 읽기 (글자 + 사진 file_id). ack=true 면 읽음 처리 */
@@ -153,6 +160,7 @@ export async function inbox(ack = false) {
     messages.push({ id: m.message_id, at: new Date(m.date * 1000).toISOString(), text: m.text ?? m.caption ?? "", photo });
   }
   if (ack && last >= offset) await setSetting("deals_inbox", { offset: last + 1 });
+  if (ack && messages.length) await setSetting("deals_awaiting", { at: new Date().toISOString(), until: null });
   return { messages, nextOffset: last + 1 };
 }
 
