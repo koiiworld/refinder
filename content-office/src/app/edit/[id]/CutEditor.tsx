@@ -370,19 +370,32 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       let x = o.x + dx, y = o.y + dy;
       if (!e.altKey) {
         const others = d.base.overlays.filter((q) => q.id !== o.id && boxes[q.id]);
-        // 가장자리끼리(화면 끝·다른 칸 끝), 가운데는 화면 가운데에만
-        const xs = [0, 100, ...others.flatMap((q) => [boxes[q.id].l, boxes[q.id].l + boxes[q.id].w])];
-        const ys = [0, 100, ...others.flatMap((q) => [boxes[q.id].t, boxes[q.id].t + boxes[q.id].h])];
-        const snap = (c: number, half: number, list: number[]) => { if (Math.abs(c - 50) < 1) return 50; for (const v of list) for (const edge of [-half, half]) if (Math.abs(c + edge - v) < 1) return v - edge; return c; };
-        x = snap(x, o.w / 2, xs); y = snap(y, h / 2, ys);
+        // 자석: 왼쪽 끝→화면 왼쪽, 오른쪽 끝→화면 오른쪽, 가운데→화면 가운데, 다른 칸 끝끼리 (1%)
+        const snap = (c: number, half: number, others: number[]) => {
+          if (Math.abs(c - 50) < 1) return 50;
+          if (Math.abs(c - half) < 1) return half;
+          if (Math.abs(c + half - 100) < 1) return 100 - half;
+          for (const v of others) for (const edge of [-half, half]) if (Math.abs(c + edge - v) < 1) return v - edge;
+          return c;
+        };
+        x = snap(x, o.w / 2, others.flatMap((q) => [boxes[q.id].l, boxes[q.id].l + boxes[q.id].w]));
+        y = snap(y, h / 2, others.flatMap((q) => [boxes[q.id].t, boxes[q.id].t + boxes[q.id].h]));
+        // 화면 밖으로 나가 안 보이게 되지 않도록 (Alt 누르면 밖으로도 가능)
+        x = Math.max(Math.min(o.w, 100) / 2, Math.min(100 - Math.min(o.w, 100) / 2, x));
+        y = Math.max(Math.min(h, 100) / 2, Math.min(100 - Math.min(h, 100) / 2, y));
       }
       p = { x: r2(x), y: r2(y) };
     } else {
       const sxs = d.mode.includes("e") ? 1 : -1, sys = d.mode.includes("s") ? 1 : -1;
+      // 반대쪽 모서리는 그대로, 끄는 쪽은 화면 끝까지만
+      const L = o.x - o.w / 2, R = o.x + o.w / 2, T = o.y - d.h0 / 2, B = o.y + d.h0 / 2;
+      const maxW = e.altKey ? 100 : Math.max(3, sxs > 0 ? 100 - Math.max(0, L) : Math.min(100, R));
+      const maxH = e.altKey ? 100 : Math.max(3, sys > 0 ? 100 - Math.max(0, T) : Math.min(100, B));
       let w = Math.max(3, o.w + sxs * dx), h = Math.max(3, d.h0 + sys * dy);
-      if (e.shiftKey) { const k = Math.max(w / o.w, h / d.h0); w = o.w * k; h = d.h0 * k; }
-      w = Math.min(100, w); h = Math.min(100, h);
-      p = { w: r2(w), h: r2(h), x: r2(o.x + (sxs * (w - o.w)) / 2), y: r2(o.y + (sys * (h - d.h0)) / 2), fit: o.fit ?? "cover" };
+      if (e.shiftKey) { const k = Math.max(w / o.w, h / d.h0); w = o.w * k; h = d.h0 * k; const f = Math.min(1, maxW / w, maxH / h); w *= f; h *= f; }
+      w = Math.min(maxW, w); h = Math.min(maxH, h);
+      const ax = sxs > 0 ? Math.max(0, L) : Math.min(100, R), ay = sys > 0 ? Math.max(0, T) : Math.min(100, B);
+      p = { w: r2(w), h: r2(h), x: r2(e.altKey ? o.x + (sxs * (w - o.w)) / 2 : ax + (sxs * w) / 2), y: r2(e.altKey ? o.y + (sys * (h - d.h0)) / 2 : ay + (sys * h) / 2), fit: o.fit ?? "cover" };
     }
     setDocRaw({ ...d.base, overlays: d.base.overlays.map((q) => (q.id === o.id ? { ...q, ...p } : q)) });
     setSave("dirty");
@@ -662,7 +675,8 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
             <div className="stack" style={{ gap: 6 }}>
               <label className="cut-row-ctl">가로 <input type="range" min={0} max={100} value={selOv.x} onChange={(e) => patchOv(selOv.id, { x: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">세로 <input type="range" min={0} max={100} value={selOv.y} onChange={(e) => patchOv(selOv.id, { y: Number(e.target.value) })} /></label>
-              <span className="cut-hint">💡 미리보기에서 영상을 끌어 옮기고, 모서리 점을 끌어 크기를 바꿔요 (Shift 누르면 비율 유지)</span>
+              <span className="cut-hint">💡 미리보기에서 영상을 끌어 옮기고, 모서리 점을 끌어 크기를 바꿔요 (Shift 누르면 비율 유지). 화면(검은 틀 안)만 영상에 나와요 — 옆으로 더 넓게 쓰려면 아래 <b>비율</b>에서 16:9·1:1로 바꾸세요.</span>
+              {(selOv.x - selOv.w / 2 > 98 || selOv.x + selOv.w / 2 < 2 || selOv.y - boxH(selOv) / 2 > 98 || selOv.y + boxH(selOv) / 2 < 2) && <button className="cut-btn primary" onClick={() => patchOv(selOv.id, { x: 50, y: 50, w: Math.min(selOv.w, 90), ...(selOv.h ? { h: Math.min(selOv.h, 90) } : {}) })}>⚠️ 화면 밖에 있어요 — 화면 안으로 가져오기</button>}
               <div className="cut-chips">
                 <span className="cut-hint">모양</span>
                 <button className={!selOv.h ? "on" : ""} onClick={() => patchOv(selOv.id, { h: undefined, fit: undefined })}>원래 비율</button>
