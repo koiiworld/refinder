@@ -60,6 +60,13 @@
 - 클라우드에서 호출: 헤더 x-co-agent-token. 환경 설정 > Network secrets 에 host ai-content-office-m7sx.onrender.com / header x-co-agent-token 으로 저장하면 새 세션부터 Mac 없이 사용
 - 맥의 08:10 launchd(com.refinder.daily-goldbox)는 끔(파일은 ~/.ai-content-office/*.plist.off)
 
+## 글 검수 규칙 (11/26 확정, 추가 비용 없음)
+1. Gemini 무료 키 (맥 ~/.ai-content-office/tone-review.mjs --passes=1): 첫 줄 훅·말투
+2. ig-human (~/.claude/skills/ig-human detect.py/humanize.py): 보이지 않는 문자·대시 등 AI 흔적만 (한국어 단어 점수는 무시). ZWJ 이모지(🏃‍♂️ 등) 쓰지 말 것
+3. Claude 최종: #광고 위치, 숫자·비교 대상, 한 글 안 말투·구조 통일
+- 유료 API(OpenAI·Anthropic) 검수 쓰지 않기. 말투는 글마다 자유지만 한 글 안에서는 통일
+- 비교는 같은 조건끼리만 (해외구매 vs 국내 정가 비교 금지). 골드박스 판매자 상품은 해외구매일 수 있음 → 로켓 우선
+
 ## 골드박스 (맥, 이전 방식) ~/.ai-content-office, 맥이 원본)
 - `goldbox.mjs`: 골드박스 API 하루 1회 → goldbox-YYYYMMDD.json (가격 기록 = 이 파일들)
 - `goldbox-post.mjs [--pick 1,4,7]`: 스레드 초안(threads.txt). 사실 기반 문구만: 지난 기록 대비 내림 / 기록 중 최저가 / 직접 확인한 정가(list-prices.json) 대비 -%
