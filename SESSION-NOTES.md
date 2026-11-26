@@ -68,6 +68,9 @@
 - 클라우드 환경 Network secret 저장 완료: 새 세션은 curl https://ai-content-office-m7sx.onrender.com/api/deals 를 헤더 없이 바로 호출 가능 (Mac 불필요)
 - 링크: 사용자가 쿠팡 파트너스에서 직접 딴 링크를 주면 그걸 우선 사용
 
+## 글쓰기 플레이북
+- THREADS-PLAYBOOK.md (7단계: 첫 줄 후보 10개·상황 팔기·후기형(메모 있을 때만)·본글→댓글1→마지막 댓글 링크·상품 고르기·시리즈·직전 점검)
+
 ## 글 검수 규칙 (11/26 확정, 추가 비용 없음)
 1. Gemini 무료 키 (맥 ~/.ai-content-office/tone-review.mjs --passes=1): 첫 줄 훅·말투
 2. ig-human (~/.claude/skills/ig-human detect.py/humanize.py): 보이지 않는 문자·대시 등 AI 흔적만 (한국어 단어 점수는 무시). ZWJ 이모지(🏃‍♂️ 등) 쓰지 말 것
