@@ -755,7 +755,7 @@ test("🎬 영상공장: 링크 → 받기 → AI가 화면 자막 위치 찾아
   const f = await fetch(`${BASE}/api/videos/${v.id}/file`);
   assert.equal(f.status, 200);
   assert.equal(f.headers.get("content-type"), "video/mp4");
-  assert.equal(Number(f.headers.get("content-length")), v.size);
+  assert.equal((await f.arrayBuffer()).byteLength, v.size, "파일 전체가 그대로 옴 (서버가 조각으로 나눠 보내 content-length 머리말은 없을 수 있음)");
   const part = await fetch(`${BASE}/api/videos/${v.id}/file`, { headers: { range: "bytes=0-99" } });
   assert.equal(part.status, 206);
   assert.equal((await part.arrayBuffer()).byteLength, 100);
