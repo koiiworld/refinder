@@ -698,3 +698,21 @@ CREATE TABLE IF NOT EXISTS ig_ops (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ig_ops_tool ON ig_ops (tool, created_at DESC);
+
+-- 📹 현장 숏폼: 찍은 영상 여러 개 → 영상 확인 → 대본 → 승인 → 자동 컷 편집
+CREATE TABLE IF NOT EXISTS shoots (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  kind       TEXT NOT NULL DEFAULT 'etc',          -- food | cafe | product | vlog | etc
+  memo       TEXT NOT NULL DEFAULT '',
+  seconds    INTEGER NOT NULL DEFAULT 30,
+  clips      JSONB NOT NULL DEFAULT '[]'::jsonb,   -- [{videoId, name, duration, transcript, frames, summary, quality}]
+  script     JSONB,                                -- {hooks, cuts:[{clip, from, to, caption}], caption, hashtags, check}
+  history    JSONB NOT NULL DEFAULT '[]'::jsonb,   -- 수정 요청 기록
+  status     TEXT NOT NULL DEFAULT 'analyzing',    -- analyzing | scripting | review | rendering | done | error
+  message    TEXT NOT NULL DEFAULT '',
+  failed_at  TEXT NOT NULL DEFAULT '',             -- 오류가 난 단계 (다시 하기용)
+  reel_id    TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

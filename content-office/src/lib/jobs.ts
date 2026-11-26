@@ -87,7 +87,7 @@ export function ensureWorker() {
 /** 영상 작업(다운로드·인코딩): 맥이 켜져 있으면 맥이 먼저 맡음 (Render 무료 서버는 CPU가 아주 약함) */
 export const VIDEO_JOBS = ["video_fetch", "video_fetch_mac", "video_edit", "studio_plan", "studio_character", "studio_scene", "studio_render"];
 const ON_RENDER = !!process.env.RENDER;
-export const MAC_ONLY_JOBS = ["video_fetch_mac", "reel_analyze", "reel_render", "reel_study", "edit_render", "edit_captions", "edit_reverse", "edit_fx", "edit_tts", "doc_convert"];
+export const MAC_ONLY_JOBS = ["video_fetch_mac", "reel_analyze", "reel_render", "reel_study", "shoot_analyze", "edit_render", "edit_captions", "edit_reverse", "edit_fx", "edit_tts", "doc_convert"];
 const hb = globalThis as unknown as { __macAlive?: { at: number; alive: boolean }; __macBeat?: number };
 /** 맥이 켜져 있고, 영상을 같은 저장소(Supabase)에 넣을 수 있을 때만 맥에 영상 작업을 맡김 */
 async function macAlive() {
@@ -291,6 +291,14 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
   async reel_render(job) {
     const { runReelRender } = await import("./reels");
     await runReelRender(String(job.payload.reelId), job.payload.quality === "720" ? "720" : "1080");
+    await (await import("./shoots")).shootRenderDone(String(job.payload.reelId)); // 현장 숏폼에서 만든 릴스면 완성 알림
+  },
+  // 📹 현장 숏폼: 영상 확인(맥: 받아쓰기·장면 사진 → 무료 Gemini) → 대본(Claude)
+  async shoot_analyze(job) {
+    await (await import("./shoots")).runShootAnalyze(String(job.payload.shootId));
+  },
+  async shoot_script(job) {
+    await (await import("./shoots")).runShootScript(String(job.payload.shootId), String(job.payload.feedback ?? ""));
   },
   async video_edit(job) {
     const { runVideoEdit } = await import("./videos");

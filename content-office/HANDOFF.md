@@ -2,6 +2,14 @@
 
 다른 AI 코딩 도구(Codex 등)가 이어서 작업할 때 **가장 먼저 읽을 문서**입니다. 기준 날짜: 2026-11-06. **파일 찾기는 `CODEMAP.md`(자동 생성: `node scripts/codemap.mjs`)를 먼저 보세요.**
 
+### 📹 현장 숏폼 `/shoots` (2026-11-27, 1차)
+- 흐름: 찍은 클립 여러 개 + 촬영 종류 + 메모 올리기 → 맥 작업 `shoot_analyze`(클립마다 받아쓰기·장면 사진 최대 10장 → 무료 Gemini `reelstudy` 단계가 사진을 보고 글로 정리) → 작업 `shoot_script`(새 단계 `shootscript`, 기본 Claude Opus 5.5 · 설정 단계별 AI에서 교체 가능) → 상태 `review` + 텔레그램 알림(링크) → 화면에서 후킹 고르기·컷 구간/자막 고치기·AI 수정 요청 → 승인 → `scriptToDoc` 으로 릴스 편집 문서 → 기존 `reel_render` → 끝나면 `shootRenderDone` 이 완성 알림.
+- 파일: `shoot-types.ts`(촬영 종류 `SHOOT_KINDS`·`cleanScript`·`scriptToDoc`, 화면·서버 공용), `shoots.ts`, `/api/shoots`, `app/shoots/*`. 표 `shoots`, 휴지통 접두사 `shoot_`.
+- **사용자 결정**: 현장 소리 유지 · 배경음악/AI 음성 없음(올릴 때 플랫폼 음악) · 승인은 텔레그램 알림 → 앱 화면 · **올리기를 누르면 대본 AI 비용까지 승인한 것**(POST `confirm:true`, 화면에 예상 비용 `shoot_script`). 수정 요청·대본 단계 다시 하기도 `confirm:true`. 자동 재시도 없음(작업 maxAttempts 1).
+- 릴스 장면에 `sound?: boolean` 추가(`remotion/types.ts`, `Reel.tsx`): 켜면 그 장면 영상(`video.videoId`)의 소리를 `video.from` 부터 냄. 현장 숏폼 문서는 `baseVideoId: null` + 장면마다 `sound: true`. 가로 클립은 `contain`, 세로는 `cover`.
+- 사실 규칙: 가격·위치·이름은 메모에 적힌 것만, 없으면 `script.check`(확인이 필요해요)로.
+- 아직 안 한 것(2·3차): 텔레그램 안에서 버튼으로 승인, 대본 여러 안 비교, 플랫폼별 캡션, 썸네일. 사용자 희망: 나중에 대본을 API 없이(무료 Gemini·맥 로컬 AI) — 단계별 AI만 바꾸면 되게 해 둠. 미확인: 실제 휴대폰 원본(HEVC·HDR·4K) 올리기와 Render 메모리(512MB)에서 큰 파일 올리기, 실제 Claude 대본 품질.
+
 ### Claude 작업 (2026-11-10)
 - 사용자는 **윈도우 PC + Render 주소**로 씀. 확장 프로그램은 설정 → 🧩 → zip 내려받기(`/api/extension-zip`)로 설치. 확장 1.2.0.
 - **서이추 기능 전부 삭제**(사용자 요청): `/seoichoo`, `/api/seoichoo`, `/api/ext/seoichoo`, `seoichoo.ts`, 확장의 seoichoo.*·seo-core.js·scripting 권한, 테스트. 실제 DB의 `seoichoo_jobs` 표는 건드리지 않음(스키마에서만 뺌).

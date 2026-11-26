@@ -30,6 +30,7 @@
 | `creator.ts` | 네이버 크리에이터 어드바이저 '유입 트렌드' — 공식 API가 없어 사용자가 화면에서 복사해 붙여 넣은 목록을 저장 | CreatorTrend, cleanCreatorKeyword, parseTrendText, saveCreatorTrend, listCreatorTrends, creatorTrendContext |
 | `dashboard.ts` | 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음) | PASS_SCORE, RevenueChannel, RevenueEntry, MonthRevenue, monthKey, getRevenue, saveRevenue, saveDailyRevenue … |
 | `db.ts` | 데이터베이스 어댑터 | getDb, q, q1, dbKind, newId, j |
+| `deals.ts` | 🧹 반품특가 줍줍 (스레드·카톡 알림방 운영) | GoldItem, kstDay, goldbox, plainUrl, shortLinks, search, unitPrice, report … |
 | `diagnose.ts` | 🩺 블로그 진단 | naverBlogSearch, naverSearch, postKey, blogKey, Check, diagnoseBlog, Diagnosis, DiagnoseState … |
 | `edit.ts` | 🎞 영상 편집 (캡컷형) — 편집은 화면에서(자동 저장), 무거운 일은 맥에서 | EditProject, RESOLUTIONS, listEdits, getEdit, createEdit, deleteEdit, saveEdit, startEditRender … |
 | `estimate.ts` | 돈 드는 버튼을 누르기 전 보여 줄 예상 비용 (토큰 × 단가 추정) | StepEstimate, estimateSteps, postEstimates |
@@ -88,6 +89,8 @@
 | `seed.ts` | 기본 역할 배정: 기획=Gemini, 원고=Claude, 검수=ChatGPT, 부분수정=Claude, 글감추천=Gemini | DEFAULT_MODELS, DEFAULT_ROLES, seedIfEmpty |
 | `series.ts` | 📺 시리즈 기획: 주인공·친구·주제 → N화를 한 번에 (화마다 제목·줄거리 3줄·8초 장면 프롬프트·유튜브 설명 2줄) | Episode, Series, listSeries, getSeries, createSeries, continueSeries, editEpisode, setCharacters … |
 | `settings.ts` | 기본 단가 (USD / 100만 토큰). 설정에서 직접 고치면 그 값이 우선합니다. | AppSettings, DEFAULT_PRICING, getSettings, saveSettings |
+| `shoot-types.ts` | 촬영 종류: 올릴 때 고름 → 종류마다 대본 구성 규칙이 달라짐 | SHOOT_KINDS, ShootKindId, shootKind, SHOOT_LENGTHS, MAX_SHOOT_CLIPS, ShootFrame, ShootClip, ShootCut … |
+| `shoots.ts` | 📹 현장 숏폼: 찍은 영상 여러 개 → 대본 보고 → 승인 → 자동 컷 편집 | ShootRow, listShoots, getShoot, createShoot, deleteShoot, runShootAnalyze, runShootScript, reviseShoot … |
 | `steps.ts` | 글(프로젝트) 진행 단계 | StepKey, STEP_AI_LABEL, DEFAULT_STEP_AI, FALLBACK_MODELS, POST_STAGES, STEP_NAMES, stageLabel, stageStep |
 | `studio.ts` | 🎬 영상 제작 스튜디오 (쇼츠·릴스) | StudioImage, StudioClip, StudioScene, StudioPlan, StudioCharacter, StudioOptions, StudioProject, STUDIO_STYLES … |
 | `telegram.ts` | 💬 텔레그램 메시지함: 앱이 보낸 메시지(보낸 메시지함)와 봇에게 온 메시지·버튼(받은 메시지함)을 기록 | TgMessage, TG_KIND, tgBase, logTg, listTg, tgCounts, markInboxSeen, sendManual |
@@ -150,6 +153,7 @@
 | `api/dashboard/revenue/route.ts` | 이번 달 수익 직접 입력 (쿠팡파트너스·애드포스트·애드센스 정산 화면 숫자) | GET, PUT, POST |
 | `api/dashboard/top/route.ts` | ?blogId · &day=YYYY-MM-DD (그날 일간) · &from=&to= (기간 지정 합계) | GET, POST |
 | `api/dashboard/visits/route.ts` | 블로그 방문자 수 (?refresh=1 이면 지금 바로 다시 수집) | GET |
+| `api/deals/route.ts` | 🧹 반품특가 줍줍 API | GET, POST |
 | `api/diagnose/route.ts` | 🩺 블로그 진단 시작 (서버 작업 큐에서 진행 — 화면을 떠나도 계속) | GET, POST |
 | `api/edit/[id]/route.ts` | { doc, title } 저장 | GET, PUT, POST, DELETE |
 | `api/edit/route.ts` | { videoIds, title } 새 편집 | GET, POST |
@@ -209,6 +213,8 @@
 | `api/settings/keys/route.ts` | API 키 상태 (키 값은 돌려주지 않음, 끝 4자리만) | GET, POST |
 | `api/settings/pricing/route.ts` | 단가 새로고침 (공개 가격표와 비교해 바뀐 모델만 반영) | POST |
 | `api/settings/route.ts` |  | GET, PUT |
+| `api/shoots/[id]/route.ts` | action: save {script} 대본 고친 것 저장 · approve {script?} 승인 → 영상 만들기 · revise {feedback, confirm} AI에게 수정 요청(유료) · retry {confirm} 멈춘 단계부터 다시 | GET, POST, DELETE |
+| `api/shoots/route.ts` | 📹 현장 숏폼 목록 + 대본 예상 비용 (AI 호출 없음) | GET, POST |
 | `api/souls/route.ts` | Higgsfield Soul ID(내 캐릭터) 목록 — 학습 중이면 상태를 새로 물어봄 | GET, POST |
 | `api/studio/[id]/route.ts` | 상태 (진행 중인 장면 영상은 Higgsfield에 확인해 갱신) | GET, PUT, POST, DELETE |
 | `api/studio/rewrite/route.ts` |  | GET, POST |
@@ -298,6 +304,10 @@
 | `settings/SettingsClient.tsx` | 세부 모델 선택: 추천 목록(가격 표시) + 불러온 모델 + 직접 입력 |  |
 | `settings/SoulCard.tsx` | Higgsfield Soul ID(내 캐릭터): 같은 인물 사진으로 한 번 학습 → SOUL 모델에서 같은 캐릭터로 계속 생성 |  |
 | `settings/page.tsx` |  | dynamic |
+| `shoots/NewShoot.tsx` | 새 촬영 올리기: 종류 · 메모 · 영상 여러 개 → 올리면 영상 확인·대본까지 자동 (올리기 = 대본 AI 비용 승인) |  |
+| `shoots/[id]/ShootView.tsx` | 그 구간에 가장 가까운 장면 사진 |  |
+| `shoots/[id]/page.tsx` |  | dynamic |
+| `shoots/page.tsx` |  | dynamic |
 | `studio/NewSeries.tsx` | 📺 시리즈로 만들기: 주인공·친구·주제 → N화 한 번에 |  |
 | `studio/NewStudio.tsx` |  |  |
 | `studio/[id]/StudioEditor.tsx` |  |  |

@@ -6,7 +6,7 @@ import { q, q1, newId } from "./db";
  * - 보내기는 각 기능(루틴·할 일·브리핑·시험)에서, 받기는 루틴 1분 확인(getUpdates)에서
  */
 export type TgMessage = { id: string; direction: "out" | "in"; kind: string; chat_id: string; chat_name: string; text: string; status: string; error: string | null; created_at: string };
-export const TG_KIND: Record<string, string> = { routine: "🔁 루틴 알림", todo: "✅ 할 일 알림", briefing: "☀️ 업무 브리핑", test: "🧪 시험 메시지", manual: "✉️ 직접 보냄", reply: "↩️ 자동 답", text: "💬 메시지", button: "🔘 버튼 누름", other: "기타" };
+export const TG_KIND: Record<string, string> = { routine: "🔁 루틴 알림", todo: "✅ 할 일 알림", briefing: "☀️ 업무 브리핑", shoot: "📹 현장 숏폼", test: "🧪 시험 메시지", manual: "✉️ 직접 보냄", reply: "↩️ 자동 답", text: "💬 메시지", button: "🔘 버튼 누름", other: "기타" };
 
 export const tgBase = () => (process.env.TELEGRAM_API_BASE?.trim() || "https://api.telegram.org").replace(/\/$/, "");
 

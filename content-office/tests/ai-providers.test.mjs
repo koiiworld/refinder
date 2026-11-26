@@ -2621,3 +2621,78 @@ test('🔲 영상 편집 나란히 놓기: 칸 크기(세로)·채우기 방식�
  const sv3=await call(`/api/edit/${ed}`,'PUT',{doc:{...sv.data.doc,size:[99999,'x'],clipBox:null},title:'나란히 시험'});
  assert.deepEqual(sv3.data.doc.size,[3840,1920],'너무 크면 3840까지');assert.equal(sv3.data.doc.clipBox,undefined);
 });
+
+test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아쓰기·장면 사진·AI가 봄) → 대본 보고·텔레그램 → 수정 요청 → 승인 → 현장 소리 그대로 자동 컷 편집 → 완성 알림", async () => {
+  const fs = await import("node:fs");
+  const up = async (name) => { const fd = new FormData(); fd.append("file", new Blob([fs.readFileSync("sample.mp4")], { type: "video/mp4" }), name); return (await (await fetch(`${BASE}/api/videos/upload`, { method: "POST", body: fd })).json()).id; };
+  const v1 = await up("클립1.mp4"), v2 = await up("클립2.mp4");
+  const est = await call("/api/shoots");
+  assert.equal(est.data.estimate.steps[0].key, "shoot_script");
+  assert.ok(est.data.estimate.steps[0].usd > 0, "대본 예상 비용");
+  const input = { videoIds: [v1, v2], kind: "food", memo: "현장숏폼마커 국밥집 9,000원", seconds: 20 };
+  assert.equal((await call("/api/shoots", "POST", input)).status, 400, "비용 확인 없이는 시작 안 함");
+  assert.equal((await call("/api/shoots", "POST", { ...input, videoIds: [], confirm: true })).status, 400);
+  const before = (await mockLog()).length;
+  const made = await call("/api/shoots", "POST", { ...input, confirm: true });
+  assert.equal(made.status, 200, JSON.stringify(made.data));
+  const id = made.data.id;
+  const wait = async (while_, n = 120, ms = 500) => { let s; for (let i = 0; i < n; i++) { s = (await call(`/api/shoots/${id}`)).data; if (!while_.includes(s.status)) break; await new Promise((x) => setTimeout(x, ms)); } return s; };
+  let s = await wait(["analyzing", "scripting"]);
+  assert.equal(s.status, "review", s.message);
+  // 영상 확인: 클립마다 길이·받아쓰기·장면 사진·AI 설명
+  assert.equal(s.clips.length, 2);
+  for (const c of s.clips) { assert.ok(Math.abs(c.duration - 3) < 0.3); assert.equal(c.transcript.length, 3); assert.ok(c.frames.length >= 2); assert.equal(c.frames[0].desc, "김이 올라오는 뚝배기"); assert.equal(c.summary, "국물이 끓는 뚝배기 클로즈업"); }
+  assert.equal((await fetch(`${BASE}/api/img/${s.clips[0].frames[0].img}.jpg`)).status, 200);
+  // 대본: 없는 클립·너무 짧은 컷은 빠지고, 길이를 넘는 구간은 클립 길이로
+  assert.deepEqual(s.script.cuts.map((c) => c.clip), [2, 1]);
+  assert.ok(s.script.cuts[1].to <= s.clips[0].duration + 0.01, "구간은 클립 길이 안");
+  assert.deepEqual(s.script.hashtags, ["#맛집", "#국밥"]);
+  assert.equal(s.script.hooks.length, 3);
+  const sp = await stepPrompt("숏폼 편집 감독");
+  assert.match(sp, /현장숏폼마커 국밥집 9,000원/);
+  assert.match(sp, /\[촬영 종류\] 🍜 맛집/);
+  assert.match(sp, /김이 올라오는 뚝배기/, "AI가 본 장면 설명을 대본 AI에 전달");
+  assert.match(sp, /첫 문장 훅이에요/, "받아쓰기 전달");
+  const log = (await mockLog()).slice(before);
+  assert.equal(log.filter((l) => JSON.stringify(l.body ?? "").includes("숏폼 편집 감독")).length, 1, "대본 AI는 한 번만");
+  assert.ok(log.some((l) => l.path.endsWith("/sendMessage") && l.body.text.includes("대본이 준비됐어요") && l.body.text.includes(`/shoots/${id}`)), "대본 준비 알림 + 바로가기");
+  // 화면
+  const page = (await (await fetch(`${BASE}/shoots/${id}`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["컷 편집 대본", "이 대본으로 만들기", "AI에게 수정 요청", "확인이 필요해요", "이 국물 실화?"]) assert.ok(page.includes(w), w);
+  const listPage = (await (await fetch(`${BASE}/shoots`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["새 촬영 올리기", "맛집", "제품 리뷰", "올리고 대본 받기", "대본 승인 대기"]) assert.ok(listPage.includes(w), w);
+  // 수정 요청 (유료 → 확인 필수)
+  assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "revise", feedback: "후킹을 바꿔 줘" })).status, 400);
+  assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "revise", feedback: "후킹을 바꿔 줘", confirm: true })).status, 200);
+  s = await wait(["scripting"]);
+  assert.equal(s.status, "review", s.message);
+  assert.equal(s.script.hooks[0], "수정된 후킹");
+  assert.equal(s.history[0].feedback, "후킹을 바꿔 줘");
+  // 직접 고치기: 후킹 2번 고르기 + 둘째 컷 자막
+  const edited = { ...s.script, hook: 1, cuts: s.script.cuts.map((c, i) => (i === 1 ? { ...c, caption: "직접 고친 자막", from: 0.5, to: 2.5 } : c)) };
+  const sv = await call(`/api/shoots/${id}`, "POST", { action: "save", script: edited });
+  assert.equal(sv.status, 200, JSON.stringify(sv.data));
+  assert.equal(sv.data.script.cuts[1].caption, "직접 고친 자막");
+  assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "save", script: { cuts: [] } })).status, 400);
+  // 승인 → 릴스 문서(클립별 현장 소리) → 맥에서 내보내기
+  const calls = (await mockLog()).length;
+  const ap = await call(`/api/shoots/${id}`, "POST", { action: "approve" });
+  assert.equal(ap.status, 200, JSON.stringify(ap.data));
+  assert.equal(ap.data.status, "rendering");
+  const reel = (await call(`/api/reels/${ap.data.reel_id}`)).data;
+  assert.deepEqual(reel.doc.scenes.map((x) => [x.video.videoId, x.video.from, x.dur, x.sound]), [[v2, 0.5, 1.5, true], [v1, 0.5, 2, true]]);
+  assert.deepEqual(reel.doc.texts.map((x) => x.text), ["줄 서는 이유", "직접 고친 자막"], "첫 컷 자막 = 고른 후킹");
+  assert.equal(reel.doc.music, null, "배경음악 없음");
+  s = await wait(["rendering"], 480, 1000);
+  assert.equal(s.status, "done", s.message);
+  assert.ok(s.output_video_id, "완성 영상");
+  const out = (await call("/api/videos")).data.videos.find((v) => v.id === s.output_video_id);
+  assert.ok(Math.abs(out.duration - 3.5) < 0.4, `컷 길이 합 = 완성 길이 (${out.duration})`);
+  const after = (await mockLog()).slice(calls);
+  assert.ok(after.some((l) => l.path.endsWith("/sendMessage") && l.body.text.includes("숏폼이 완성됐어요")), "완성 알림");
+  assert.ok(!after.some((l) => JSON.stringify(l.body ?? "").includes("숏폼 편집 감독")), "승인·만들기에는 AI 호출 없음");
+  // 대본 고쳐 다시 만들기 → 다시 승인 대기 · 휴지통
+  assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "retry", confirm: true })).data.status, "review");
+  assert.equal((await call(`/api/shoots/${id}`, "DELETE")).status, 200);
+  assert.equal((await call(`/api/shoots/${id}`)).status, 404);
+});

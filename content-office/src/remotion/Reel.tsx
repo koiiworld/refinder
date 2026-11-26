@@ -202,7 +202,7 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
                 />
               </AbsoluteFill>
             )}
-            {doc.audio === "base" && baseSrc && <Audio pauseWhenBuffering src={baseSrc} startFrom={Math.round(s.audioFrom * fps)} />}
+            {s.sound && s.video.videoId && src && !s.image ? <Audio pauseWhenBuffering src={src} startFrom={Math.round(s.video.from * fps)} /> : doc.audio === "base" && baseSrc && <Audio pauseWhenBuffering src={baseSrc} startFrom={Math.round(s.audioFrom * fps)} />}
           </Sequence>
         );
       })}
