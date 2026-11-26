@@ -27,7 +27,12 @@ export type ShootClip = {
 
 /** 대본의 컷 하나: 몇 번 클립의 몇 초~몇 초를 쓰고, 그 위에 어떤 자막을 얹을지 */
 export type ShootCut = { clip: number; from: number; to: number; caption: string; note: string };
+export type ShootPost = { title: string; desc: string }; // 플랫폼별 올릴 글 (제목 + 설명)
 export type ShootScript = {
+  name?: string; // 여러 안일 때 이름 (A안 · 음식 먼저)
+  concept?: string; // 이 안의 구성 한 줄
+  shorts?: ShootPost; // 유튜브 쇼츠용
+  clip?: ShootPost; // 네이버 클립용
   title: string;
   hooks: string[]; // 첫 컷 자막 후보 (hook 번째를 씀)
   hook: number;
@@ -43,7 +48,7 @@ export type ShootScript = {
 export type ShootStatus = "analyzing" | "scripting" | "review" | "rendering" | "done" | "error";
 export type Shoot = {
   id: string; title: string; kind: ShootKindId; memo: string; seconds: number;
-  clips: ShootClip[]; script: ShootScript | null; history: { at: string; feedback: string }[];
+  clips: ShootClip[]; script: ShootScript | null; variants: ShootScript[]; pick: number; history: { at: string; feedback: string }[];
   status: ShootStatus; message: string; failed_at: string; reel_id: string | null;
   created_at: string; updated_at: string;
 };
@@ -76,7 +81,17 @@ export function cleanScript(raw: unknown, clips: ShootClip[]): ShootScript {
   if (!hooks.length && cuts[0]?.caption) hooks.push(cuts[0].caption);
   const tags = (Array.isArray(r.hashtags) ? r.hashtags : []).map((x) => String(x).replace(/[^\p{L}\p{N}_]/gu, "")).filter(Boolean);
   const used = new Set(cuts.map((c) => c.clip));
+  const post = (v: unknown): ShootPost | undefined => {
+    const o = (v ?? {}) as Record<string, unknown>;
+    const title = str(o.title, 100), desc = String(o.desc ?? "").trim().slice(0, 1500);
+    return title || desc ? { title, desc } : undefined;
+  };
+  const shorts = post(r.shorts), clip = post(r.clip);
   return {
+    ...(str(r.name, 30) ? { name: str(r.name, 30) } : {}),
+    ...(str(r.concept, 120) ? { concept: str(r.concept, 120) } : {}),
+    ...(shorts ? { shorts } : {}),
+    ...(clip ? { clip } : {}),
     title: str(r.title, 40),
     hooks,
     hook: Math.max(0, Math.min(hooks.length - 1, Math.round(Number(r.hook)) || 0)),
@@ -88,6 +103,14 @@ export function cleanScript(raw: unknown, clips: ShootClip[]): ShootScript {
     ...(r.model ? { model: str(r.model, 60) } : {}),
     ...(r.substitutedFor ? { substitutedFor: str(r.substitutedFor, 60) } : {}),
   };
+}
+
+/** AI 답 → 대본 안 목록 (variants 가 없으면 답 전체를 한 안으로). post(올릴 글)는 모든 안에 같이 붙임 */
+export function cleanVariants(raw: unknown, clips: ShootClip[], extra: Record<string, unknown> = {}): ShootScript[] {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const post = (r.post ?? {}) as Record<string, unknown>;
+  const list = Array.isArray(r.variants) && r.variants.length ? (r.variants as Record<string, unknown>[]) : [r];
+  return list.slice(0, 3).map((v, i, a) => cleanScript({ ...post, ...v, name: a.length > 1 ? v?.name || `${"ABC"[i]}안` : v?.name, ...extra }, clips)).filter((s) => s.cuts.length);
 }
 
 export const scriptSeconds = (s: ShootScript | null) => r2((s?.cuts ?? []).reduce((a, c) => a + (c.to - c.from), 0));

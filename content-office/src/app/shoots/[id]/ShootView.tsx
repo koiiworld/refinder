@@ -96,6 +96,20 @@ export default function ShootView({ initial, estimateUsd }: { initial: Row; esti
             {script.model && <span className="tiny muted">{script.model}{script.substitutedFor ? ` (${script.substitutedFor} 대신)` : ""}</span>}
           </div>
 
+          {(s.variants?.length ?? 0) > 1 && (
+            <div className="stack" style={{ gap: 6 }}>
+              <span className="small muted strong">대본 {s.variants.length}안 — 눌러서 비교하세요</span>
+              <div className="row" style={{ gap: 6 }}>
+                {s.variants.map((v, i) => (
+                  <button key={i} className={`chip ${s.pick === i ? "on" : ""}`} disabled={!review || !!busy} onClick={() => { if (s.pick !== i && (!dirty || confirm("고친 내용을 저장하지 않고 다른 안을 볼까요?"))) void act("pick", { n: i }, "다른 안 여는 중"); }}>
+                    {v.name || `${i + 1}안`} · {Math.round(scriptSeconds(v))}초
+                  </button>
+                ))}
+              </div>
+              {script.concept && <span className="small">{script.concept}</span>}
+            </div>
+          )}
+
           {script.hooks.length > 0 && (
             <div className="stack" style={{ gap: 6 }}>
               <span className="small muted strong">첫 컷 자막 (후킹) — 하나 고르세요</span>
@@ -157,27 +171,36 @@ export default function ShootView({ initial, estimateUsd }: { initial: Row; esti
               {script.check.map((x, i) => <div key={i}>· {x}</div>)}
             </div>
           )}
-          {(script.caption || script.hashtags.length > 0) && (
-            <div className="stack" style={{ gap: 4 }}>
-              <span className="small muted strong">올릴 때 쓸 글</span>
-              <div className="small" style={{ whiteSpace: "pre-wrap" }}>{script.caption}{script.hashtags.length ? `\n\n${script.hashtags.join(" ")}` : ""}</div>
-              <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => navigator.clipboard?.writeText(`${script.caption}\n\n${script.hashtags.join(" ")}`.trim())}>📋 글 복사</button>
-            </div>
-          )}
+          <div className="stack" style={{ gap: 8 }}>
+            <span className="small muted strong">올릴 때 쓸 글 (플랫폼별)</span>
+            {[
+              { label: "📷 인스타 릴스", text: `${script.caption}${script.hashtags.length ? `\n\n${script.hashtags.join(" ")}` : ""}`.trim() },
+              { label: "▶️ 유튜브 쇼츠", text: script.shorts ? `${script.shorts.title}\n\n${script.shorts.desc}`.trim() : "" },
+              { label: "🟢 네이버 클립", text: script.clip ? `${script.clip.title}\n\n${script.clip.desc}`.trim() : "" },
+            ].filter((x) => x.text).map((x) => (
+              <div key={x.label} className="stack" style={{ gap: 4, background: "var(--panel-2)", borderRadius: 10, padding: 10 }}>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <b className="small">{x.label}</b>
+                  <button className="btn btn-sm" onClick={() => navigator.clipboard?.writeText(x.text)}>📋 복사</button>
+                </div>
+                <div className="small" style={{ whiteSpace: "pre-wrap" }}>{x.text}</div>
+              </div>
+            ))}
+          </div>
 
           {review && (
             <div className="stack" style={{ gap: 10, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
               <div className="row" style={{ gap: 8 }}>
                 <button className="btn btn-primary" disabled={!!busy} onClick={() => act("approve", { script }, "영상 만들기 시작하는 중")}>{busy ? <><span className="spinner" /> {busy}</> : "✅ 이 대본으로 만들기"}</button>
                 {dirty && <button className="btn" disabled={!!busy} onClick={() => act("save", { script }, "저장 중")}>고친 내용 저장</button>}
-                <span className="tiny muted">승인하면 맥에서 바로 잘라 붙여요. AI 비용은 들지 않아요.</span>
+                <span className="tiny muted">승인하면 맥에서 바로 잘라 붙여요. AI 비용은 들지 않아요. 텔레그램 알림의 버튼으로도 승인할 수 있어요.</span>
               </div>
               <div className="stack" style={{ gap: 6 }}>
                 <span className="small muted strong">✏️ AI에게 수정 요청</span>
                 <textarea className="textarea" rows={2} value={feedback} maxLength={1000} onChange={(e) => setFeedback(e.target.value)} placeholder="예: 먹는 장면을 더 앞으로, 자막은 더 담백하게, 20초로 줄여 줘" aria-label="수정 요청" />
                 <div className="row" style={{ gap: 8 }}>
                   <button className="btn btn-sm" disabled={!!busy || !feedback.trim()} onClick={() => act("revise", { feedback, confirm: true }, "수정 요청 보내는 중")}>🔄 이 요청으로 대본 다시 받기</button>
-                  <span className="tiny muted">대본 AI를 한 번 더 불러요 (예상 {cost}){dirty ? " · 직접 고친 내용은 사라져요" : ""}</span>
+                  <span className="tiny muted">대본 AI를 한 번 더 불러요 (예상 {cost}){(s.variants?.length ?? 0) > 1 ? " · 지금 보는 안만 고쳐요" : ""}{dirty ? " · 직접 고친 내용은 사라져요" : ""}</span>
                 </div>
               </div>
             </div>

@@ -454,7 +454,7 @@ export async function pollButtons() {
     const cb = u.callback_query;
     if (!cb?.data) continue;
     const [a0] = cb.data.split(":");
-    await logTg({ direction: "in", kind: "button", text: `${a0 === "rd" ? "✅ 완료 처리" : a0 === "rs" ? "⏰ 30분 뒤 알림" : cb.data}${cb.message?.text ? ` · ${cb.message.text.split("\n")[0].slice(0, 80)}` : ""}`, chatId: cb.message?.chat?.id ?? cb.from?.id, chatName: nameOf(cb.message?.chat) });
+    await logTg({ direction: "in", kind: "button", text: `${a0 === "rd" ? "✅ 완료 처리" : a0 === "rs" ? "⏰ 30분 뒤 알림" : a0 === "sa" ? "📹 숏폼 대본 승인" : cb.data}${cb.message?.text ? ` · ${cb.message.text.split("\n")[0].slice(0, 80)}` : ""}`, chatId: cb.message?.chat?.id ?? cb.from?.id, chatName: nameOf(cb.message?.chat) });
     // 내 채팅에서 누른 버튼만 처리
     if (String(cb.message?.chat?.id ?? cb.from?.id) !== process.env.TELEGRAM_CHAT_ID!.trim()) {
       await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "권한이 없어요." }).catch(() => {});
@@ -468,6 +468,11 @@ export async function pollButtons() {
         text = r.done ? "✅ 완료 처리했어요" : `아직 남았어요: ${r.missing.join(", ")}`;
         if (r.done && cb.message) await tg("editMessageReplyMarkup", { chat_id: cb.message.chat?.id, message_id: cb.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
         if (!r.done) await tg("sendMessage", { chat_id: process.env.TELEGRAM_CHAT_ID!.trim(), text: `아직 ${r.missing.join(", ")}이(가) 남아 있어요. 등록하면 자동으로 완료돼요.` }, "reply").catch(() => {});
+      } else if (act === "sa") {
+        // 📹 현장 숏폼: 대본 승인 버튼
+        const r = await (await import("./shoots")).shootButton(cb.data);
+        text = r.text;
+        if (r.ok && cb.message) await tg("editMessageReplyMarkup", { chat_id: cb.message.chat?.id, message_id: cb.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
       } else if (act === "rs") {
         text = (await snooze(runId, 30)) ? "⏰ 30분 뒤에 다시 알릴게요" : "마감이 가까워 더 미룰 수 없어요";
       }

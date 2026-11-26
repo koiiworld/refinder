@@ -213,7 +213,7 @@
 | `api/settings/keys/route.ts` | API 키 상태 (키 값은 돌려주지 않음, 끝 4자리만) | GET, POST |
 | `api/settings/pricing/route.ts` | 단가 새로고침 (공개 가격표와 비교해 바뀐 모델만 반영) | POST |
 | `api/settings/route.ts` |  | GET, PUT |
-| `api/shoots/[id]/route.ts` | action: save {script} 대본 고친 것 저장 · approve {script?} 승인 → 영상 만들기 · revise {feedback, confirm} AI에게 수정 요청(유료) · retry {confirm} 멈춘 단계부터 다시 | GET, POST, DELETE |
+| `api/shoots/[id]/route.ts` | action: pick {n} 여러 안 중 고르기 · save {script} 대본 고친 것 저장 · approve {script?} 승인 → 영상 만들기 · revise {feedback, confirm} AI에게 수정 요청(유료) · retry { | GET, POST, DELETE |
 | `api/shoots/route.ts` | 📹 현장 숏폼 목록 + 대본 예상 비용 (AI 호출 없음) | GET, POST |
 | `api/souls/route.ts` | Higgsfield Soul ID(내 캐릭터) 목록 — 학습 중이면 상태를 새로 물어봄 | GET, POST |
 | `api/studio/[id]/route.ts` | 상태 (진행 중인 장면 영상은 Higgsfield에 확인해 갱신) | GET, PUT, POST, DELETE |

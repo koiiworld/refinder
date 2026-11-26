@@ -8,7 +8,8 @@
 - **사용자 결정**: 현장 소리 유지 · 배경음악/AI 음성 없음(올릴 때 플랫폼 음악) · 승인은 텔레그램 알림 → 앱 화면 · **올리기를 누르면 대본 AI 비용까지 승인한 것**(POST `confirm:true`, 화면에 예상 비용 `shoot_script`). 수정 요청·대본 단계 다시 하기도 `confirm:true`. 자동 재시도 없음(작업 maxAttempts 1).
 - 릴스 장면에 `sound?: boolean` 추가(`remotion/types.ts`, `Reel.tsx`): 켜면 그 장면 영상(`video.videoId`)의 소리를 `video.from` 부터 냄. 현장 숏폼 문서는 `baseVideoId: null` + 장면마다 `sound: true`. 가로 클립은 `contain`, 세로는 `cover`.
 - 사실 규칙: 가격·위치·이름은 메모에 적힌 것만, 없으면 `script.check`(확인이 필요해요)로.
-- 아직 안 한 것(2·3차): 텔레그램 안에서 버튼으로 승인, 대본 여러 안 비교, 플랫폼별 캡션, 썸네일. 사용자 희망: 나중에 대본을 API 없이(무료 Gemini·맥 로컬 AI) — 단계별 AI만 바꾸면 되게 해 둠. 미확인: 실제 휴대폰 원본(HEVC·HDR·4K) 올리기와 Render 메모리(512MB)에서 큰 파일 올리기, 실제 Claude 대본 품질.
+- **2차(2026-11-27)**: ① 대본 2안 — 대본 AI 한 번에 `variants` 2개(수정 요청은 고른 안만 다시), 표 `shoots.variants`·`pick`(`script = variants[pick]`), 화면에서 눌러 비교(`action: pick`). ② 플랫폼별 올릴 글 — `script.caption/hashtags`(인스타 릴스)·`script.shorts`·`script.clip`(제목+설명), 화면에서 각각 복사. ③ 텔레그램 승인 — 대본 알림에 안별 컷·자막 요약 + 버튼 `sa:<촬영id>:<안 번호>`, `routines.ts pollButtons`(1분마다)가 `shootButton` 호출 → 승인·내보내기. 내 채팅에서 누른 것만, 이미 만드는 중이면 다시 만들지 않음.
+- 아직 안 한 것: 텔레그램에서 글로 수정 요청, 썸네일. 사용자 희망: 나중에 대본을 API 없이(무료 Gemini·맥 로컬 AI) — 단계별 AI만 바꾸면 되게 해 둠. 미확인: 실제 휴대폰 원본(HEVC·HDR·4K) 올리기와 Render 메모리(512MB)에서 큰 파일 올리기, 실제 Claude 대본 품질.
 
 ### Claude 작업 (2026-11-10)
 - 사용자는 **윈도우 PC + Render 주소**로 씀. 확장 프로그램은 설정 → 🧩 → zip 내려받기(`/api/extension-zip`)로 설치. 확장 1.2.0.

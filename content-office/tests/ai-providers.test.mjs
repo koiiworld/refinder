@@ -2648,6 +2648,11 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   assert.ok(s.script.cuts[1].to <= s.clips[0].duration + 0.01, "구간은 클립 길이 안");
   assert.deepEqual(s.script.hashtags, ["#맛집", "#국밥"]);
   assert.equal(s.script.hooks.length, 3);
+  // 대본 2안 + 플랫폼별 올릴 글
+  assert.deepEqual(s.variants.map((v) => v.name), ["A안 · 음식 먼저", "B안 · 궁금증"]);
+  assert.equal(s.pick, 0);
+  assert.deepEqual([s.script.shorts.title, s.script.clip.desc, s.variants[1].shorts.title], ["쇼츠 제목", "클립 설명", "쇼츠 제목"]);
+  assert.match(await stepPrompt("숏폼 편집 감독"), /\[대본은 2안\]/);
   const sp = await stepPrompt("숏폼 편집 감독");
   assert.match(sp, /현장숏폼마커 국밥집 9,000원/);
   assert.match(sp, /\[촬영 종류\] 🍜 맛집/);
@@ -2655,12 +2660,18 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   assert.match(sp, /첫 문장 훅이에요/, "받아쓰기 전달");
   const log = (await mockLog()).slice(before);
   assert.equal(log.filter((l) => JSON.stringify(l.body ?? "").includes("숏폼 편집 감독")).length, 1, "대본 AI는 한 번만");
-  assert.ok(log.some((l) => l.path.endsWith("/sendMessage") && l.body.text.includes("대본이 준비됐어요") && l.body.text.includes(`/shoots/${id}`)), "대본 준비 알림 + 바로가기");
+  assert.ok(log.some((l) => l.path.endsWith("/sendMessage") && l.body.text.includes("대본이 준비됐어요") && l.body.text.includes(`/shoots/${id}`) && l.body.text.includes("【B안 · 궁금증】") && l.body.text.includes("“국물이 진해요”") && l.body.reply_markup.inline_keyboard[1][0].callback_data === `sa:${id}:1` && l.body.reply_markup.inline_keyboard[2][0].url.endsWith(`/shoots/${id}`)), "대본 준비 알림: 안별 컷·자막 + 안별 승인 버튼 + 바로가기");
   // 화면
   const page = (await (await fetch(`${BASE}/shoots/${id}`)).text()).replace(/<!-- -->/g, "");
-  for (const w of ["컷 편집 대본", "이 대본으로 만들기", "AI에게 수정 요청", "확인이 필요해요", "이 국물 실화?"]) assert.ok(page.includes(w), w);
+  for (const w of ["컷 편집 대본", "이 대본으로 만들기", "AI에게 수정 요청", "확인이 필요해요", "이 국물 실화?", "B안 · 궁금증", "인스타 릴스", "유튜브 쇼츠", "네이버 클립", "쇼츠 제목"]) assert.ok(page.includes(w), w);
   const listPage = (await (await fetch(`${BASE}/shoots`)).text()).replace(/<!-- -->/g, "");
   for (const w of ["새 촬영 올리기", "맛집", "제품 리뷰", "올리고 대본 받기", "대본 승인 대기"]) assert.ok(listPage.includes(w), w);
+  // 다른 안 고르기 (AI 호출 없음) → 다시 A안
+  const pk = await call(`/api/shoots/${id}`, "POST", { action: "pick", n: 1 });
+  assert.equal(pk.data.script.name, "B안 · 궁금증");
+  assert.equal(pk.data.script.cuts.length, 1);
+  assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "pick", n: 7 })).status, 400);
+  await call(`/api/shoots/${id}`, "POST", { action: "pick", n: 0 });
   // 수정 요청 (유료 → 확인 필수)
   assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "revise", feedback: "후킹을 바꿔 줘" })).status, 400);
   assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "revise", feedback: "후킹을 바꿔 줘", confirm: true })).status, 200);
@@ -2668,6 +2679,8 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   assert.equal(s.status, "review", s.message);
   assert.equal(s.script.hooks[0], "수정된 후킹");
   assert.equal(s.history[0].feedback, "후킹을 바꿔 줘");
+  assert.deepEqual(s.variants.map((v) => [v.name, v.hooks[0]]), [["A안 · 음식 먼저", "수정된 후킹"], ["B안 · 궁금증", "여기 뭐가 유명하게?"]], "수정 요청은 고른 안만 바꿈");
+  assert.doesNotMatch(await stepPrompt("숏폼 편집 감독"), /\[대본은 2안\]/);
   // 직접 고치기: 후킹 2번 고르기 + 둘째 컷 자막
   const edited = { ...s.script, hook: 1, cuts: s.script.cuts.map((c, i) => (i === 1 ? { ...c, caption: "직접 고친 자막", from: 0.5, to: 2.5 } : c)) };
   const sv = await call(`/api/shoots/${id}`, "POST", { action: "save", script: edited });
@@ -2676,9 +2689,18 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "save", script: { cuts: [] } })).status, 400);
   // 승인 → 릴스 문서(클립별 현장 소리) → 맥에서 내보내기
   const calls = (await mockLog()).length;
-  const ap = await call(`/api/shoots/${id}`, "POST", { action: "approve" });
-  assert.equal(ap.status, 200, JSON.stringify(ap.data));
-  assert.equal(ap.data.status, "rendering");
+  assert.equal((await call(`/api/shoots/${id}`)).data.variants[0].cuts[1].caption, "직접 고친 자막", "고친 내용은 그 안에 저장");
+  // 텔레그램 버튼으로 승인 (다른 채팅에서 누른 건 무시)
+  await call(`/__tgpress?data=sa:${id}:0&chat=111`, "GET", undefined, MOCK);
+  await call("/api/routines", "POST", { action: "tick" });
+  assert.equal((await call(`/api/shoots/${id}`)).data.status, "review", "남이 누른 버튼은 무시");
+  await call(`/__tgpress?data=sa:${id}:0`, "GET", undefined, MOCK);
+  await call("/api/routines", "POST", { action: "tick" });
+  const ap = await call(`/api/shoots/${id}`);
+  assert.equal(ap.data.status, "rendering", ap.data.message);
+  await call(`/__tgpress?data=sa:${id}:1`, "GET", undefined, MOCK); // 또 눌러도 다시 만들지 않음
+  await call("/api/routines", "POST", { action: "tick" });
+  assert.equal((await call(`/api/shoots/${id}`)).data.reel_id, ap.data.reel_id);
   const reel = (await call(`/api/reels/${ap.data.reel_id}`)).data;
   assert.deepEqual(reel.doc.scenes.map((x) => [x.video.videoId, x.video.from, x.dur, x.sound]), [[v2, 0.5, 1.5, true], [v1, 0.5, 2, true]]);
   assert.deepEqual(reel.doc.texts.map((x) => x.text), ["줄 서는 이유", "직접 고친 자막"], "첫 컷 자막 = 고른 후킹");

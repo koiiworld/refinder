@@ -1,5 +1,5 @@
 import { body, fail, handle, ok, type Ctx } from "@/lib/api";
-import { approveShoot, deleteShoot, getShoot, retryShoot, reviseShoot, saveShootScript } from "@/lib/shoots";
+import { approveShoot, deleteShoot, getShoot, pickShootVariant, retryShoot, reviseShoot, saveShootScript } from "@/lib/shoots";
 
 export async function GET(_req: Request, ctx: Ctx) {
   return handle(async () => {
@@ -8,13 +8,14 @@ export async function GET(_req: Request, ctx: Ctx) {
   });
 }
 
-/** action: save {script} 대본 고친 것 저장 · approve {script?} 승인 → 영상 만들기 · revise {feedback, confirm} AI에게 수정 요청(유료) · retry {confirm} 멈춘 단계부터 다시 */
+/** action: pick {n} 여러 안 중 고르기 · save {script} 대본 고친 것 저장 · approve {script?} 승인 → 영상 만들기 · revise {feedback, confirm} AI에게 수정 요청(유료) · retry {confirm} 멈춘 단계부터 다시 */
 export async function POST(req: Request, ctx: Ctx) {
   return handle(async () => {
     const id = (await ctx.params).id;
-    const b = await body<{ action?: string; script?: unknown; feedback?: string; confirm?: boolean }>(req);
+    const b = await body<{ action?: string; script?: unknown; feedback?: string; confirm?: boolean; n?: number }>(req);
     try {
-      if (b.action === "save") await saveShootScript(id, b.script);
+      if (b.action === "pick") await pickShootVariant(id, Number(b.n));
+      else if (b.action === "save") await saveShootScript(id, b.script);
       else if (b.action === "approve") await approveShoot(id, b.script);
       else if (b.action === "revise") {
         if (b.confirm !== true) return fail("예상 비용을 확인한 뒤 요청해 주세요.");
