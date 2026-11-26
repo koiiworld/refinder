@@ -93,6 +93,16 @@ export async function search(keyword: string, limit = 10) {
   return (data?.productData ?? []).map((p) => ({ ...p, url: plainUrl(p.productUrl, p.productId) }));
 }
 
+/** 상품명에서 개수를 읽어 개당 가격 (예: "355ml, 24개" → 24개, "5개입" → 5개, "2p" → 2개). 못 읽으면 null */
+export function unitPrice(name: string, price: number) {
+  const n = name.replace(/\[[^\]]*\]/g, " ");
+  const counts = [...n.matchAll(/(\d{1,4})\s*(개입|개|입|팩|캔|병|매|롤|p|P|ea|EA)(?![a-zA-Z가-힣])/g)].map((m) => Number(m[1])).filter((c) => c >= 2 && c <= 1000);
+  if (!counts.length) return null;
+  const total = counts.length >= 2 && /세트|x|X|×/.test(n) ? counts.reduce((a, b) => a * b, 1) : Math.max(...counts);
+  if (total < 2 || total > 2000) return null;
+  return { count: total, each: Math.round(price / total) };
+}
+
 /** 상품별 가격 기록에서 사실만 뽑기: 지난 기록보다 내림 / 기록 중 최저가 */
 async function priceFacts(day: string, items: GoldItem[]) {
   const rows = await q<{ key: string; value: GoldItem[] }>("SELECT key, value FROM settings WHERE key LIKE 'deals_goldbox:%' AND key < $1 ORDER BY key", [`deals_goldbox:${day}`]);
@@ -223,8 +233,12 @@ export async function runDaily(day = kstDay(), force = false) {
   const items = await goldbox(day, force);
   const facts = await priceFacts(day, items);
   const lines = [`📦 오늘 모은 데이터 (${day.slice(4, 6)}/${day.slice(6)} 골드박스 ${items.length}개)`, ""];
-  items.slice(0, 30).forEach((p, i) => lines.push(`${i + 1}. ${p.productName.split(",")[0].slice(0, 34)} | ${won(p.productPrice)}원${facts[i].length ? " | " + facts[i].join(" / ") : ""}`));
-  lines.push("", "올릴 번호(예: 1,4)를 답장하면 스레드 초안을 만들어요.");
+  items.slice(0, 30).forEach((p, i) => {
+    const u = unitPrice(p.productName, p.productPrice);
+    const extra = [u ? `${u.count}개 · 개당 ${won(u.each)}원` : "", ...facts[i]].filter(Boolean);
+    lines.push(`${i + 1}. ${p.productName.split(",")[0].slice(0, 34)} | ${won(p.productPrice)}원${extra.length ? " | " + extra.join(" / ") : ""}`);
+  });
+  lines.push("", "※ 쿠팡 API는 정가·할인율을 안 줘요. 비교는 개당 가격 + 지난 골드박스 기록(쌓이는 중)으로만 해요.", "올릴 번호(예: 1,4)를 답장하면 스레드 초안을 만들어요.");
   await report(lines.join("\n"));
   await report(FILTER_ROUTINE);
   return { items: items.length };
