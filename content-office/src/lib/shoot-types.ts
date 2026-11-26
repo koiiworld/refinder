@@ -29,7 +29,12 @@ export type ShootClip = {
 };
 
 /** 대본의 컷 하나: 몇 번 클립의 몇 초~몇 초를 쓰고, 그 위에 어떤 자막을 얹을지 */
-export type ShootCut = { clip: number; from: number; to: number; caption: string; note: string };
+export type ShootCut = { clip: number; from: number; to: number; caption: string; note: string; speed?: number };
+/** 컷 배속: 붓기·굽기·걷기처럼 긴 과정은 빠르게, 늘어나는 치즈 같은 순간은 느리게 */
+export const SHOOT_SPEEDS = [0.5, 1, 1.5, 2, 3, 4] as const;
+export const cutSpeed = (c: { speed?: number }) => ((SHOOT_SPEEDS as readonly number[]).includes(Number(c.speed)) ? Number(c.speed) : 1);
+/** 화면에 나오는 길이 (원본 구간 ÷ 배속) */
+export const cutSeconds = (c: ShootCut) => (c.to - c.from) / cutSpeed(c);
 export type ShootPost = { title: string; desc: string }; // 플랫폼별 올릴 글 (제목 + 설명)
 export type ShootScript = {
   name?: string; // 여러 안일 때 이름 (A안 · 음식 먼저)
@@ -76,8 +81,10 @@ export function cleanScript(raw: unknown, clips: ShootClip[]): ShootScript {
     let to = Number(c.to) || 0;
     if (dur > 0) { to = Math.min(to || dur, dur); from = Math.min(from, Math.max(0, dur - 0.6)); }
     if (to - from < 0.6) continue;
-    if (to - from > 15) to = from + 15;
-    cuts.push({ clip: n, from: r2(from), to: r2(to), caption: str(c.caption, 60), note: str(c.note, 160) });
+    const speed = cutSpeed(c as { speed?: number });
+    if (to - from > 15 * speed) to = from + 15 * speed; // 화면에 15초 넘게 나오는 컷은 자름
+    if ((to - from) / speed < 0.6) continue;
+    cuts.push({ clip: n, from: r2(from), to: r2(to), caption: str(c.caption, 60), note: str(c.note, 160), ...(speed !== 1 ? { speed } : {}) });
     if (cuts.length >= 30) break;
   }
   const hooks = (Array.isArray(r.hooks) ? r.hooks : []).map((h) => str(h, 60)).filter(Boolean).slice(0, 4);
@@ -116,7 +123,7 @@ export function cleanVariants(raw: unknown, clips: ShootClip[], extra: Record<st
   return list.slice(0, 3).map((v, i, a) => cleanScript({ ...post, ...v, name: a.length > 1 ? v?.name || `${"ABC"[i]}안` : v?.name, ...extra }, clips)).filter((s) => s.cuts.length);
 }
 
-export const scriptSeconds = (s: ShootScript | null) => r2((s?.cuts ?? []).reduce((a, c) => a + (c.to - c.from), 0));
+export const scriptSeconds = (s: ShootScript | null) => r2((s?.cuts ?? []).reduce((a, c) => a + cutSeconds(c), 0));
 
 /**
  * 승인한 대본 → 릴스 편집 문서
@@ -132,10 +139,12 @@ export function scriptToDoc(script: ShootScript, clips: ShootClip[], memo = ""):
   script.cuts.forEach((c, i) => {
     const clip = clips[c.clip - 1];
     if (!clip) return;
-    const dur = r2(c.to - c.from);
+    const speed = cutSpeed(c);
+    const dur = r2(cutSeconds(c));
     const wide = (clip.width ?? 0) > (clip.height ?? 0);
     const text = i === 0 ? script.hooks[script.hook] || c.caption : c.caption;
-    scenes.push({ id: sid(), label: (text || `컷 ${i + 1}`).slice(0, 30), dur, audioFrom: 0, video: { videoId: clip.videoId, from: c.from }, sound: true, fit: wide ? "contain" : "cover", bg: { type: "none" }, image: null });
+    scenes.push({ id: sid(), label: (text || `컷 ${i + 1}`).slice(0, 30), dur, audioFrom: 0, video: { videoId: clip.videoId, from: c.from }, ...(speed !== 1 ? { speed } : {}), sound: speed === 1, // 배속 컷은 소리를 끔 (빨라지거나 늘어진 소리가 어색해서)
+       fit: wide ? "contain" : "cover", bg: { type: "none" }, image: null });
     if (text) texts.push({ id: sid(), start: r2(t), end: r2(t + dur), text, style: i === 0 ? { ...DEFAULT_TEXT_STYLE, y: 520, size: 88, anim: "pop" } : { ...DEFAULT_TEXT_STYLE, y: 1420, anim: "fade" } });
     t += dur;
   });

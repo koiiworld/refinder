@@ -17,6 +17,7 @@ export type ReelScene = {
   bg: ReelBg;
   image?: string | null; // 사진 장면 (/api/img/…) — 영상 대신 사진을 화면에
   kenburns?: boolean; // 사진 천천히 확대
+  speed?: number; // 배속 (0.25~4, 기본 1). dur 은 화면에 나오는 길이 → 원본은 dur × speed 만큼 씀 (video.videoId 가 있는 장면만)
   sound?: boolean; // 이 장면에 넣은 영상(video.videoId)의 소리를 그대로 냄 (현장 숏폼: 클립마다 현장 소리)
 };
 

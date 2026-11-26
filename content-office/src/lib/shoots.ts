@@ -160,6 +160,7 @@ const SYSTEM = `너는 한국 인스타그램 릴스·유튜브 쇼츠·네이�
 규칙:
 - 첫 컷은 1~2초 안에 스크롤을 멈추게 하는 가장 강한 장면. 첫 컷 자막(후킹)은 후보 3개를 낸다. 인사·"안녕하세요" 금지.
 - 컷 하나는 보통 1.5~4초. from·to 는 그 클립 길이 안의 초. 장면 설명에 있는 시각 근처에서 고른다. 말소리가 있는 구간은 문장 중간에서 자르지 않는다.
+- 배속(speed): 붓기·굽기·끓이기·이동처럼 과정이 긴 장면은 2~4배로 빠르게, 치즈가 늘어나거나 국물이 떨어지는 짧은 순간은 0.5배로 느리게 할 수 있다. 쓸 수 있는 값은 0.5·1·1.5·2·3·4. from~to 는 원본 구간이고 화면에는 (to-from)÷speed 초가 나온다. 배속 컷은 소리가 꺼지니 말소리·먹는 소리가 중요한 컷은 1배로 둔다. 배속은 꼭 필요한 컷에만.
 - 현장 소리를 그대로 쓴다. 내레이션·배경음악은 없다(음악은 올릴 때 플랫폼에서 넣음). 자막은 화면에 얹는 짧은 글(한 줄 16자 안팎, 최대 24자), 말하듯 쉬운 말. 자막이 필요 없는 컷은 빈 문자열.
 - 비슷한 장면은 가장 좋은 것 하나만. 흔들리거나 어두운 클립은 빼고 unused 에 이유를 적는다.
 - 가격·위치·메뉴 이름·제품 사양·영업시간 같은 사실은 메모에 적힌 것만 쓴다. 메모에 없는데 넣으면 좋을 사실은 자막에 쓰지 말고 check 에 "무엇을 확인하면 좋은지" 적는다.
@@ -186,7 +187,7 @@ export async function runShootScript(id: string, feedback = "") {
     const voice = await q1<{ value: unknown }>("SELECT value FROM settings WHERE key='ig_voice'").catch(() => null);
     const voiceText = typeof voice?.value === "string" ? voice.value : String((voice?.value as { text?: string } | null)?.text ?? "");
     const cur = s.script;
-    const prev = feedback && cur ? `\n\n[지금 대본]\n${JSON.stringify({ name: cur.name, hooks: cur.hooks, cuts: cur.cuts.map(({ clip, from, to, caption }) => ({ clip, from, to, caption })) })}\n\n[수정 요청 — 이 요청을 반영해 이 대본을 다시 줘. 요청하지 않은 부분은 되도록 그대로 둬. variants 에는 고친 안 하나만]\n${feedback.slice(0, 1000)}` : "";
+    const prev = feedback && cur ? `\n\n[지금 대본]\n${JSON.stringify({ name: cur.name, hooks: cur.hooks, cuts: cur.cuts.map(({ clip, from, to, caption, speed }) => ({ clip, from, to, speed: speed ?? 1, caption })) })}\n\n[수정 요청 — 이 요청을 반영해 이 대본을 다시 줘. 요청하지 않은 부분은 되도록 그대로 둬. variants 에는 고친 안 하나만]\n${feedback.slice(0, 1000)}` : "";
     const prompt = `[촬영 종류] ${kind.label}
 [이 종류의 구성 규칙] ${kind.rule}
 [목표 길이] 약 ${s.seconds}초 (컷 길이 합계가 ${Math.round(s.seconds * 0.8)}~${Math.round(s.seconds * 1.15)}초. 쓸 만한 장면이 모자라면 더 짧아도 됨)
@@ -197,7 +198,7 @@ ${voiceText.trim() ? `\n[내 말투]\n${voiceText.trim().slice(0, 800)}\n` : ""}
 ${clipsText(s.clips)}${prev}
 ${feedback ? "" : "\n[대본은 2안] 첫 컷과 흐름이 서로 다른 두 가지 구성으로 짜 줘 (예: 음식부터 보여 주는 안 / 궁금증으로 시작하는 안). 쓸 만한 장면이 적어 두 안이 거의 같아진다면 한 안만 줘.\n"}
 [답 형식]
-{"variants":[{"name":"A안 · 구성 이름(8자 이내)","concept":"이 안의 흐름 한 줄","title":"영상 제목(20자 이내)","hooks":["첫 컷 자막 후보1","후보2","후보3"],"cuts":[{"clip":클립 번호,"from":시작 초,"to":끝 초,"caption":"자막 또는 빈 문자열","note":"이 장면을 고른 이유 한 줄"}],"unused":[{"clip":번호,"reason":"안 쓴 이유"}],"check":["확인이 필요한 사실"]}],"post":{"caption":"인스타 릴스 캡션 2~4줄","hashtags":["해시태그",...5개],"shorts":{"title":"유튜브 쇼츠 제목","desc":"설명 1~2줄"},"clip":{"title":"네이버 클립 제목","desc":"설명 1~2줄"}}}`;
+{"variants":[{"name":"A안 · 구성 이름(8자 이내)","concept":"이 안의 흐름 한 줄","title":"영상 제목(20자 이내)","hooks":["첫 컷 자막 후보1","후보2","후보3"],"cuts":[{"clip":클립 번호,"from":시작 초,"to":끝 초,"speed":1,"caption":"자막 또는 빈 문자열","note":"이 장면을 고른 이유 한 줄"}],"unused":[{"clip":번호,"reason":"안 쓴 이유"}],"check":["확인이 필요한 사실"]}],"post":{"caption":"인스타 릴스 캡션 2~4줄","hashtags":["해시태그",...5개],"shorts":{"title":"유튜브 쇼츠 제목","desc":"설명 1~2줄"},"clip":{"title":"네이버 클립 제목","desc":"설명 1~2줄"}}}`;
     const res = await runStep({ step: "shootscript", purpose: "shoot_script", blog: null, system: SYSTEM, prompt, json: true, maxTokens: 9000, retries: 0 });
     const got = cleanVariants(extractJson<Record<string, unknown>>(res.text), s.clips, { model: res.model, substitutedFor: res.substitutedFor });
     if (!got.length) throw new Error("대본에 쓸 수 있는 컷이 없었어요. '다시 하기'를 눌러 주세요.");
@@ -207,7 +208,7 @@ ${feedback ? "" : "\n[대본은 2안] 첫 컷과 흐름이 서로 다른 두 가
     const variants = feedback && old.length ? old.map((v, i) => (i === pick ? { ...got[0], name: got[0].name || v.name, shorts: got[0].shorts ?? v.shorts, clip: got[0].clip ?? v.clip, caption: got[0].caption || v.caption, hashtags: got[0].hashtags.length ? got[0].hashtags : v.hashtags } : v)) : got;
     const script = variants[pick];
     await setShoot(id, { script, variants, pick, status: "review", failed_at: "", message: `대본 준비 완료 · ${variants.length > 1 ? `${variants.length}안 · ` : ""}컷 ${script.cuts.length}개 · 약 ${Math.round(scriptSeconds(script))}초`, ...(script.title && !feedback && s.title.startsWith(kind.label) ? { title: script.title } : {}) }); // 제목을 안 적었으면 AI 제목으로
-    const brief = variants.map((v, i) => `${variants.length > 1 ? `\n【${v.name || `${i + 1}안`}】${v.concept ? ` ${v.concept}` : ""}\n` : "\n"}후킹: ${v.hooks[v.hook] ?? ""}\n컷 ${v.cuts.length}개 · 약 ${Math.round(scriptSeconds(v))}초\n${v.cuts.map((c, k) => `${k + 1}. 클립${c.clip} ${c.from}~${c.to}초${c.caption ? ` “${c.caption}”` : ""}`).join("\n")}${v.check.length ? `\n⚠ 확인: ${v.check.join(" / ")}` : ""}`).join("\n");
+    const brief = variants.map((v, i) => `${variants.length > 1 ? `\n【${v.name || `${i + 1}안`}】${v.concept ? ` ${v.concept}` : ""}\n` : "\n"}후킹: ${v.hooks[v.hook] ?? ""}\n컷 ${v.cuts.length}개 · 약 ${Math.round(scriptSeconds(v))}초\n${v.cuts.map((c, k) => `${k + 1}. 클립${c.clip} ${c.from}~${c.to}초${c.speed && c.speed !== 1 ? ` (${c.speed}배속)` : ""}${c.caption ? ` “${c.caption}”` : ""}`).join("\n")}${v.check.length ? `\n⚠ 확인: ${v.check.join(" / ")}` : ""}`).join("\n");
     await notify(`📹 대본이 준비됐어요 — ${s.title}\n${brief}\n\n버튼을 누르면 그 안으로 바로 만들어요 (1분 안에 시작). 고치려면 앱에서 열어 주세요.`, id, variants.map((v, i) => ({ text: `✅ ${variants.length > 1 ? `${(v.name || `${i + 1}안`).split("·")[0].trim()}으로` : "이 대본으로"} 만들기`, callback_data: `sa:${id}:${i}` })));
   } catch (e) {
     await fail(id, "script", e);

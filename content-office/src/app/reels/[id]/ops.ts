@@ -24,7 +24,7 @@ export function splitScene(doc: ReelDoc, id: string, t: number): ReelDoc {
   const o = r2(t - st[i]);
   if (o < MIN || s.dur - o < MIN) return doc;
   const a: ReelScene = { ...s, dur: o };
-  const b: ReelScene = { ...s, id: nid(), dur: r2(s.dur - o), audioFrom: r2(s.audioFrom + o), video: { ...s.video, from: s.video.videoId ? r2(s.video.from + o) : s.video.from } };
+  const b: ReelScene = { ...s, id: nid(), dur: r2(s.dur - o), audioFrom: r2(s.audioFrom + o), video: { ...s.video, from: s.video.videoId ? r2(s.video.from + o * (s.speed || 1)) : s.video.from } };
   const scenes = [...doc.scenes];
   scenes.splice(i, 1, a, b);
   return { ...doc, scenes };

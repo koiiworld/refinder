@@ -255,7 +255,7 @@ export async function runDaily(day = kstDay(), force = false) {
   const yday = kstDay(new Date(Date.parse(`${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}T00:00:00+09:00`) - 3600_000));
   const sum = await replySummary(yday).catch(() => "");
   if (sum) await report(sum);
-  await report(FILTER_ROUTINE);
+  // 반품 확인 루틴은 콘셉트 미정이라 아침 보고에서 뺌 (11/27 사용자 지시: 반품은 아직 콘셉트에 넣지 말 것)
   return { items: items.length };
 }
 

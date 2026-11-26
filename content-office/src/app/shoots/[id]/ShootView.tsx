@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/components/client-utils";
 import { fmtUsd } from "@/components/ui";
-import { scriptSeconds, SHOOT_STATUS_LABEL, shootKind, type Shoot, type ShootClip, type ShootCut, type ShootScript } from "@/lib/shoot-types";
+import { cutSeconds, cutSpeed, scriptSeconds, SHOOT_SPEEDS, SHOOT_STATUS_LABEL, shootKind, type Shoot, type ShootClip, type ShootCut, type ShootScript } from "@/lib/shoot-types";
 
 type Row = Shoot & { output_video_id: string | null; reel_message: string | null };
 const sec = (n: number) => `${n.toFixed(1)}초`;
@@ -139,8 +139,12 @@ export default function ShootView({ initial, estimateUsd }: { initial: Row; esti
                           <span>~</span>
                           <input className="input" type="number" step={0.1} min={0} max={clip?.duration ?? undefined} value={c.to} onChange={(e) => editCut(i, { to: Number(e.target.value) })} style={{ width: 68, padding: "2px 6px" }} aria-label={`컷 ${i + 1} 끝 초`} />
                           <span className="muted">초 (클립 길이 {sec(clip?.duration ?? 0)})</span>
+                          <select className="select" value={cutSpeed(c)} onChange={(e) => editCut(i, { speed: Number(e.target.value) })} style={{ width: "auto", padding: "2px 6px" }} aria-label={`컷 ${i + 1} 배속`}>
+                            {SHOOT_SPEEDS.map((v) => <option key={v} value={v}>{v === 1 ? "보통 속도" : v < 1 ? `느리게 ${v}배` : `빠르게 ${v}배`}</option>)}
+                          </select>
+                          <span className="muted">→ 화면에 {sec(Math.max(0, cutSeconds(c)))}{cutSpeed(c) !== 1 ? " · 소리 꺼짐" : ""}</span>
                         </>
-                      ) : <span className="muted">{sec(c.from)} ~ {sec(c.to)}</span>}
+                      ) : <span className="muted">{sec(c.from)} ~ {sec(c.to)}{cutSpeed(c) !== 1 ? ` · ${cutSpeed(c)}배속` : ""}</span>}
                     </div>
                     {review
                       ? <input className="input" value={i === 0 && script.hooks.length ? script.hooks[script.hook] ?? "" : c.caption} disabled={i === 0 && script.hooks.length > 0} maxLength={60} placeholder="자막 없음" onChange={(e) => editCut(i, { caption: e.target.value })} aria-label={`컷 ${i + 1} 자막`} />

@@ -188,6 +188,7 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
         const vid = s.video.videoId ?? doc.baseVideoId;
         const src = vid ? srcs[vid] : undefined;
         const card = s.bg.type !== "none";
+        const speed = s.video.videoId ? Math.min(4, Math.max(0.25, Number(s.speed) || 1)) : 1;
         return (
           <Sequence key={s.id} from={from} durationInFrames={dur} name={s.label || `장면 ${i + 1}`}>
             <Bg bg={s.bg} />
@@ -197,12 +198,13 @@ export const Reel: React.FC<ReelProps> = ({ doc, srcs, fontUrl, fontUrls }) => {
                 <OffthreadVideo pauseWhenBuffering
                   src={src}
                   muted
+                  playbackRate={speed}
                   startFrom={Math.round((s.video.videoId ? s.video.from : s.audioFrom) * fps)}
                   style={card ? { width: "100%", height: "100%", objectFit: "contain", borderRadius: 36 } : { width: "100%", height: "100%", objectFit: s.fit }}
                 />
               </AbsoluteFill>
             )}
-            {s.sound && s.video.videoId && src && !s.image ? <Audio pauseWhenBuffering src={src} startFrom={Math.round(s.video.from * fps)} /> : doc.audio === "base" && baseSrc && <Audio pauseWhenBuffering src={baseSrc} startFrom={Math.round(s.audioFrom * fps)} />}
+            {s.sound && s.video.videoId && src && !s.image ? <Audio pauseWhenBuffering src={src} playbackRate={speed} startFrom={Math.round(s.video.from * fps)} /> : doc.audio === "base" && baseSrc && <Audio pauseWhenBuffering src={baseSrc} startFrom={Math.round(s.audioFrom * fps)} />}
           </Sequence>
         );
       })}
