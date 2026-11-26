@@ -205,15 +205,22 @@ export async function threadsMe() {
 type PostLog = { at: string; id: string; first: string; body?: string; reply?: string; replyId?: string | null };
 
 /** 게시: 본문 → 첫 댓글. 점검에 걸리면 올리지 않음 */
-export async function postThreads(body: string, reply = "") {
-  const problems = checkPost(body, reply);
+export async function postThreads(body: string, reply = "", replies: string[] = []) {
+  // replies 가 있으면 본글 → 댓글1 → 댓글2 … 로 이어 달기 (마지막 댓글이 링크·대가성 문구). 없으면 reply 1개
+  const chain = (replies.length ? replies : [reply]).map((r) => String(r ?? "").trim()).filter(Boolean);
+  const last = chain.at(-1) ?? "";
+  const problems = [...checkPost(body, last), ...chain.slice(0, -1).flatMap((r, i) => ([...r].length > 500 ? [`댓글${i + 1}이 500자를 넘어요`] : []))];
+  if (/link\.coupang|https?:\/\//.test(chain.slice(0, -1).join("\n"))) problems.push("링크는 마지막 댓글에만 넣어요");
   if (problems.length) throw new Error("게시 안 함: " + problems.join(" / "));
   const id = await threadsPublish(body.trim());
   let replyId: string | null = null;
-  if (reply.trim()) {
+  let parent = id;
+  for (const r of chain) {
     await sleep(3000);
-    replyId = await threadsPublish(reply.trim(), id);
+    parent = await threadsPublish(r, parent);
+    replyId ??= parent;
   }
+  reply = chain.join("\n\n");
   const log = (await getSetting<PostLog[]>("deals_threads_log")) ?? [];
   log.unshift({ at: new Date().toISOString(), id, first: body.split("\n")[0].slice(0, 80), body: body.trim(), reply: reply.trim(), replyId });
   await setSetting("deals_threads_log", log.slice(0, 100));

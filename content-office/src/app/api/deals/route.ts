@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   return handle(async () => {
     if (denied(req)) return fail("토큰이 맞지 않아요.", 401);
-    const b = await body<{ action?: string; text?: string; keyword?: string; urls?: string[]; body?: string; reply?: string; force?: boolean; id?: string; replyId?: string }>(req);
+    const b = await body<{ action?: string; text?: string; keyword?: string; urls?: string[]; body?: string; reply?: string; force?: boolean; id?: string; replyId?: string; replies?: string[] }>(req);
     try {
       switch (b.action) {
         case "ack": return ok(await inbox(true));
@@ -58,8 +58,8 @@ export async function POST(req: Request) {
           if (!urls.length) return fail("쿠팡 상품 주소(https://www.coupang.com/...)를 넣어 주세요.");
           return ok({ links: await shortLinks(urls) });
         }
-        case "check": return ok({ problems: checkPost(String(b.body ?? ""), String(b.reply ?? "")) });
-        case "threads": return ok(await postThreads(String(b.body ?? ""), String(b.reply ?? "")));
+        case "check": { const rs = Array.isArray(b.replies) ? b.replies.map(String) : [String(b.reply ?? "")]; return ok({ problems: checkPost(String(b.body ?? ""), rs.at(-1) ?? "") }); }
+        case "threads": return ok(await postThreads(String(b.body ?? ""), String(b.reply ?? ""), Array.isArray(b.replies) ? b.replies.map(String) : []));
         case "daily": return ok(await runDaily(kstDay(), !!b.force));
         case "log_post": return ok(await attachPostLog(String(b.id ?? ""), String(b.body ?? ""), String(b.reply ?? ""), b.replyId ? String(b.replyId) : undefined));
         case "reply_tick": await replyTick(); return ok({ summary: await replySummary(kstDay()) });
