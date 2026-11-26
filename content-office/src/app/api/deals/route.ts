@@ -1,5 +1,5 @@
 import { body, fail, handle, ok } from "@/lib/api";
-import { agentAllowed, checkPost, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
+import { agentAllowed, checkPost, replyTick, replySummary, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
 
 /**
  * 🧹 반품특가 줍줍 API
@@ -61,6 +61,7 @@ export async function POST(req: Request) {
         case "check": return ok({ problems: checkPost(String(b.body ?? ""), String(b.reply ?? "")) });
         case "threads": return ok(await postThreads(String(b.body ?? ""), String(b.reply ?? "")));
         case "daily": return ok(await runDaily(kstDay(), !!b.force));
+        case "reply_tick": await replyTick(); return ok({ summary: await replySummary(kstDay()) });
         default: return fail("알 수 없는 작업이에요.");
       }
     } catch (e) {

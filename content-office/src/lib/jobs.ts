@@ -71,6 +71,9 @@ export function ensureWorker() {
   const dl = () => void import("./deals").then((m) => m.dealsTick()).catch(() => {});
   setTimeout(dl, 45_000).unref?.();
   setInterval(dl, 5 * 60 * 1000).unref?.();
+  // 💬 스레드 댓글 자동 답글 (검수 후, Render 에서만, 10분마다)
+  const rp = () => void import("./deals").then((m) => m.replyTick()).catch(() => {});
+  setInterval(rp, 10 * 60 * 1000).unref?.();
   // 🗑 휴지통 30일 지난 것 자동 완전 삭제 (1시간마다)
   const tp = () => void import("./trash").then((m) => m.purgeExpired()).catch(() => {});
   setTimeout(tp, 90_000).unref?.();

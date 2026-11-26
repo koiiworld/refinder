@@ -202,6 +202,8 @@ export async function threadsMe() {
   return d.username;
 }
 
+type PostLog = { at: string; id: string; first: string; body?: string; reply?: string; replyId?: string | null };
+
 /** 게시: 본문 → 첫 댓글. 점검에 걸리면 올리지 않음 */
 export async function postThreads(body: string, reply = "") {
   const problems = checkPost(body, reply);
@@ -212,8 +214,8 @@ export async function postThreads(body: string, reply = "") {
     await sleep(3000);
     replyId = await threadsPublish(reply.trim(), id);
   }
-  const log = (await getSetting<{ at: string; id: string; first: string }[]>("deals_threads_log")) ?? [];
-  log.unshift({ at: new Date().toISOString(), id, first: body.split("\n")[0].slice(0, 80) });
+  const log = (await getSetting<PostLog[]>("deals_threads_log")) ?? [];
+  log.unshift({ at: new Date().toISOString(), id, first: body.split("\n")[0].slice(0, 80), body: body.trim(), reply: reply.trim(), replyId });
   await setSetting("deals_threads_log", log.slice(0, 100));
   return { id, replyId };
 }
@@ -240,6 +242,9 @@ export async function runDaily(day = kstDay(), force = false) {
   });
   lines.push("", "※ 쿠팡 API는 정가·할인율을 안 줘요. 비교는 개당 가격 + 지난 골드박스 기록(쌓이는 중)으로만 해요.", "올릴 번호(예: 1,4)를 답장하면 스레드 초안을 만들어요.");
   await report(lines.join("\n"));
+  const yday = kstDay(new Date(Date.parse(`${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}T00:00:00+09:00`) - 3600_000));
+  const sum = await replySummary(yday).catch(() => "");
+  if (sum) await report(sum);
   await report(FILTER_ROUTINE);
   return { items: items.length };
 }
@@ -265,4 +270,125 @@ export function agentAllowed(header: string | null) {
   const a = Buffer.from(header.trim());
   const b = Buffer.from(want);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// ---------- 댓글 자동 답글 (검수 후) ----------
+// 10분마다(Render 에서만): 최근 3일 글의 새 댓글 → Gemini(무료) 답글 작성 → Gemini 2차 점검 → 규칙 검사 → 답글
+// 악플·시비·스팸·개인정보·판단 어려움은 답하지 않고 '확인 필요'로 모아 다음 아침 보고. 한 번 5개, 하루 30개까지
+const REPLY_MAX_TICK = 5;
+const REPLY_MAX_DAY = 30;
+
+type ReplyLog = { at: string; post: string; comment: string; user: string; text: string; action: "replied" | "skipped" | "error"; answer?: string; reason?: string };
+
+async function threadsGet(path: string, params: Record<string, string>) {
+  const token = process.env.THREADS_ACCESS_TOKEN?.trim();
+  if (!token) throw new Error("스레드 토큰(THREADS_ACCESS_TOKEN)이 없어요.");
+  const res = await fetch(`${THREADS()}${path}?${new URLSearchParams({ ...params, access_token: token })}`, { signal: AbortSignal.timeout(20_000) });
+  const d = (await res.json().catch(() => ({}))) as { data?: unknown[]; username?: string; error?: { message?: string } };
+  if (!res.ok || d.error) throw new Error(`스레드 오류 (HTTP ${res.status}) ${d.error?.message ?? ""}`.trim());
+  return d;
+}
+
+async function geminiJson(system: string, user: string) {
+  const key = process.env.GOOGLE_AI_TEXT_API_KEY?.trim();
+  if (!key) throw new Error("무료 Gemini 키(GOOGLE_AI_TEXT_API_KEY)가 없어요.");
+  for (const model of ["gemini-3.5-flash", "gemini-3.5-flash-lite"]) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST", signal: AbortSignal.timeout(60_000),
+        headers: { "x-goog-api-key": key, "content-type": "application/json" },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2048 } }),
+      });
+      const d = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+      const txt = (d.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+      const m = txt.match(/\{[\s\S]*\}/);
+      if (res.ok && m) return JSON.parse(m[0]) as Record<string, unknown>;
+    } catch { /* 다음 모델 */ }
+  }
+  throw new Error("Gemini 답을 받지 못했어요.");
+}
+
+/** 규칙 검사 (AI 와 별개로 코드가 확인) */
+export function checkReply(answer: string, post: string) {
+  const problems: string[] = [];
+  const a = answer.trim();
+  if (!a) problems.push("빈 답글");
+  if ([...a].length > 150) problems.push("150자 초과");
+  if (/https?:\/\/|www\.|link\.coupang/i.test(a)) problems.push("링크 포함");
+  if (/[\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/.test(a)) problems.push("보이지 않는 문자");
+  if (/[—–]/.test(a)) problems.push("긴 대시");
+  const nums = (a.match(/\d[\d,]*/g) ?? []).map((n) => n.replace(/,/g, ""));
+  const known = new Set((post.match(/\d[\d,]*/g) ?? []).map((n) => n.replace(/,/g, "")));
+  for (const n of nums) if (!known.has(n)) problems.push(`원글에 없는 숫자(${n})`);
+  if (/최저가|오늘만|마지막|품절 임박|무조건|100%|정품/.test(a) && !/최저가|오늘만|마지막|품절 임박|무조건|100%|정품/.test(post)) problems.push("확인 안 된 단정 표현");
+  return problems;
+}
+
+const REPLY_RULES = `너는 스레드 계정 '반품특가 줍줍'의 댓글 담당이야. 원글(아래 POST)만 근거로 댓글에 짧게 답해.
+규칙:
+- 원글의 말투(반말/존댓말)와 같은 말투로, 1~2문장, 100자 안쪽
+- 원글에 없는 가격·숫자·효능·재고·정품 여부는 절대 말하지 말 것. 모르면 "상품 페이지에서 확인해줘" 정도로
+- 링크는 쓰지 말 것 (필요하면 "링크는 첫 댓글에 있어" 라고만)
+- 구매를 압박하지 말 것, 과장 금지, 이모지는 0~1개
+- 악플·시비·정치/혐오·스팸·광고·개인정보(전화번호 등)·판단이 어려운 댓글은 답하지 말 것 (action: "skip")
+JSON 한 개로만 답해: {"action": "reply" | "skip", "reason": "짧게", "answer": "답글 (skip 이면 빈 문자열)"}`;
+
+const REVIEW_RULES = `너는 스레드 답글 검수자야. POST(원글), COMMENT(댓글), ANSWER(보낼 답글)를 보고 판단해.
+- ANSWER 가 원글에 없는 사실·숫자·효능을 말하거나, 과장·단정·구매 압박이 있거나, 원글과 말투가 다르거나, 댓글에 맞지 않으면 고쳐
+- 고칠 수 없거나 답하지 않는 게 나으면 action 을 "skip"
+JSON 한 개로만 답해: {"action": "reply" | "skip", "reason": "짧게", "answer": "최종 답글"}`;
+
+export async function replyTick(now = new Date()) {
+  if (!process.env.RENDER && process.env.DEALS_RUN_HERE !== "1") return;
+  if (!process.env.THREADS_ACCESS_TOKEN?.trim() || !process.env.GOOGLE_AI_TEXT_API_KEY?.trim()) return;
+  if ((await getSetting<{ off?: boolean }>("deals_autoreply"))?.off) return;
+  const day = kstDay(now);
+  const posts = ((await getSetting<PostLog[]>("deals_threads_log")) ?? []).filter((p) => p.body && now.getTime() - Date.parse(p.at) < 3 * 86400_000);
+  if (!posts.length) return;
+  const handled = (await getSetting<Record<string, string>>("deals_replied")) ?? {};
+  const log = (await getSetting<ReplyLog[]>("deals_reply_log")) ?? [];
+  let todayCount = log.filter((l) => l.action === "replied" && kstDay(new Date(l.at)) === day).length;
+  let tick = 0;
+  const me = (await threadsGet("/me", { fields: "username" })).username as string | undefined;
+  for (const post of posts) {
+    const d = await threadsGet(`/${post.id}/replies`, { fields: "id,text,username,timestamp", reverse: "false" }).catch(() => ({ data: [] }));
+    for (const c of (d.data ?? []) as { id: string; text?: string; username?: string }[]) {
+      if (handled[c.id] || c.id === post.replyId || c.username === me || !c.text?.trim()) continue;
+      if (tick >= REPLY_MAX_TICK || todayCount >= REPLY_MAX_DAY) break;
+      handled[c.id] = new Date().toISOString();
+      const entry: ReplyLog = { at: new Date().toISOString(), post: post.id, comment: c.id, user: c.username ?? "", text: c.text.slice(0, 300), action: "skipped" };
+      try {
+        const ctx = `POST:\n${post.body}\n\nCOMMENT (@${c.username}):\n${c.text}`;
+        const a1 = await geminiJson(REPLY_RULES, ctx);
+        if (a1.action !== "reply") { entry.reason = `1차: ${a1.reason ?? "skip"}`; }
+        else {
+          const a2 = await geminiJson(REVIEW_RULES, `${ctx}\n\nANSWER:\n${a1.answer}`);
+          const answer = String(a2.answer ?? "").trim();
+          const problems = a2.action === "reply" ? checkReply(answer, post.body ?? "") : [`2차: ${a2.reason ?? "skip"}`];
+          if (problems.length) entry.reason = problems.join(" / ");
+          else {
+            await threadsPublish(answer, c.id);
+            entry.action = "replied"; entry.answer = answer; tick++; todayCount++;
+          }
+        }
+      } catch (e) {
+        entry.action = "error"; entry.reason = (e as Error).message.slice(0, 200);
+      }
+      log.unshift(entry);
+    }
+  }
+  await setSetting("deals_replied", handled);
+  await setSetting("deals_reply_log", log.slice(0, 300));
+}
+
+/** 어제 답글 요약 (아침 보고에 붙임) */
+export async function replySummary(day: string) {
+  const log = (await getSetting<ReplyLog[]>("deals_reply_log")) ?? [];
+  const y = log.filter((l) => kstDay(new Date(l.at)) === day);
+  if (!y.length) return "";
+  const replied = y.filter((l) => l.action === "replied");
+  const check = y.filter((l) => l.action !== "replied");
+  const lines = [`💬 ${day.slice(4, 6)}/${day.slice(6)} 댓글: 답글 ${replied.length}개 · 확인 필요 ${check.length}개`];
+  for (const l of check.slice(0, 10)) lines.push(`- @${l.user}: ${l.text.slice(0, 60)} → ${l.reason ?? l.action}`);
+  return lines.join("\n");
 }
