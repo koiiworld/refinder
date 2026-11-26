@@ -63,7 +63,8 @@ export default function ShootView({ initial, estimateUsd }: { initial: Row; esti
           <span className={`badge ${s.status === "error" ? "badge-bad" : s.status === "done" ? "badge-ok" : s.status === "review" ? "badge-warn" : "badge-accent"}`}>{working && <span className="spinner" style={{ width: 10, height: 10 }} />} {SHOOT_STATUS_LABEL[s.status]}</span>
           <span className="small">{s.status === "rendering" && s.reel_message ? s.reel_message : s.message}</span>
         </div>
-        <span className="small muted">{shootKind(s.kind).label} · 클립 {s.clips.length}개 · 목표 약 {s.seconds}초</span>
+        <span className="small muted">{shootKind(s.kind).label} · 클립 {s.clips.length}개 · 목표 약 {s.seconds}초{s.mosaic ? " · 🫥 얼굴 모자이크" : ""}{s.refs?.length ? ` · 🎯 참고 릴스 ${s.refs.length}개` : ""}</span>
+        {s.mosaic && s.status !== "analyzing" && <div className="notice notice-warn small">얼굴 모자이크는 AI가 1초에 2장씩 보고 가린 거라 빠르게 지나가는 얼굴은 놓칠 수 있어요. 올리기 전에 완성 영상을 처음부터 끝까지 확인하세요.</div>}
         {s.memo && <div className="small" style={{ whiteSpace: "pre-wrap" }}>📝 {s.memo}</div>}
         {working && <span className="tiny muted">이 화면을 닫아도 계속돼요. {s.status === "rendering" ? "완성되면" : "대본이 준비되면"} 텔레그램으로 알려 줘요. 맥이 꺼져 있으면 켜질 때 시작돼요.</span>}
         {s.status === "error" && (
@@ -218,7 +219,7 @@ export default function ShootView({ initial, estimateUsd }: { initial: Row; esti
           <div className="stack" style={{ gap: 12, marginTop: 10 }}>
             {s.clips.map((c, i) => (
               <div key={c.videoId} className="stack" style={{ gap: 4 }}>
-                <div className="small"><b>클립 {i + 1}</b> <span className="muted">{sec(c.duration ?? 0)} · {c.name}</span></div>
+                <div className="small"><b>클립 {i + 1}</b> <span className="muted">{sec(c.duration ?? 0)} · {c.name}{c.faces !== undefined ? (c.faces ? ` · 🫥 얼굴 ${c.faces}곳 가림` : " · 얼굴 없음") : ""}</span></div>
                 {c.summary && <div className="small">{c.summary}</div>}
                 {c.quality && <div className="small" style={{ color: "var(--warn)" }}>⚠ {c.quality}</div>}
                 <div className="row" style={{ gap: 4, flexWrap: "nowrap", overflowX: "auto" }}>

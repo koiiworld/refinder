@@ -298,7 +298,7 @@ const HANDLERS: Record<string, (job: Job) => Promise<void>> = {
     await (await import("./shoots")).runShootAnalyze(String(job.payload.shootId));
   },
   async shoot_script(job) {
-    await (await import("./shoots")).runShootScript(String(job.payload.shootId), String(job.payload.feedback ?? ""));
+    await (await import("./shoots")).runShootScript(String(job.payload.shootId), String(job.payload.feedback ?? ""), Number(job.payload.wait) || 0);
   },
   async video_edit(job) {
     const { runVideoEdit } = await import("./videos");

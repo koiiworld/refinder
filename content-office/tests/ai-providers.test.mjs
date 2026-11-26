@@ -2721,6 +2721,31 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   const after = (await mockLog()).slice(calls);
   assert.ok(after.some((l) => l.path.endsWith("/sendMessage") && l.body.text.includes("숏폼이 완성됐어요")), "완성 알림");
   assert.ok(!after.some((l) => JSON.stringify(l.body ?? "").includes("숏폼 편집 감독")), "승인·만들기에는 AI 호출 없음");
+  // 🫥 얼굴 모자이크 + 🎯 참고 릴스: Claude가 얼굴 위치(1초 2장) → 가린 새 영상으로 바꿔 씀 · 참고 릴스 구성이 대본 AI에 전달
+  const study = (await call("/api/study")).data.find((x) => x.status === "done");
+  assert.ok(study, "앞 테스트의 릴스 분석");
+  const n0 = (await mockLog()).length;
+  const m = await call("/api/shoots", "POST", { videoIds: [v1], kind: "vlog", memo: "모자이크 시험", mosaic: true, refs: [study.id, "study_none"], confirm: true });
+  assert.equal(m.status, 200, JSON.stringify(m.data));
+  let ms;
+  for (let i = 0; i < 160; i++) { ms = (await call(`/api/shoots/${m.data.id}`)).data; if (!["analyzing", "scripting"].includes(ms.status)) break; await new Promise((x) => setTimeout(x, 500)); }
+  assert.equal(ms.status, "review", ms.message);
+  assert.equal(ms.mosaic, true);
+  assert.deepEqual(ms.refs, [study.id]);
+  assert.equal(ms.clips[0].originalId, v1);
+  assert.notEqual(ms.clips[0].videoId, v1, "가린 영상으로 바뀜");
+  assert.equal(ms.clips[0].faces, 1, "이어지는 사진의 같은 얼굴은 한 구간으로 · 점 같은 상자는 무시");
+  const mv = (await call("/api/videos")).data.videos.find((v) => v.id === ms.clips[0].videoId);
+  assert.equal(mv.status, "ready");
+  assert.ok(Math.abs(mv.duration - 3) < 0.3);
+  const faceCalls = (await mockLog()).slice(n0).filter((l) => JSON.stringify(l.body ?? "").includes("얼굴 위치 찾기 도우미"));
+  assert.equal(faceCalls.length, 1, "3초 클립 = 사진 6장 = 한 번");
+  assert.ok(faceCalls[0].path.includes("/v1/messages"), "얼굴 찾기는 Claude");
+  const rp = await stepPrompt("숏폼 편집 감독");
+  assert.match(rp, /\[참고 릴스/);
+  assert.ok(rp.includes(study.title.slice(0, 20)), "참고 릴스 분석 내용 전달");
+  const lp = (await (await fetch(`${BASE}/shoots`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["얼굴 모자이크", "참고 릴스 (레퍼런스)"]) assert.ok(lp.includes(w), w);
   // 대본 고쳐 다시 만들기 → 다시 승인 대기 · 휴지통
   assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "retry", confirm: true })).data.status, "review");
   assert.equal((await call(`/api/shoots/${id}`, "DELETE")).status, 200);

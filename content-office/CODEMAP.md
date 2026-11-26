@@ -30,7 +30,7 @@
 | `creator.ts` | 네이버 크리에이터 어드바이저 '유입 트렌드' — 공식 API가 없어 사용자가 화면에서 복사해 붙여 넣은 목록을 저장 | CreatorTrend, cleanCreatorKeyword, parseTrendText, saveCreatorTrend, listCreatorTrends, creatorTrendContext |
 | `dashboard.ts` | 메인 대시보드 데이터 — 모두 앱 DB의 실제 기록만 사용 (지어낸 숫자 없음) | PASS_SCORE, RevenueChannel, RevenueEntry, MonthRevenue, monthKey, getRevenue, saveRevenue, saveDailyRevenue … |
 | `db.ts` | 데이터베이스 어댑터 | getDb, q, q1, dbKind, newId, j |
-| `deals.ts` | 🧹 반품특가 줍줍 (스레드·카톡 알림방 운영) | GoldItem, kstDay, goldbox, plainUrl, shortLinks, search, unitPrice, report … |
+| `deals.ts` | 🧹 반품특가 줍줍 (스레드·카톡 알림방 운영) | GoldItem, kstDay, goldbox, plainUrl, shortLinks, search, unitPrice, awaiting … |
 | `diagnose.ts` | 🩺 블로그 진단 | naverBlogSearch, naverSearch, postKey, blogKey, Check, diagnoseBlog, Diagnosis, DiagnoseState … |
 | `edit.ts` | 🎞 영상 편집 (캡컷형) — 편집은 화면에서(자동 저장), 무거운 일은 맥에서 | EditProject, RESOLUTIONS, listEdits, getEdit, createEdit, deleteEdit, saveEdit, startEditRender … |
 | `estimate.ts` | 돈 드는 버튼을 누르기 전 보여 줄 예상 비용 (토큰 × 단가 추정) | StepEstimate, estimateSteps, postEstimates |
@@ -89,7 +89,8 @@
 | `seed.ts` | 기본 역할 배정: 기획=Gemini, 원고=Claude, 검수=ChatGPT, 부분수정=Claude, 글감추천=Gemini | DEFAULT_MODELS, DEFAULT_ROLES, seedIfEmpty |
 | `series.ts` | 📺 시리즈 기획: 주인공·친구·주제 → N화를 한 번에 (화마다 제목·줄거리 3줄·8초 장면 프롬프트·유튜브 설명 2줄) | Episode, Series, listSeries, getSeries, createSeries, continueSeries, editEpisode, setCharacters … |
 | `settings.ts` | 기본 단가 (USD / 100만 토큰). 설정에서 직접 고치면 그 값이 우선합니다. | AppSettings, DEFAULT_PRICING, getSettings, saveSettings |
-| `shoot-types.ts` | 촬영 종류: 올릴 때 고름 → 종류마다 대본 구성 규칙이 달라짐 | SHOOT_KINDS, ShootKindId, shootKind, SHOOT_LENGTHS, MAX_SHOOT_CLIPS, ShootFrame, ShootClip, ShootCut … |
+| `shoot-mosaic.ts` | 🫥 현장 숏폼 얼굴 모자이크 (맥에서 처리) | FACE_FPS, FaceBox, FaceTrack, parseFaces, faceTracks, mosaicFilter, mosaicClip |
+| `shoot-types.ts` | 촬영 종류: 올릴 때 고름 → 종류마다 대본 구성 규칙이 달라짐 | SHOOT_KINDS, ShootKindId, shootKind, SHOOT_LENGTHS, MAX_SHOOT_CLIPS, MAX_SHOOT_REFS, VIDEO_EXT, isVideoFile … |
 | `shoots.ts` | 📹 현장 숏폼: 찍은 영상 여러 개 → 대본 보고 → 승인 → 자동 컷 편집 | ShootRow, listShoots, getShoot, createShoot, deleteShoot, runShootAnalyze, runShootScript, reviseShoot … |
 | `steps.ts` | 글(프로젝트) 진행 단계 | StepKey, STEP_AI_LABEL, DEFAULT_STEP_AI, FALLBACK_MODELS, POST_STAGES, STEP_NAMES, stageLabel, stageStep |
 | `studio.ts` | 🎬 영상 제작 스튜디오 (쇼츠·릴스) | StudioImage, StudioClip, StudioScene, StudioPlan, StudioCharacter, StudioOptions, StudioProject, STUDIO_STYLES … |

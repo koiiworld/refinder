@@ -2,13 +2,15 @@ import TrashableList from "@/components/TrashableList";
 import { fmtDate } from "@/components/ui";
 import { estimateSteps } from "@/lib/estimate";
 import { listShoots } from "@/lib/shoots";
+import { listStudies } from "@/lib/reel-study";
 import { SHOOT_STATUS_LABEL, shootKind } from "@/lib/shoot-types";
 import NewShoot from "./NewShoot";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShootsPage() {
-  const [list, estimate] = await Promise.all([listShoots(), estimateSteps(["shoot_script"])]);
+  const [list, estimate, face, studies] = await Promise.all([listShoots(), estimateSteps(["shoot_script"]), estimateSteps(["shoot_face"]), listStudies()]);
+  const refs = studies.filter((x) => x.status === "done").slice(0, 40).map((x) => ({ id: x.id, title: (x.title || x.url).slice(0, 40), sub: [x.mine ? "내 릴스" : "", x.analysis?.format ?? x.category].filter(Boolean).join(" · ") }));
   return (
     <div className="page">
       <div className="page-head">
@@ -18,7 +20,7 @@ export default async function ShootsPage() {
         </div>
       </div>
       <div className="stack" style={{ gap: 16 }}>
-        <NewShoot estimate={estimate.steps[0] ?? null} />
+        <NewShoot estimate={estimate.steps[0] ?? null} faceEstimate={face.steps[0] ?? null} studies={refs} />
         <TrashableList
           title="촬영 목록"
           items={list.map((s) => ({

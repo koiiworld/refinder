@@ -5,9 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { q, q1, newId, j } from "./db";
 import { enqueue } from "./jobs";
-import { ffmpegPath, getVideo, probe } from "./videos";
+import { addVideoFile, ffmpegPath, fitSize, getVideo, probe } from "./videos";
 import { extractJson, runStep } from "./ai/run";
-import { cleanScript, cleanVariants, MAX_SHOOT_CLIPS, scriptSeconds, scriptToDoc, SHOOT_LENGTHS, shootKind, type Shoot, type ShootClip, type ShootScript } from "./shoot-types";
+import { cleanScript, cleanVariants, MAX_SHOOT_CLIPS, MAX_SHOOT_REFS, scriptSeconds, scriptToDoc, SHOOT_LENGTHS, shootKind, type Shoot, type ShootClip, type ShootScript } from "./shoot-types";
 
 /**
  * 📹 현장 숏폼: 찍은 영상 여러 개 → 대본 보고 → 승인 → 자동 컷 편집
@@ -45,7 +45,7 @@ async function setShoot(id: string, patch: Partial<Pick<Shoot, "status" | "messa
 const fail = (id: string, at: "analyze" | "script" | "render", e: unknown) => setShoot(id, { status: "error", failed_at: at, message: (e instanceof Error ? e.message : String(e)).slice(0, 400) });
 
 /** 새 촬영: 이미 올린 영상(영상공장)들을 묶어 영상 확인을 시작 */
-export async function createShoot(input: { title?: string; kind?: string; memo?: string; seconds?: number; videoIds?: string[] }) {
+export async function createShoot(input: { title?: string; kind?: string; memo?: string; seconds?: number; videoIds?: string[]; mosaic?: boolean; refs?: string[]; refUrls?: string[] }) {
   const ids = Array.from(new Set((input.videoIds ?? []).map(String).filter(Boolean)));
   if (!ids.length) throw new Error("영상을 1개 이상 올려 주세요.");
   if (ids.length > MAX_SHOOT_CLIPS) throw new Error(`영상은 한 번에 ${MAX_SHOOT_CLIPS}개까지 올릴 수 있어요.`);
@@ -59,8 +59,14 @@ export async function createShoot(input: { title?: string; kind?: string; memo?:
   const memo = String(input.memo ?? "").trim().slice(0, 2000);
   const seconds = (SHOOT_LENGTHS as readonly number[]).includes(Number(input.seconds)) ? Number(input.seconds) : 30;
   const title = String(input.title ?? "").trim().slice(0, 80) || memo.split("\n")[0].slice(0, 40) || `${kind.label} ${new Date().toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric" })}`;
+  // 참고 릴스: 이미 분석한 것(릴스 분석) + 새 링크(지금 분석 시작 → 대본 쓰기 전에 끝나길 기다림)
+  let refs = Array.from(new Set((input.refs ?? []).map(String).filter((x) => /^study_/.test(x))));
+  if (refs.length) refs = (await q<{ id: string }>("SELECT id FROM study_reels WHERE id = ANY($1)", [refs])).map((r) => r.id);
+  const urls = Array.from(new Set((input.refUrls ?? []).map((u) => String(u).trim()).filter((u) => /^https?:\/\//.test(u)))).slice(0, Math.max(0, MAX_SHOOT_REFS - refs.length));
+  if (urls.length) refs.push(...(await (await import("./reel-study")).addStudies(urls, false)));
+  refs = refs.slice(0, MAX_SHOOT_REFS);
   const id = newId("shoot_");
-  await q("INSERT INTO shoots (id, title, kind, memo, seconds, clips, status, message) VALUES ($1,$2,$3,$4,$5,$6,'analyzing','영상 확인 대기 중 (맥에서 받아쓰기·장면 사진)')", [id, title, kind.id, memo, seconds, j(clips)]);
+  await q("INSERT INTO shoots (id, title, kind, memo, seconds, clips, mosaic, refs, status, message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'analyzing','영상 확인 대기 중 (맥에서 받아쓰기·장면 사진)')", [id, title, kind.id, memo, seconds, j(clips), input.mosaic === true, j(refs)]);
   await enqueue("shoot_analyze", { payload: { shootId: id }, maxAttempts: 1 });
   return id;
 }
@@ -100,9 +106,23 @@ export async function runShootAnalyze(id: string) {
     for (const [i, c] of s.clips.entries()) {
       const label = `클립 ${i + 1}/${s.clips.length}`;
       await setShoot(id, { message: `${label} 받아쓰는 중` });
-      const file = await videoToTemp(c.videoId, dir);
-      const meta = await probe(file);
+      let file = await videoToTemp(c.videoId, dir);
+      let meta = await probe(file);
       const duration = meta.duration ?? c.duration ?? 0;
+      // 🫥 얼굴 모자이크 (켰을 때만 · 이미 한 클립은 건너뜀): 가린 영상을 새로 저장하고 이 뒤로는 그 영상만 씀
+      let videoId = c.videoId, originalId = c.originalId, faces = c.faces;
+      if (s.mosaic && faces === undefined) {
+        const m = await (await import("./shoot-mosaic")).mosaicClip({ file, dir, tag: `c${i}`, duration, run, onStep: (msg) => void setShoot(id, { message: `${label} ${msg}` }) });
+        faces = m.faces;
+        if (m.file) {
+          const name = await fitSize(dir, path.basename(m.file));
+          originalId = c.videoId;
+          videoId = await addVideoFile({ title: `${c.name} (얼굴 모자이크)`.slice(0, 200), file: path.join(dir, name), kind: "edit", info: { description: `현장 숏폼 ${id} 얼굴 모자이크` } });
+          fs.rmSync(file, { force: true });
+          file = await videoToTemp(videoId, dir);
+          meta = await probe(file);
+        }
+      }
       let transcript: NonNullable<ShootClip["transcript"]> = [];
       if (fs.existsSync(WHISPER_PY()) || process.env.WHISPER_PYTHON) {
         const r = await run(WHISPER_PY(), [WHISPER_SCRIPT(), file, process.env.WHISPER_MODEL || "small"], { env: { FFMPEG: ffmpegPath() } });
@@ -119,7 +139,7 @@ export async function runShootAnalyze(id: string) {
         if (!fs.existsSync(out)) continue;
         const buf = fs.readFileSync(out);
         const img = `img_${crypto.randomBytes(12).toString("hex")}`;
-        await q("INSERT INTO generated_images (id, project_id, provider, model, mime, data, prompt) VALUES ($1,NULL,'shoot','frame','image/jpeg',$2,$3)", [img, buf, `${id}#${i + 1}@${t.toFixed(1)}`]);
+        await q("INSERT INTO generated_images (id, project_id, provider, model, mime, data, prompt) VALUES ($1,NULL,'shoot','frame','image/jpeg',$2,$3)", [img, buf, `${id}#${i + 1}@${t.toFixed(1)}`]); // 모자이크를 켰으면 가린 영상에서 뽑은 사진
         frames.push({ t: Math.round(t * 10) / 10, img });
         dataUrls.push(`data:image/jpeg;base64,${buf.toString("base64")}`);
       }
@@ -142,7 +162,7 @@ export async function runShootAnalyze(id: string) {
           quality = `AI가 이 클립을 보지 못했어요: ${(e as Error).message.slice(0, 100)}`;
         }
       }
-      clips.push({ ...c, duration, width: meta.width ?? c.width, height: meta.height ?? c.height, transcript, frames, summary, quality });
+      clips.push({ ...c, videoId, ...(originalId ? { originalId } : {}), ...(faces !== undefined ? { faces } : {}), duration, width: meta.width ?? c.width, height: meta.height ?? c.height, transcript, frames, summary, quality });
       await setShoot(id, { clips: [...clips, ...s.clips.slice(clips.length)] });
       fs.rmSync(file, { force: true });
     }
@@ -178,10 +198,31 @@ function clipsText(clips: ShootClip[]) {
   }).join("\n\n");
 }
 
+/** 참고 릴스(릴스 분석 결과) → 대본 AI에 줄 글. pending = 아직 분석 중인 수 */
+async function refsText(ids: string[]) {
+  if (!ids?.length) return { text: "", pending: 0 };
+  const rows = await q<{ id: string; status: string; title: string; analysis: import("./reel-study").StudyAnalysis; transcript: { text: string }[] }>("SELECT id, status, title, analysis, transcript FROM study_reels WHERE id = ANY($1)", [ids]);
+  const done = rows.filter((r) => r.status === "done");
+  const text = done.map((r, i) => {
+    const a = r.analysis ?? {};
+    return [`(참고 ${i + 1}) ${r.title.slice(0, 80)}${a.format ? ` · 형식: ${a.format}` : ""}`, a.summary ? `  요약: ${a.summary}` : "", a.hook?.text ? `  첫 3초: ${a.hook.text}${a.hook.verdict ? ` → ${a.hook.verdict}` : ""}` : "",
+      ...(a.structure ?? []).slice(0, 8).map((x) => `  ${x.t} ${x.part}: ${x.desc}`), a.whyWorks?.length ? `  잘 된 이유: ${a.whyWorks.slice(0, 4).join(" / ")}` : "",
+      r.transcript?.length ? `  말·자막 호흡: ${r.transcript.slice(0, 12).map((x) => x.text).join(" / ").slice(0, 400)}` : ""].filter(Boolean).join("\n");
+  }).join("\n\n");
+  return { text, pending: rows.filter((r) => r.status === "queued" || r.status === "running").length };
+}
+
 /** 작업 ③: 대본 쓰기 (feedback 이 있으면 지금 대본을 그 요청대로 고침) */
-export async function runShootScript(id: string, feedback = "") {
+export async function runShootScript(id: string, feedback = "", wait = 0) {
   const s = await getShoot(id);
   if (!s || s.status !== "scripting") return;
+  const ref = await refsText(s.refs).catch(() => ({ text: "", pending: 0 }));
+  // 방금 넣은 참고 릴스가 아직 분석 중이면 끝날 때까지 기다림 (20초마다, 최대 15분 → 그래도 안 끝나면 없이 진행)
+  if (ref.pending && wait < 45) {
+    await setShoot(id, { message: `참고 릴스 분석을 기다리는 중 (${ref.pending}개 남음)` });
+    await enqueue("shoot_script", { payload: { shootId: id, feedback, wait: wait + 1 }, maxAttempts: 1, runAfter: new Date(Date.now() + 20_000) });
+    return;
+  }
   try {
     const kind = shootKind(s.kind);
     const voice = await q1<{ value: unknown }>("SELECT value FROM settings WHERE key='ig_voice'").catch(() => null);
@@ -194,6 +235,7 @@ export async function runShootScript(id: string, feedback = "") {
 [촬영자 메모 — 사실은 여기 적힌 것만]
 ${s.memo || "(메모 없음)"}
 ${voiceText.trim() ? `\n[내 말투]\n${voiceText.trim().slice(0, 800)}\n` : ""}
+${ref.text ? `\n[참고 릴스 — 촬영자가 고른 레퍼런스. 첫 컷을 여는 방식·컷 길이와 호흡·자막 말투·흐름을 따라 하되, 문구를 그대로 베끼지 말고 내용(사실)은 가져오지 마. 내 클립에 없는 장면은 억지로 맞추지 마]\n${ref.text}\n` : ""}
 [촬영한 클립들 — AI가 장면 사진을 보고 정리한 것]
 ${clipsText(s.clips)}${prev}
 ${feedback ? "" : "\n[대본은 2안] 첫 컷과 흐름이 서로 다른 두 가지 구성으로 짜 줘 (예: 음식부터 보여 주는 안 / 궁금증으로 시작하는 안). 쓸 만한 장면이 적어 두 안이 거의 같아진다면 한 안만 줘.\n"}
