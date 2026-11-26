@@ -54,7 +54,13 @@
 - ⛔ 11/24 새벽: 사용자가 사파리에서 필터 검색 링크 여러 개를 연달아 열자 쿠팡이 '요청하신 페이지의 사용권한이 없습니다'로 차단. → 루틴에서 링크 전부 제거, 앱에서 직접 필터 체크만. candidates(후보 링크)도 매일 보고에서 뺌
 - 맥 디스크 여유 거의 없음(약 0.9GB)
 
-## 골드박스 (맥 ~/.ai-content-office, 맥이 원본)
+## ✅ Render 이전 (11/26, feature/ai-content-office 89a6500 배포)
+- content-office/src/lib/deals.ts + /api/deals: 매일 08:10 골드박스→업무 보고(Render에서만, 하루 1번), 답장·사진 읽기, 검색, 짧은 링크, 게시 전 점검, 스레드 게시
+- 키는 앱 'API 키 직접 연결'에 저장: THREADS_ACCESS_TOKEN, REPORT_TELEGRAM_BOT_TOKEN, REPORT_TELEGRAM_CHAT_ID, DEALS_AGENT_TOKEN(맥 .env.local 에도 있음)
+- 클라우드에서 호출: 헤더 x-co-agent-token. 환경 설정 > Network secrets 에 host ai-content-office-m7sx.onrender.com / header x-co-agent-token 으로 저장하면 새 세션부터 Mac 없이 사용
+- 맥의 08:10 launchd(com.refinder.daily-goldbox)는 끔(파일은 ~/.ai-content-office/*.plist.off)
+
+## 골드박스 (맥, 이전 방식) ~/.ai-content-office, 맥이 원본)
 - `goldbox.mjs`: 골드박스 API 하루 1회 → goldbox-YYYYMMDD.json (가격 기록 = 이 파일들)
 - `goldbox-post.mjs [--pick 1,4,7]`: 스레드 초안(threads.txt). 사실 기반 문구만: 지난 기록 대비 내림 / 기록 중 최저가 / 직접 확인한 정가(list-prices.json) 대비 -%
   - 짧은 링크: 링크 생성 API 하루 1회(일반 상품 주소로 변환해야 됨), short-links.json
