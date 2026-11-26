@@ -74,6 +74,8 @@
 
 ## 텔레그램 답장 자동 확인
 - 예약 작업 trig_01HvZrhhj7GrY3GFGMgtEnJa: 매일 09:23~23:23(KST) 매시간 새 세션 실행. 먼저 ?action=awaiting 확인 → false 면 바로 종료 (사용자 지시 11/27: 내가 보고를 보냈을 때만 답장 확인). true 면 inbox → 처리 → ack → report. 게시는 텔레그램에서 '게시해' 받은 원고만
+- 사용자 지시 11/27: 보고 뒤엔 5분 간격 확인. 예약 작업은 최소 1시간이라, 대화 중 보고를 보냈으면 그 세션에서 백그라운드로 5분마다 ?action=inbox 확인(최대 2시간, 새 메시지 오면 처리). 그 외엔 1시간 예약 작업
+- threads_delete 권한 아직 없음(삭제 403) → 아이폰 첫 버전 DgNF8gAGxRd 삭제 대기
 - awaiting: report 보내면 24시간 켜짐(noWait:true 면 안 켬), 답장을 ack 처리하면 꺼짐
 - 스레드 인기 주제 API는 KR 빈 결과(US만 나옴). keyword_search 는 403(권한/검수 필요)
 
