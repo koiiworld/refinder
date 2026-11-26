@@ -40,6 +40,7 @@
 - 맥: 보내기 `node ~/.ai-content-office/report.mjs <파일>` · 답장 읽기 `node ~/.ai-content-office/inbox.mjs` (처리 후 `--ack`)
 - 키: 맥 `content-office/.env.local` 의 REPORT_TELEGRAM_BOT_TOKEN / REPORT_TELEGRAM_CHAT_ID (출력 금지)
 - **보고 규칙 (사용자 지정 11/24)**: 매번 보고 X. ① 그날 모은 데이터 ② 업무 마칠 때 ③ 스레드 게시 직전 — 이때만 보고
+- 사용자가 대화를 직접 보고 있는 날은 업무 마무리 보고 생략 (11/26)
 - 반품 담기: 사용자가 쿠팡 앱 '반품 상품' 화면 캡처 + 공유 링크를 @upmoo3bot 에 보냄 → inbox.mjs 가 사진을 ~/.ai-content-office/inbox/ 에 저장 → 캡처 읽어서 상품명·반품가·등급·새 상품가 추출 (북마클릿은 앱에서 안 돼서 이 방식)
 - 이 세션은 예약 작업 불가(컴퓨터 연결 세션) → 사용자가 여기서 "확인"하면 텔레그램 답장 읽고 진행
 
@@ -59,6 +60,13 @@
 - 키는 앱 'API 키 직접 연결'에 저장: THREADS_ACCESS_TOKEN, REPORT_TELEGRAM_BOT_TOKEN, REPORT_TELEGRAM_CHAT_ID, DEALS_AGENT_TOKEN(맥 .env.local 에도 있음)
 - 클라우드에서 호출: 헤더 x-co-agent-token. 환경 설정 > Network secrets 에 host ai-content-office-m7sx.onrender.com / header x-co-agent-token 으로 저장하면 새 세션부터 Mac 없이 사용
 - 맥의 08:10 launchd(com.refinder.daily-goldbox)는 끔(파일은 ~/.ai-content-office/*.plist.off)
+
+## 11/26 진행
+- 스레드 게시: 샥즈 오픈런 프로2(골드박스, 해외구매라 정가 비교 X) DgM8dhzm0qD / 아이폰 Air 1TB 반품-미개봉 DgNF8gAGxRd
+- 광고 표시는 [광고] (해시태그 #광고 쓰면 주제 태그가 '광고'가 됨), 주제 태그는 본문 끝 #러닝/#애플 같이 1개
+- 댓글 자동 답글 배포(10분마다, threads_read_replies 권한 추가한 토큰)
+- 클라우드 환경 Network secret 저장 완료: 새 세션은 curl https://ai-content-office-m7sx.onrender.com/api/deals 를 헤더 없이 바로 호출 가능 (Mac 불필요)
+- 링크: 사용자가 쿠팡 파트너스에서 직접 딴 링크를 주면 그걸 우선 사용
 
 ## 글 검수 규칙 (11/26 확정, 추가 비용 없음)
 1. Gemini 무료 키 (맥 ~/.ai-content-office/tone-review.mjs --passes=1): 첫 줄 훅·말투
