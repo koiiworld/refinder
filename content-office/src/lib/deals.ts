@@ -267,7 +267,7 @@ export async function dealsTick(now = new Date()) {
 export function agentAllowed(header: string | null) {
   const want = process.env.DEALS_AGENT_TOKEN?.trim();
   if (!want || !header) return false;
-  const a = Buffer.from(header.trim());
+  const a = Buffer.from(header.trim().replace(/^Bearer\s+/i, "").trim());
   const b = Buffer.from(want);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
