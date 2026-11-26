@@ -29,22 +29,36 @@ if (!fs.existsSync(path.join(bundleDir, "index.html"))) {
   serveUrl = await bundle({ entryPoint: job.entry, outDir: bundleDir });
 }
 
-const opts = { serveUrl, id: job.compositionId || "Reel", inputProps: job.props, ...(job.browser ? { browserExecutable: job.browser } : {}) };
-const composition = await selectComposition(opts);
-let last = 0;
-await renderMedia({
-  ...opts,
-  composition,
-  codec: "h264",
-  crf: 23,
-  ...(job.scale ? { scale: job.scale } : {}), // 해상도: 720p 0.67 · 1080p 1 · 2K 1.33 · 4K 2
-  outputLocation: job.out,
-  concurrency: 2,
-  onProgress: ({ progress }) => {
-    if (progress - last >= 0.05 || progress === 1) {
-      last = progress;
-      console.log(`progress ${progress.toFixed(2)}`);
-    }
-  },
-});
+// 예전 묶음은 지움 (최근 2개만 남김 — 맥 저장공간 아끼기)
+try {
+  const olds = fs.readdirSync(job.cacheDir).filter((f) => f.startsWith("bundle-") && f !== `bundle-${key}`).map((f) => ({ f, t: fs.statSync(path.join(job.cacheDir, f)).mtimeMs })).sort((a, b) => b.t - a.t).slice(1);
+  for (const { f } of olds) fs.rmSync(path.join(job.cacheDir, f), { recursive: true, force: true });
+} catch {}
+
+process.on("uncaughtException", (e) => { console.error(`ERR: ${e?.message ?? e}`); process.exit(1); });
+process.on("unhandledRejection", (e) => { console.error(`ERR: ${e?.message ?? e}`); process.exit(1); });
+const opts = { serveUrl, id: job.compositionId || "Reel", inputProps: job.props, timeoutInMilliseconds: 120000, ...(job.browser ? { browserExecutable: job.browser } : {}) };
+try {
+  const composition = await selectComposition(opts);
+  let last = 0;
+  await renderMedia({
+    ...opts,
+    composition,
+    codec: "h264",
+    crf: 23,
+    ...(job.scale ? { scale: job.scale } : {}), // 해상도: 720p 0.67 · 1080p 1 · 2K 1.33 · 4K 2
+    outputLocation: job.out,
+    concurrency: 2,
+    onProgress: ({ progress }) => {
+      if (progress - last >= 0.05 || progress === 1) {
+        last = progress;
+        console.log(`progress ${progress.toFixed(2)}`);
+      }
+    },
+  });
+} catch (e) {
+  // 진짜 이유를 한 줄로 (앱이 이 줄을 화면에 보여 줌)
+  console.error(`ERR: ${String(e?.message ?? e).split("\n")[0]}`);
+  process.exit(1);
+}
 console.log("done");

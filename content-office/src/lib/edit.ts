@@ -28,6 +28,17 @@ const CHROME = process.env.REMOTION_BROWSER || "/Applications/Google Chrome.app/
 const sid = () => Math.random().toString(36).slice(2, 9);
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+/** 렌더 오류에서 진짜 이유만 (스택 "at …" 줄 말고) + 알아듣기 쉬운 설명 */
+function renderWhy(err: string) {
+  const lines = err.split("\n").map((l) => l.trim()).filter(Boolean);
+  const tagged = lines.filter((l) => l.startsWith("ERR:")).map((l) => l.slice(4).trim());
+  const msg = (tagged.length ? tagged : lines.filter((l) => !/^at\s/.test(l) && !/^progress /.test(l) && !/node\.js v\d/i.test(l))).slice(-3).join(" ").slice(0, 400);
+  const hint = /ENOSPC|no space/i.test(msg) ? " → 맥 저장공간이 꽉 찼어요. 공간을 비우고 다시 해 주세요."
+    : /delayRender|timeout|timed out/i.test(msg) ? " → 영상을 불러오는 데 너무 오래 걸렸어요. 다시 눌러 보거나, 아주 긴 영상은 잘라서 써 주세요."
+    : /decode|codec|hevc|could not extract|Failed to/i.test(msg) ? " → 영상 파일 형식을 읽지 못했어요. 그 영상을 영상공장에서 한 번 받아 다시 저장(변환)한 뒤 써 주세요." : "";
+  return (msg || "알 수 없는 오류") + hint;
+}
+
 export async function listEdits() {
   return q<EditProject>("SELECT * FROM edit_projects WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 100");
 }
@@ -147,7 +158,7 @@ export async function runEditRender(id: string, resolution: string) {
         }
       },
     });
-    if (r.code !== 0 || !fs.existsSync(out)) throw new Error(`내보내기 실패: ${r.err.split("\n").filter(Boolean).slice(-2).join(" ").slice(0, 300)}`);
+    if (r.code !== 0 || !fs.existsSync(out)) throw new Error(`내보내기 실패: ${renderWhy(r.err)}`);
     await setEdit(id, { message: "영상공장에 저장 중" });
     const final = await fitSize(dir, "edit.mp4");
     const vid = await addVideoFile({ title: `${e.title} (${resolution})`, file: path.join(dir, final), kind: "reel", info: { description: `영상 편집 ${id}` } });
