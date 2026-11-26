@@ -272,6 +272,17 @@ export function agentAllowed(header: string | null) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/** 자동 답글용 원글 기록 채우기 (기록에 본문이 없는 예전 글) */
+export async function attachPostLog(id: string, body: string, reply: string, replyId?: string) {
+  const log = (await getSetting<PostLog[]>("deals_threads_log")) ?? [];
+  const p = log.find((x) => x.id === id);
+  if (!p) throw new Error("그 글의 게시 기록이 없어요.");
+  if (!body.trim()) throw new Error("본문이 비어 있어요.");
+  Object.assign(p, { body: body.trim(), reply: reply.trim(), replyId: replyId ?? p.replyId ?? null });
+  await setSetting("deals_threads_log", log);
+  return { id, first: p.first };
+}
+
 // ---------- 댓글 자동 답글 (검수 후) ----------
 // 10분마다(Render 에서만): 최근 3일 글의 새 댓글 → Gemini(무료) 답글 작성 → Gemini 2차 점검 → 규칙 검사 → 답글
 // 악플·시비·스팸·개인정보·판단 어려움은 답하지 않고 '확인 필요'로 모아 다음 아침 보고. 한 번 5개, 하루 30개까지

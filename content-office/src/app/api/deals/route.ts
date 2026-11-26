@@ -1,5 +1,5 @@
 import { body, fail, handle, ok } from "@/lib/api";
-import { agentAllowed, checkPost, replyTick, replySummary, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
+import { agentAllowed, attachPostLog, checkPost, replyTick, replySummary, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
 
 /**
  * 🧹 반품특가 줍줍 API
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   return handle(async () => {
     if (denied(req)) return fail("토큰이 맞지 않아요.", 401);
-    const b = await body<{ action?: string; text?: string; keyword?: string; urls?: string[]; body?: string; reply?: string; force?: boolean }>(req);
+    const b = await body<{ action?: string; text?: string; keyword?: string; urls?: string[]; body?: string; reply?: string; force?: boolean; id?: string; replyId?: string }>(req);
     try {
       switch (b.action) {
         case "ack": return ok(await inbox(true));
@@ -61,6 +61,7 @@ export async function POST(req: Request) {
         case "check": return ok({ problems: checkPost(String(b.body ?? ""), String(b.reply ?? "")) });
         case "threads": return ok(await postThreads(String(b.body ?? ""), String(b.reply ?? "")));
         case "daily": return ok(await runDaily(kstDay(), !!b.force));
+        case "log_post": return ok(await attachPostLog(String(b.id ?? ""), String(b.body ?? ""), String(b.reply ?? ""), b.replyId ? String(b.replyId) : undefined));
         case "reply_tick": await replyTick(); return ok({ summary: await replySummary(kstDay()) });
         default: return fail("알 수 없는 작업이에요.");
       }
