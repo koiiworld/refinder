@@ -247,6 +247,12 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       setDoc((d) => ({ ...d, texts: d.texts.flatMap((x) => (x.id === selText.id ? [{ ...x, end: r2(t) }, { ...x, id: sid(), start: r2(t) }] : [x])) }));
       return;
     }
+    if (sel?.kind === "overlay" && selOv) {
+      const o = t - selOv.start;
+      if (o < 0.15 || selOv.dur - o < 0.15) return;
+      setDoc((d) => ({ ...d, overlays: d.overlays.flatMap((x) => (x.id === selOv.id ? [{ ...x, dur: r2(o) }, { ...x, id: sid(), start: r2(t), dur: r2(selOv.dur - o), in: x.kind === "image" ? x.in : r2(x.in + o) }] : [x])) }));
+      return;
+    }
     const i = selClip ? doc.clips.findIndex((c) => c.id === selClip.id) : clipAt(t);
     const c = doc.clips[i];
     if (!c) return;
@@ -323,6 +329,26 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
       setInfo(await api<Info>(`/api/edit/${info.id}`, "POST", body));
       setPanel(null);
     } catch (e) { setErr((e as Error).message); }
+  }
+
+  // ✂️ 오버레이 자르기 (시간): 앞·뒤 자르기, 기준 영상(본 클립)에 맞추기
+  const [ovNote, setOvNote] = useState("");
+  const ovSrcLen = (o: Overlay) => (o.kind === "image" ? Infinity : durOf(o.src));
+  function trimOv(o: Overlay, side: "head" | "tail") {
+    const k = t - o.start;
+    if (k < 0.1 || o.dur - k < 0.1) { setOvNote("재생 막대(흰 선)를 이 오버레이 안으로 옮긴 뒤 눌러 주세요."); return; }
+    setOvNote("");
+    if (side === "head") patchOv(o.id, { start: r2(t), dur: r2(o.dur - k), in: o.kind === "image" ? o.in : r2(o.in + k) });
+    else patchOv(o.id, { dur: r2(k) });
+  }
+  function fitOv(o: Overlay, whole: boolean) {
+    if (!doc.clips.length) { setOvNote("기준이 될 본 영상(아래 첫 줄)이 없어요."); return; }
+    let a = 0, b = starts[doc.clips.length - 1] + clipLen(doc.clips[doc.clips.length - 1]);
+    if (!whole) { const i = clipAt(Math.max(o.start, t >= o.start && t < o.start + o.dur ? t : o.start)); a = starts[i]; b = a + clipLen(doc.clips[i]); }
+    const want = b - a, can = ovSrcLen(o) - o.in;
+    const dur = r2(Math.max(0.2, Math.min(want, can)));
+    patchOv(o.id, { start: r2(a), dur });
+    setOvNote(can + 0.05 < want ? `오버레이 영상이 ${r2(want - can)}초 짧아서 끝부분은 비어요. '영상 몇 초부터'를 앞으로 당기면 더 길게 쓸 수 있어요.` : `기준 영상 ${fmt(a)}~${fmt(b)}에 맞췄어요 (넘치는 부분은 잘라냈어요).`);
   }
 
   // ▣ 미리보기 위 오버레이 상자: 실제 그려진 위치를 재서 (%) 끌어 옮기기·모서리로 크기 조절
@@ -531,7 +557,8 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
     if (d.kind === "text") n = { ...b, texts: b.texts.map((x) => (x.id === d.id ? { ...x, start: mv(d.a), end: r2(mv(d.a) + (d.b - d.a)) } : x)) };
     if (d.kind === "text-r") n = { ...b, texts: b.texts.map((x) => (x.id === d.id ? { ...x, end: r2(Math.max(x.start + 0.2, d.b + dt)) } : x)) };
     if (d.kind === "ov") n = { ...b, overlays: b.overlays.map((x) => (x.id === d.id ? { ...x, start: mv(d.a) } : x)) };
-    if (d.kind === "ov-r") n = { ...b, overlays: b.overlays.map((x) => (x.id === d.id ? { ...x, dur: r2(Math.max(0.2, d.b + dt)) } : x)) };
+    if (d.kind === "ov-r") n = { ...b, overlays: b.overlays.map((x) => (x.id === d.id ? { ...x, dur: r2(Math.max(0.2, Math.min(ovSrcLen(x) - x.in, d.b + dt))) } : x)) };
+    if (d.kind === "ov-l") n = { ...b, overlays: b.overlays.map((x) => { if (x.id !== d.id) return x; const k = Math.max(-d.a, x.kind === "image" ? -Infinity : -x.in, Math.min(x.dur - 0.2, dt)); return { ...x, start: r2(d.a + k), dur: r2(x.dur - k), in: x.kind === "image" ? x.in : r2(x.in + k) }; }) };
     if (d.kind === "au") n = { ...b, audios: b.audios.map((x) => (x.id === d.id ? { ...x, start: mv(d.a) } : x)) };
     if (d.kind === "au-r") n = { ...b, audios: b.audios.map((x) => (x.id === d.id ? { ...x, dur: r2(Math.max(0.2, Math.min(durOf(x.src) - x.in, d.b + dt))) } : x)) };
     setDocRaw(n);
@@ -657,7 +684,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
             <div className="cut-row" style={{ marginLeft: -half }}>
               {doc.overlays.map((o) => (
                 <div key={o.id} className={`cut-blk ov${sel?.id === o.id ? " on" : ""}`} style={{ left: half + o.start * pps, width: Math.max(8, o.dur * pps - 2) }} onPointerDown={(e) => { down(e, "ov", o.id, o.start, o.dur); setSel({ kind: "overlay", id: o.id }); setPanel("overlay"); }} onClick={(e) => e.stopPropagation()}>
-                  ▣ {media.find((m) => m.id === o.src)?.title ?? "오버레이"}<i className="cut-h r" onPointerDown={(e) => down(e, "ov-r", o.id, o.start, o.dur)} />
+                  <i className="cut-h l" onPointerDown={(e) => down(e, "ov-l", o.id, o.start, o.in)} />▣ {media.find((m) => m.id === o.src)?.title ?? "오버레이"}<i className="cut-h r" onPointerDown={(e) => down(e, "ov-r", o.id, o.start, o.dur)} />
                 </div>
               ))}
               {!doc.overlays.length && <button className="cut-addrow" style={{ left: half + t * pps }} onClick={(e) => { e.stopPropagation(); setPickFor("overlay"); }}>＋ 오버레이 추가</button>}
@@ -751,7 +778,7 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
             <div className="stack" style={{ gap: 6 }}>
               <label className="cut-row-ctl">가로 <input type="range" min={0} max={100} value={selOv.x} onChange={(e) => patchOv(selOv.id, { x: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">세로 <input type="range" min={0} max={100} value={selOv.y} onChange={(e) => patchOv(selOv.id, { y: Number(e.target.value) })} /></label>
-              <span className="cut-hint">💡 미리보기에서 영상을 끌어 옮기고, 모서리 점을 끌어 크기를 바꿔요 (Shift 누르면 비율 유지). 화면(검은 틀 안)만 영상에 나와요 — 옆으로 더 넓게 쓰려면 아래 <b>비율</b>에서 16:9·1:1로 바꾸세요.</span>
+              <span className="cut-hint">💡 미리보기에서 영상을 끌어 옮기고, 모서리 점을 끌어 크기를 바꿔요 (Shift 누르면 비율 유지). 화면(틀 안)만 영상에 나와요 — 옆으로 더 넓게 쓰려면 화면 가장자리의 <b>흰 손잡이</b>를 끌어 화면을 늘리세요.</span>
               {(selOv.x - selOv.w / 2 > 98 || selOv.x + selOv.w / 2 < 2 || selOv.y - boxH(selOv) / 2 > 98 || selOv.y + boxH(selOv) / 2 < 2) && <button className="cut-btn primary" onClick={() => patchOv(selOv.id, { x: 50, y: 50, w: Math.min(selOv.w, 90), ...(selOv.h ? { h: Math.min(selOv.h, 90) } : {}) })}>⚠️ 화면 밖에 있어요 — 화면 안으로 가져오기</button>}
               <div className="cut-chips">
                 <span className="cut-hint">모양</span>
@@ -761,6 +788,18 @@ export default function CutEditor({ initial, initialDoc, media: initialMedia }: 
               </div>
               <label className="cut-row-ctl">가로 크기 <input type="range" min={2} max={100} step={0.5} value={selOv.w} onChange={(e) => patchOv(selOv.id, { w: Number(e.target.value) })} /><input className="cut-num" type="number" min={2} max={100} step={0.5} value={selOv.w} onChange={(e) => patchOv(selOv.id, { w: Math.max(2, Math.min(100, Number(e.target.value) || 2)) })} aria-label="가로 크기 %" />%</label>
               {selOv.h != null && <label className="cut-row-ctl">세로 크기 <input type="range" min={3} max={100} step={0.5} value={selOv.h} onChange={(e) => patchOv(selOv.id, { h: Number(e.target.value) })} /><input className="cut-num" type="number" min={3} max={100} step={0.5} value={selOv.h} onChange={(e) => patchOv(selOv.id, { h: Math.max(3, Math.min(100, Number(e.target.value) || 3)) })} aria-label="세로 크기 %" />%</label>}
+              <div className="stack" style={{ gap: 4, padding: "6px 0", borderTop: "1px solid var(--cut-line, #333)", borderBottom: "1px solid var(--cut-line, #333)" }}>
+                <span className="cut-hint">✂️ 자르기 — 타임라인의 보라색 막대 양 끝을 끌어도 돼요 · 지금 {fmt(selOv.start)}~{fmt(selOv.start + selOv.dur)} ({r2(selOv.dur)}초)</span>
+                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                  <button className="cut-btn primary" onClick={() => fitOv(selOv, false)}>📏 기준 영상에 맞추기</button>
+                  <button className="cut-btn" onClick={() => fitOv(selOv, true)}>전체 길이에 맞추기</button>
+                  <button className="cut-btn" onClick={() => trimOv(selOv, "head")}>⇤ 여기 앞 자르기</button>
+                  <button className="cut-btn" onClick={() => trimOv(selOv, "tail")}>여기 뒤 자르기 ⇥</button>
+                  <button className="cut-btn" onClick={split}>✂️ 여기서 나누기</button>
+                </div>
+                {selOv.kind === "video" && <label className="cut-row-ctl">영상 몇 초부터 <input type="range" min={0} max={Math.max(0, r2(ovSrcLen(selOv) - 0.2))} step={0.1} value={selOv.in} onChange={(e) => { const v = Number(e.target.value); patchOv(selOv.id, { in: v, dur: r2(Math.max(0.2, Math.min(selOv.dur, ovSrcLen(selOv) - v))) }); }} /><span className="cut-hint">{r2(selOv.in)}초</span></label>}
+                {ovNote && <span className="cut-hint" style={{ color: "#fbbf24" }}>{ovNote}</span>}
+              </div>
               <label className="cut-row-ctl">투명도 <input type="range" min={0} max={1} step={0.05} value={selOv.opacity} onChange={(e) => patchOv(selOv.id, { opacity: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">둥글게 <input type="range" min={0} max={100} value={selOv.radius} onChange={(e) => patchOv(selOv.id, { radius: Number(e.target.value) })} /></label>
               <label className="cut-row-ctl">소리 <input type="range" min={0} max={2} step={0.05} value={selOv.volume} onChange={(e) => patchOv(selOv.id, { volume: Number(e.target.value) })} /></label>
