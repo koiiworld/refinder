@@ -347,9 +347,9 @@ export function checkReply(answer: string, post: string) {
   return problems;
 }
 
-const REPLY_RULES = `너는 스레드 계정 '반품특가 줍줍'의 댓글 담당이야. 원글(아래 POST)만 근거로 댓글에 짧게 답해.
+const REPLY_RULES = `너는 스레드 계정 '자취방 살림고수'(살림 n년차 선배가 자취방 살림 문제를 해결해 주는 계정)의 댓글 담당이야. 자취생인 척하거나 '나 자취할 때' 같은 1인칭 경험담은 쓰지 말 것. 원글(아래 POST)만 근거로 댓글에 짧게 답해.
 규칙:
-- 원글의 말투(반말/존댓말)와 같은 말투로, 1~2문장, 100자 안쪽
+- 댓글 단 사람의 말투에 맞출 것: 댓글이 존댓말(~요, ~습니다, ~네요 등)이면 존댓말, 반말이면 반말. 애매하면 존댓말. 1~2문장, 100자 안쪽
 - 원글에 없는 가격·숫자·효능·재고·정품 여부는 절대 말하지 말 것. 모르면 "상품 페이지에서 확인해줘" 정도로
 - 링크는 쓰지 말 것 (필요하면 "링크는 첫 댓글에 있어" 라고만)
 - 구매를 압박하지 말 것, 과장 금지, 이모지는 0~1개
@@ -357,7 +357,7 @@ const REPLY_RULES = `너는 스레드 계정 '반품특가 줍줍'의 댓글 담
 JSON 한 개로만 답해: {"action": "reply" | "skip", "reason": "짧게", "answer": "답글 (skip 이면 빈 문자열)"}`;
 
 const REVIEW_RULES = `너는 스레드 답글 검수자야. POST(원글), COMMENT(댓글), ANSWER(보낼 답글)를 보고 판단해.
-- ANSWER 가 원글에 없는 사실·숫자·효능을 말하거나, 과장·단정·구매 압박이 있거나, 원글과 말투가 다르거나, 댓글에 맞지 않으면 고쳐
+- ANSWER 가 원글에 없는 사실·숫자·효능을 말하거나, 과장·단정·구매 압박이 있거나, 댓글 단 사람의 말투(존댓말/반말)와 다르거나(애매하면 존댓말), 댓글에 맞지 않으면 고쳐
 - 고칠 수 없거나 답하지 않는 게 나으면 action 을 "skip"
 JSON 한 개로만 답해: {"action": "reply" | "skip", "reason": "짧게", "answer": "최종 답글"}`;
 
@@ -402,6 +402,11 @@ export async function replyTick(now = new Date()) {
   }
   await setSetting("deals_replied", handled);
   await setSetting("deals_reply_log", log.slice(0, 300));
+}
+
+/** 최근 자동 답글 기록 (건너뛴 이유 포함) */
+export async function replyLog(n = 50) {
+  return ((await getSetting<ReplyLog[]>("deals_reply_log")) ?? []).slice(0, n);
 }
 
 /** 어제 답글 요약 (아침 보고에 붙임) */

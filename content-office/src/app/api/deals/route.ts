@@ -1,5 +1,5 @@
 import { body, fail, handle, ok } from "@/lib/api";
-import { agentAllowed, attachPostLog, awaiting, checkPost, insightsReport, trendsSection, replyTick, replySummary, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
+import { agentAllowed, attachPostLog, awaiting, checkPost, insightsReport, trendsSection, replyTick, replySummary, replyLog, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
 
 /**
  * 🧹 반품특가 줍줍 API
@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     if (action === "awaiting") return ok({ awaiting: await awaiting() });
     if (action === "insights") return ok({ text: await insightsReport() });
     if (action === "trends") return ok({ text: await trendsSection() });
+    if (action === "replies") return ok({ log: await replyLog() });
     if (action === "photo") {
       const { bytes, type } = await photo(String(u.searchParams.get("id") ?? ""));
       return new Response(new Uint8Array(bytes), { headers: { "content-type": type, "cache-control": "no-store" } });
