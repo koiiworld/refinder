@@ -237,6 +237,53 @@ export async function postThreads(body: string, reply = "", replies: string[] = 
   return { id, replyId };
 }
 
+
+// ---------- 예약 게시 큐 (사용자가 "게시해" 승인한 원고만 넣음) ----------
+type QueueItem = { qid: string; at: string; body: string; replies: string[]; status: "wait" | "posted" | "error"; id?: string; err?: string };
+
+export async function queueList() {
+  return (await getSetting<QueueItem[]>("deals_queue")) ?? [];
+}
+
+export async function queueAdd(items: { at: string; body: string; replies?: string[]; reply?: string }[]) {
+  const q = await queueList();
+  const added: QueueItem[] = [];
+  for (const it of items) {
+    const replies = (it.replies?.length ? it.replies : [it.reply ?? ""]).map(String).map((r) => r.trim()).filter(Boolean);
+    const problems = checkPost(String(it.body ?? ""), replies.at(-1) ?? "");
+    if (isNaN(Date.parse(it.at))) problems.push("시간 형식이 틀려요");
+    if (problems.length) throw new Error(`게시 안 함 (${String(it.body).split("\n")[0].slice(0, 30)}): ${problems.join(" / ")}`);
+    added.push({ qid: Math.random().toString(36).slice(2, 10), at: new Date(it.at).toISOString(), body: String(it.body).trim(), replies, status: "wait" });
+  }
+  const all = [...q, ...added].sort((a, b) => a.at.localeCompare(b.at));
+  await setSetting("deals_queue", all.slice(-300));
+  return added.map(({ qid, at }) => ({ qid, at }));
+}
+
+export async function queueRemove(qid: string) {
+  const q = await queueList();
+  await setSetting("deals_queue", q.filter((x) => x.qid !== qid || x.status !== "wait"));
+  return { removed: q.some((x) => x.qid === qid && x.status === "wait") };
+}
+
+/** 5분마다: 시간이 된 원고 1개씩 게시 (Render 에서만) */
+export async function queueTick(now = new Date()) {
+  if (!process.env.RENDER && process.env.DEALS_RUN_HERE !== "1") return;
+  if (!process.env.THREADS_ACCESS_TOKEN?.trim()) return;
+  const q = await queueList();
+  const due = q.find((x) => x.status === "wait" && Date.parse(x.at) <= now.getTime());
+  if (!due) return;
+  due.status = "posted"; // 먼저 표시해서 중복 게시 방지
+  await setSetting("deals_queue", q);
+  try {
+    const r = await postThreads(due.body, "", due.replies);
+    due.id = r.id;
+  } catch (e) {
+    due.status = "error"; due.err = (e as Error).message.slice(0, 200);
+  }
+  await setSetting("deals_queue", q);
+}
+
 // ---------- 매일 아침 ----------
 export const FILTER_ROUTINE = [
   "🧹 오늘의 반품 확인 (쿠팡 앱에서 직접, 1~2분)",

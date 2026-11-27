@@ -1,5 +1,5 @@
 import { body, fail, handle, ok } from "@/lib/api";
-import { agentAllowed, attachPostLog, awaiting, checkPost, insightsReport, trendsSection, replyTick, replySummary, replyLog, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
+import { agentAllowed, attachPostLog, awaiting, checkPost, insightsReport, trendsSection, replyTick, replySummary, replyLog, queueList, queueAdd, queueRemove, goldbox, inbox, kstDay, photo, postThreads, report, runDaily, search, shortLinks, threadsMe } from "@/lib/deals";
 
 /**
  * 🧹 반품특가 줍줍 API
@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     if (action === "awaiting") return ok({ awaiting: await awaiting() });
     if (action === "insights") return ok({ text: await insightsReport() });
     if (action === "trends") return ok({ text: await trendsSection() });
+    if (action === "queue") return ok({ queue: (await queueList()).slice(-60) });
     if (action === "replies") return ok({ log: await replyLog() });
     if (action === "photo") {
       const { bytes, type } = await photo(String(u.searchParams.get("id") ?? ""));
@@ -51,7 +52,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   return handle(async () => {
     if (denied(req)) return fail("토큰이 맞지 않아요.", 401);
-    const b = await body<{ action?: string; text?: string; keyword?: string; urls?: string[]; body?: string; reply?: string; force?: boolean; id?: string; replyId?: string; replies?: string[]; noWait?: boolean }>(req);
+    const b = await body<{ action?: string; text?: string; keyword?: string; urls?: string[]; body?: string; reply?: string; force?: boolean; id?: string; replyId?: string; replies?: string[]; noWait?: boolean; items?: { at: string; body: string; replies?: string[]; reply?: string }[]; qid?: string }>(req);
     try {
       switch (b.action) {
         case "ack": return ok(await inbox(true));
@@ -66,6 +67,8 @@ export async function POST(req: Request) {
         case "threads": return ok(await postThreads(String(b.body ?? ""), String(b.reply ?? ""), Array.isArray(b.replies) ? b.replies.map(String) : []));
         case "daily": return ok(await runDaily(kstDay(), !!b.force));
         case "log_post": return ok(await attachPostLog(String(b.id ?? ""), String(b.body ?? ""), String(b.reply ?? ""), b.replyId ? String(b.replyId) : undefined));
+        case "queue_add": return ok({ added: await queueAdd(Array.isArray(b.items) ? b.items : []) });
+        case "queue_remove": return ok(await queueRemove(String(b.qid ?? "")));
         case "reply_tick": await replyTick(); return ok({ summary: await replySummary(kstDay()) });
         default: return fail("알 수 없는 작업이에요.");
       }
