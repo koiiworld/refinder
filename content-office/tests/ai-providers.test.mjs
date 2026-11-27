@@ -2744,8 +2744,27 @@ test("📹 현장 숏폼: 클립 여러 개 올리기 → 영상 확인(받아�
   const rp = await stepPrompt("숏폼 편집 감독");
   assert.match(rp, /\[참고 릴스/);
   assert.ok(rp.includes(study.title.slice(0, 20)), "참고 릴스 분석 내용 전달");
+  // 참고 릴스 뜯어보기: 컷 호흡·고정 제목·자막 모양 → 대본 지시 + 완성 영상 글자 모양
+  assert.equal(ms.ref_style.fixedTitle.example, "POV: 요즘 난리난 신메뉴");
+  assert.deepEqual([ms.ref_style.caption.pos, ms.ref_style.caption.box, ms.ref_style.caption.stroke], ["bottom", "#ffe600", ""], "상자가 있으면 테두리는 뺌");
+  assert.ok(ms.ref_style.cuts >= 1 && ms.ref_style.avgCut > 0);
+  assert.match(rp, /\[참고 릴스를 뜯어본 결과/);
+  assert.match(rp, /고정 제목\(영상 내내 떠 있음\): "POV: 요즘 난리난 신메뉴" — 화면 위쪽/);
+  assert.match(rp, /컷 하나는 [\d.]+~[\d.]+초로 맞춘다/);
+  assert.equal(ms.script.fixedTitle, "POV: 모자이크 시험");
+  assert.equal((await call(`/api/study/${study.id}`)).data.analysis.style.fixedTitle.pos, "top", "뜯어본 결과는 릴스 분석에 보관 (다음엔 다시 안 함)");
+  const ma = await call(`/api/shoots/${m.data.id}`, "POST", { action: "approve" });
+  assert.equal(ma.status, 200, JSON.stringify(ma.data));
+  const mdoc = (await call(`/api/reels/${ma.data.reel_id}`)).data.doc;
+  const total = mdoc.scenes.reduce((a, x) => a + x.dur, 0);
+  assert.deepEqual([mdoc.texts[0].text, mdoc.texts[0].start, Math.abs(mdoc.texts[0].end - total) < 0.05, mdoc.texts[0].style.y, mdoc.texts[0].style.stroke], ["POV: 모자이크 시험", 0, true, 330, "#000000"], "고정 제목은 영상 내내 위쪽에");
+  assert.deepEqual([mdoc.texts[1].style.y, mdoc.texts[1].style.color, mdoc.texts[1].style.box], [1450, "#111111", "#ffe600"], "컷 자막은 참고 릴스 모양");
+  for (let i = 0; i < 240; i++) { if ((await call(`/api/shoots/${m.data.id}`)).data.status !== "rendering") break; await new Promise((x) => setTimeout(x, 1000)); }
+  assert.equal((await call(`/api/shoots/${m.data.id}`)).data.status, "done");
+  const rv = (await (await fetch(`${BASE}/shoots/${m.data.id}`)).text()).replace(/<!-- -->/g, "");
+  for (const w of ["참고 릴스에서 가져온 형식", "화면에 계속 떠 있는 제목"]) assert.ok(rv.includes(w), w);
   const lp = (await (await fetch(`${BASE}/shoots`)).text()).replace(/<!-- -->/g, "");
-  for (const w of ["얼굴 모자이크", "참고 릴스 (레퍼런스)"]) assert.ok(lp.includes(w), w);
+  for (const w of ["얼굴 모자이크", "참고 릴스 (레퍼런스)", "영상 확인은 클립당"]) assert.ok(lp.includes(w), w);
   // 대본 고쳐 다시 만들기 → 다시 승인 대기 · 휴지통
   assert.equal((await call(`/api/shoots/${id}`, "POST", { action: "retry", confirm: true })).data.status, "review");
   assert.equal((await call(`/api/shoots/${id}`, "DELETE")).status, 200);

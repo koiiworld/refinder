@@ -111,6 +111,22 @@ export default function ShootView({ initial, estimateUsd }: { initial: Row; esti
             </div>
           )}
 
+          {s.ref_style && (
+            <div className="notice small stack" style={{ gap: 2 }}>
+              <b>🎯 참고 릴스에서 가져온 형식</b>
+              <span>컷 호흡: {s.ref_style.duration}초에 컷 약 {s.ref_style.cuts}개 (평균 {s.ref_style.avgCut}초) → 이 대본 평균 {(scriptSeconds(script) / Math.max(1, script.cuts.length)).toFixed(1)}초</span>
+              <span>고정 제목: {s.ref_style.fixedTitle ? `“${s.ref_style.fixedTitle.example}” (${{ top: "위", middle: "가운데", bottom: "아래" }[s.ref_style.fixedTitle.pos]})` : "없음"} · 컷 자막: {s.ref_style.caption ? `${{ top: "위", middle: "가운데", bottom: "아래" }[s.ref_style.caption.pos]}${s.ref_style.caption.box ? " · 상자 글자" : ""}` : "없음"}</span>
+              {s.ref_style.pacing && <span className="muted">{s.ref_style.pacing}</span>}
+              <span className="tiny muted">글자 위치·색·상자는 완성 영상에 그대로 적용돼요. 글꼴 종류와 화면 전환 효과는 따라 하지 못해요.</span>
+            </div>
+          )}
+          {(script.fixedTitle !== undefined || s.ref_style?.fixedTitle) && (
+            <label className="stack" style={{ gap: 4 }}>
+              <span className="small muted strong">화면에 계속 떠 있는 제목 (비우면 안 넣어요)</span>
+              <input className="input" value={script.fixedTitle ?? ""} disabled={!review} maxLength={40} onChange={(e) => edit((d) => ({ ...d, fixedTitle: e.target.value }))} aria-label="고정 제목" />
+            </label>
+          )}
+
           {script.hooks.length > 0 && (
             <div className="stack" style={{ gap: 6 }}>
               <span className="small muted strong">첫 컷 자막 (후킹) — 하나 고르세요</span>

@@ -720,3 +720,4 @@ ALTER TABLE shoots ADD COLUMN IF NOT EXISTS variants JSONB NOT NULL DEFAULT '[]'
 ALTER TABLE shoots ADD COLUMN IF NOT EXISTS pick INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE shoots ADD COLUMN IF NOT EXISTS mosaic BOOLEAN NOT NULL DEFAULT FALSE; -- 얼굴 모자이크 (Claude가 얼굴 위치, 맥이 가림)
 ALTER TABLE shoots ADD COLUMN IF NOT EXISTS refs JSONB NOT NULL DEFAULT '[]'::jsonb; -- 참고 릴스 (study_reels id, 최대 3)
+ALTER TABLE shoots ADD COLUMN IF NOT EXISTS ref_style JSONB; -- 참고 릴스를 뜯어본 결과 (컷 수·컷 길이·고정 제목·자막 모양) → 대본·자막 모양에 적용

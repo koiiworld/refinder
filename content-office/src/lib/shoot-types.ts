@@ -38,12 +38,46 @@ export const SHOOT_SPEEDS = [0.5, 1, 1.5, 2, 3, 4] as const;
 export const cutSpeed = (c: { speed?: number }) => ((SHOOT_SPEEDS as readonly number[]).includes(Number(c.speed)) ? Number(c.speed) : 1);
 /** 화면에 나오는 길이 (원본 구간 ÷ 배속) */
 export const cutSeconds = (c: ShootCut) => (c.to - c.from) / cutSpeed(c);
+/** 참고 릴스의 글자 모양 (위치·색·상자·테두리·크기) */
+export type TextLook = { pos: "top" | "middle" | "bottom"; color: string; box: string; stroke: string; size: "s" | "m" | "l" };
+/** 참고 릴스를 뜯어본 결과: 컷 호흡 + 화면 글자 배치 → 대본(컷 수·길이·고정 제목)과 자막 모양에 적용 */
+export type RefStyle = {
+  title: string; duration: number; cuts: number; avgCut: number;
+  fixedTitle?: TextLook & { example: string }; // 영상 내내 떠 있는 제목 (예: 위쪽 "POV: …")
+  caption?: TextLook & { examples: string[] }; // 컷마다 바뀌는 자막
+  opening: string; pacing: string; ending: string;
+};
+const hex = (v: unknown) => (/^#[0-9a-f]{6}$/i.test(String(v ?? "").trim()) ? String(v).trim().toLowerCase() : "");
+function cleanLook(v: unknown): TextLook | null {
+  const o = (v ?? {}) as Record<string, unknown>;
+  if (o.has === false || !o || typeof v !== "object") return null;
+  const pos = ["top", "middle", "bottom"].includes(String(o.pos)) ? (String(o.pos) as TextLook["pos"]) : "bottom";
+  const size = ["s", "m", "l"].includes(String(o.size)) ? (String(o.size) as TextLook["size"]) : "m";
+  const box = hex(o.box);
+  return { pos, size, color: hex(o.color) || "#ffffff", box, stroke: box ? "" : hex(o.stroke) };
+}
+export function cleanRefStyle(raw: unknown, base: { title: string; duration: number; cuts: number }): RefStyle {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const ft = cleanLook(r.fixedTitle), cp = cleanLook(r.caption);
+  const s = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+  const ftEx = s((r.fixedTitle as { example?: string } | null)?.example, 60);
+  const cpEx = (Array.isArray((r.caption as { examples?: unknown[] } | null)?.examples) ? (r.caption as { examples: unknown[] }).examples : []).map((x) => s(x, 60)).filter(Boolean).slice(0, 5);
+  const cuts = Math.max(1, Math.round(base.cuts));
+  return {
+    title: s(base.title, 80), duration: Math.round(base.duration * 10) / 10, cuts, avgCut: Math.round((base.duration / cuts) * 10) / 10,
+    ...(ft && ftEx ? { fixedTitle: { ...ft, example: ftEx } } : {}),
+    ...(cp ? { caption: { ...cp, examples: cpEx } } : {}),
+    opening: s(r.opening, 160), pacing: s(r.pacing, 160), ending: s(r.ending, 160),
+  };
+}
+
 export type ShootPost = { title: string; desc: string }; // 플랫폼별 올릴 글 (제목 + 설명)
 export type ShootScript = {
   name?: string; // 여러 안일 때 이름 (A안 · 음식 먼저)
   concept?: string; // 이 안의 구성 한 줄
   shorts?: ShootPost; // 유튜브 쇼츠용
   clip?: ShootPost; // 네이버 클립용
+  fixedTitle?: string; // 영상 내내 화면에 떠 있는 제목 (참고 릴스가 그런 형식일 때)
   title: string;
   hooks: string[]; // 첫 컷 자막 후보 (hook 번째를 씀)
   hook: number;
@@ -58,7 +92,7 @@ export type ShootScript = {
 
 export type ShootStatus = "analyzing" | "scripting" | "review" | "rendering" | "done" | "error";
 export type Shoot = {
-  id: string; title: string; kind: ShootKindId; memo: string; seconds: number; mosaic: boolean; refs: string[];
+  id: string; title: string; kind: ShootKindId; memo: string; seconds: number; mosaic: boolean; refs: string[]; ref_style: RefStyle | null;
   clips: ShootClip[]; script: ShootScript | null; variants: ShootScript[]; pick: number; history: { at: string; feedback: string }[];
   status: ShootStatus; message: string; failed_at: string; reel_id: string | null;
   created_at: string; updated_at: string;
@@ -105,6 +139,7 @@ export function cleanScript(raw: unknown, clips: ShootClip[]): ShootScript {
     ...(str(r.concept, 120) ? { concept: str(r.concept, 120) } : {}),
     ...(shorts ? { shorts } : {}),
     ...(clip ? { clip } : {}),
+    ...(str(r.fixedTitle, 40) ? { fixedTitle: str(r.fixedTitle, 40) } : {}),
     title: str(r.title, 40),
     hooks,
     hook: Math.max(0, Math.min(hooks.length - 1, Math.round(Number(r.hook)) || 0)),
@@ -128,16 +163,24 @@ export function cleanVariants(raw: unknown, clips: ShootClip[], extra: Record<st
 
 export const scriptSeconds = (s: ShootScript | null) => r2((s?.cuts ?? []).reduce((a, c) => a + cutSeconds(c), 0));
 
+const LOOK_Y = { top: 330, middle: 960, bottom: 1450 } as const;
+const LOOK_SIZE = { s: 54, m: 68, l: 90 } as const;
+const lookStyle = (l: TextLook) => ({ ...DEFAULT_TEXT_STYLE, y: LOOK_Y[l.pos], size: LOOK_SIZE[l.size], color: l.color, box: l.box, stroke: l.box ? "" : l.stroke || (l.color === "#ffffff" ? "#000000" : "") });
+
 /**
  * 승인한 대본 → 릴스 편집 문서
  * - 컷 하나 = 장면 하나 (그 클립의 그 구간, 현장 소리 그대로)
  * - 자막은 그 장면이 보이는 동안. 첫 컷 자막은 고른 후킹 문구
+ * - 참고 릴스(look)가 있으면 글자 위치·색·상자를 그 릴스처럼, 고정 제목(fixedTitle)은 영상 내내 띄움
  * - 가로로 찍은 클립은 잘리지 않게 화면 안에 다 보이게(contain), 세로는 화면 가득(cover)
  */
-export function scriptToDoc(script: ShootScript, clips: ShootClip[], memo = ""): ReelDoc {
+export function scriptToDoc(script: ShootScript, clips: ShootClip[], memo = "", look: RefStyle | null = null): ReelDoc {
   const sid = () => Math.random().toString(36).slice(2, 9);
   const scenes: ReelScene[] = [];
   const texts: ReelText[] = [];
+  const fixed = script.fixedTitle?.trim() ?? "";
+  // 고정 제목과 자막이 같은 자리에 겹치지 않게: 겹치면 자막을 아래로
+  const capLook = look?.caption && !(fixed && look.fixedTitle && look.caption.pos === look.fixedTitle.pos) ? look.caption : look?.caption ? { ...look.caption, pos: (look.fixedTitle?.pos === "bottom" ? "middle" : "bottom") as TextLook["pos"] } : null;
   let t = 0;
   script.cuts.forEach((c, i) => {
     const clip = clips[c.clip - 1];
@@ -147,9 +190,10 @@ export function scriptToDoc(script: ShootScript, clips: ShootClip[], memo = ""):
     const wide = (clip.width ?? 0) > (clip.height ?? 0);
     const text = i === 0 ? script.hooks[script.hook] || c.caption : c.caption;
     scenes.push({ id: sid(), label: (text || `컷 ${i + 1}`).slice(0, 30), dur, audioFrom: 0, video: { videoId: clip.videoId, from: c.from }, ...(speed !== 1 ? { speed } : {}), sound: speed === 1, // 배속 컷은 소리를 끔 (빨라지거나 늘어진 소리가 어색해서)
-       fit: wide ? "contain" : "cover", bg: { type: "none" }, image: null });
-    if (text) texts.push({ id: sid(), start: r2(t), end: r2(t + dur), text, style: i === 0 ? { ...DEFAULT_TEXT_STYLE, y: 520, size: 88, anim: "pop" } : { ...DEFAULT_TEXT_STYLE, y: 1420, anim: "fade" } });
+      fit: wide ? "contain" : "cover", bg: { type: "none" }, image: null });
+    if (text) texts.push({ id: sid(), start: r2(t), end: r2(t + dur), text, style: capLook ? { ...lookStyle(capLook), anim: i === 0 ? "pop" : "fade" } : i === 0 && !fixed ? { ...DEFAULT_TEXT_STYLE, y: 520, size: 88, anim: "pop" } : { ...DEFAULT_TEXT_STYLE, y: 1420, anim: "fade" } });
     t += dur;
   });
+  if (fixed && t > 0) texts.unshift({ id: sid(), start: 0, end: r2(t), text: fixed, style: { ...(look?.fixedTitle ? lookStyle(look.fixedTitle) : { ...DEFAULT_TEXT_STYLE, y: LOOK_Y.top, size: LOOK_SIZE.m }), anim: "fade" } });
   return { width: 1080, height: 1920, fps: 30, baseVideoId: null, audio: "base", scenes, texts, overlays: [], photos: [], music: null, ...(memo ? { memo: memo.slice(0, 4000) } : {}) };
 }

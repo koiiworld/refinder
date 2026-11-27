@@ -2,7 +2,7 @@
 //  1 키워드 추천(AI) → 2 블로그별 키워드 선택(나) → 3 SEO 제목 추천·선택(AI) → 4 글 작성+해시태그(AI)
 //  → 5 이미지(프롬프트는 AI, 생성은 버튼으로 Higgsfield) → 6 글·이미지 검수(AI) → 7 발행(나)
 
-export type StepKey = "keywords" | "titles" | "writing" | "hashtags" | "review" | "carousel" | "studio" | "imageprompt" | "reelstudy" | "factcheck" | "reelscript" | "repurpose" | "shootscript" | "shootface";
+export type StepKey = "keywords" | "titles" | "writing" | "hashtags" | "review" | "carousel" | "studio" | "imageprompt" | "reelstudy" | "factcheck" | "reelscript" | "repurpose" | "shootscript" | "shootface" | "shootview";
 
 export const STEP_AI_LABEL: Record<StepKey, string> = {
   keywords: "① 키워드 추천",
@@ -18,6 +18,7 @@ export const STEP_AI_LABEL: Record<StepKey, string> = {
   reelscript: "🎬 릴스 AI 대본 (트렌드 반영 · Claude)",
   repurpose: "📣 블로그 → 채널 변환 (릴스 대본·카드뉴스·스레드 등)",
   shootscript: "📹 현장 숏폼 대본 (찍은 영상 → 컷·자막)",
+  shootview: "📹 현장 숏폼 영상 확인 (장면 사진 보기 · 참고 릴스 뜯어보기)",
   shootface: "🫥 현장 숏폼 얼굴 모자이크 (얼굴 위치 찾기 · Claude)",
 };
 
@@ -36,6 +37,7 @@ export const DEFAULT_STEP_AI: Record<StepKey, { provider: "openai" | "anthropic"
   reelscript: { provider: "anthropic", model: "claude-opus-5-5" }, // 고품질 · Fable의 절반 가격
   repurpose: { provider: "anthropic", model: "claude-opus-5-5" },
   shootscript: { provider: "anthropic", model: "claude-opus-5-5" },
+  shootview: { provider: "google", model: "gemini-3.5-flash" }, // 무료 Gemini 키 (릴스 분석 단계 설정과 따로 — 그쪽을 유료 모델로 바꿔도 여기는 안 따라감)
   shootface: { provider: "anthropic", model: "claude-opus-5-5" }, // 사용자 지정: 얼굴 찾기는 Claude (1초 2장 사진)
   // 영상 확인(reelstudy, 무료 Gemini)이 글로 정리한 것을 받아 대본만 씀
 };

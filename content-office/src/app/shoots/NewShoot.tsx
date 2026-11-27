@@ -10,7 +10,7 @@ type Est = { model: string; usd: number | null } | null;
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(0)}MB`;
 
 /** 새 촬영 올리기: 종류 · 메모 · 영상 여러 개 → 올리면 영상 확인·대본까지 자동 (올리기 = 대본 AI 비용 승인) */
-export default function NewShoot({ estimate, faceEstimate, studies }: { estimate: Est; faceEstimate: Est; studies: { id: string; title: string; sub: string }[] }) {
+export default function NewShoot({ estimate, faceEstimate, viewEstimate, studies }: { estimate: Est; faceEstimate: Est; viewEstimate: Est; studies: { id: string; title: string; sub: string }[] }) {
   const [refs, setRefs] = useState<string[]>([]);
   const [refUrls, setRefUrls] = useState("");
   const urlList = refUrls.split(/\s+/).filter((u) => /^https?:\/\//.test(u));
@@ -150,7 +150,7 @@ export default function NewShoot({ estimate, faceEstimate, studies }: { estimate
       </label>
       <div className="row" style={{ gap: 8 }}>
         <button className="btn btn-primary" disabled={!!busy || !files.length} onClick={start}>{busy ? <><span className="spinner" /> {busy}</> : "📤 올리고 대본 받기"}</button>
-        <span className="small muted">대본 AI 예상 비용 {estimate?.usd != null ? fmtUsd(estimate.usd) : "단가 정보 없음"}{estimate ? ` · ${estimate.model}` : ""} — 올리면 승인한 것으로 처리해요. 영상 확인은 무료 AI예요.</span>
+        <span className="small muted">대본 AI 예상 비용 {estimate?.usd != null ? fmtUsd(estimate.usd) : "단가 정보 없음"}{estimate ? ` · ${estimate.model}` : ""} — 올리면 승인한 것으로 처리해요. 영상 확인은 클립당 약 {viewEstimate?.usd != null ? fmtUsd(viewEstimate.usd) : "?"}{viewEstimate ? ` (${viewEstimate.model})` : ""}.</span>
       </div>
       {err && <div className="notice notice-bad small">{err}</div>}
       <span className="tiny muted">한 번에 {MAX_SHOOT_CLIPS}개, 클립당 300MB까지. 50MB가 넘는 클립은 화질을 조금 줄여 저장해요. 올린 뒤 화면을 닫아도 계속되고, 대본이 준비되면 텔레그램으로 알려 줘요. 맥이 꺼져 있으면 켜질 때 시작돼요.</span>

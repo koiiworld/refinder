@@ -7,7 +7,7 @@ import { q, q1, newId, j } from "./db";
 import { enqueue } from "./jobs";
 import { addVideoFile, ffmpegPath, fitSize, getVideo, probe } from "./videos";
 import { extractJson, runStep } from "./ai/run";
-import { cleanScript, cleanVariants, MAX_SHOOT_CLIPS, MAX_SHOOT_REFS, scriptSeconds, scriptToDoc, SHOOT_LENGTHS, shootKind, type Shoot, type ShootClip, type ShootScript } from "./shoot-types";
+import { cleanRefStyle, cleanScript, cleanVariants, type RefStyle, MAX_SHOOT_CLIPS, MAX_SHOOT_REFS, scriptSeconds, scriptToDoc, SHOOT_LENGTHS, shootKind, type Shoot, type ShootClip, type ShootScript } from "./shoot-types";
 
 /**
  * 📹 현장 숏폼: 찍은 영상 여러 개 → 대본 보고 → 승인 → 자동 컷 편집
@@ -36,11 +36,11 @@ export async function getShoot(id: string) {
     [id],
   );
 }
-async function setShoot(id: string, patch: Partial<Pick<Shoot, "status" | "message" | "clips" | "script" | "variants" | "pick" | "history" | "failed_at" | "reel_id" | "title">>) {
+async function setShoot(id: string, patch: Partial<Pick<Shoot, "status" | "message" | "clips" | "script" | "variants" | "pick" | "ref_style" | "history" | "failed_at" | "reel_id" | "title">>) {
   const keys = Object.keys(patch) as (keyof typeof patch)[];
   if (!keys.length) return;
   const sets = keys.map((k, i) => `${k}=$${i + 2}`).join(", ");
-  await q(`UPDATE shoots SET ${sets}, updated_at=NOW() WHERE id=$1`, [id, ...keys.map((k) => (["clips", "script", "variants", "history"].includes(k) ? j(patch[k]) : patch[k]))]);
+  await q(`UPDATE shoots SET ${sets}, updated_at=NOW() WHERE id=$1`, [id, ...keys.map((k) => (["clips", "script", "variants", "history", "ref_style"].includes(k) ? j(patch[k]) : patch[k]))]);
 }
 const fail = (id: string, at: "analyze" | "script" | "render", e: unknown) => setShoot(id, { status: "error", failed_at: at, message: (e instanceof Error ? e.message : String(e)).slice(0, 400) });
 
@@ -149,7 +149,7 @@ export async function runShootAnalyze(id: string) {
         await setShoot(id, { message: `${label} AI가 장면 보는 중` });
         try {
           const res = await runStep({
-            step: "reelstudy", role: "ideas", purpose: "shoot_view", blog: null, json: true, maxTokens: 2000, images: dataUrls, retries: 0,
+            step: "shootview", role: "ideas", purpose: "shoot_view", blog: null, json: true, maxTokens: 2000, images: dataUrls, retries: 0,
             system: "너는 숏폼 영상 촬영본 검토자야. 함께 준 사진(한 클립에서 시간 순서로 뽑은 장면)을 직접 보고, 보이는 것만 한국어로 적어. 추측·지어내기 금지. 답은 JSON만.",
             prompt: `촬영 종류: ${shootKind(s.kind).label}\n클립 길이: ${duration.toFixed(1)}초\n사진 순서와 시각: ${frames.map((f, k) => `${k + 1}번=${f.t}초`).join(", ")}\n\n사진마다 무엇이 어떻게 보이는지(대상·동작·구도·먹음직스러움이나 눈길 끄는 정도)를 한 문장으로, 클립 전체는 한 줄로 요약해. 흔들림·어두움·초점 나감·손가락 가림 같은 문제가 있으면 quality에 적고 없으면 빈 문자열.\n{"summary":"클립 한 줄 요약","quality":"문제 또는 빈 문자열","frames":[{"n":1,"desc":"..."}]}`,
           });
@@ -212,6 +212,56 @@ async function refsText(ids: string[]) {
   return { text, pending: rows.filter((r) => r.status === "queued" || r.status === "running").length };
 }
 
+/**
+ * 참고 릴스 뜯어보기: 컷 수·컷 길이(화면 전환 감지) + 화면 글자 배치(고정 제목·자막의 위치·색·상자)를 사진 12장으로 확인
+ * 한 번 뜯어본 결과는 그 릴스 분석(study_reels.analysis.style)에 보관해 다음엔 다시 안 함
+ */
+async function refStyle(studyId: string): Promise<RefStyle | null> {
+  const st = await q1<{ title: string; video_id: string | null; analysis: { style?: RefStyle } }>("SELECT title, video_id, analysis FROM study_reels WHERE id=$1 AND status='done'", [studyId]);
+  if (!st) return null;
+  if (st.analysis?.style?.cuts) return st.analysis.style;
+  if (!st.video_id) return null;
+  const { run, videoToTemp } = await import("./reels");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "shoot-ref-"));
+  try {
+    const file = await videoToTemp(st.video_id, dir);
+    const duration = (await probe(file)).duration ?? 0;
+    if (duration < 1) return null;
+    const sc = await run(ffmpegPath(), ["-hide_banner", "-i", file, "-vf", "select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"], { timeoutMs: 5 * 60 * 1000 });
+    const cutTimes = Array.from(sc.err.matchAll(/pts_time:([\d.]+)/g)).map((m) => Number(m[1])).filter((t, i, a) => t > 0.4 && t < duration - 0.3 && (i === 0 || t - a[i - 1] >= 0.4));
+    const n = 12, urls: string[] = [], times: number[] = [];
+    for (let k = 0; k < n; k++) {
+      const t = Math.round(((k + 0.5) * duration / n) * 10) / 10, out = path.join(dir, `r${k}.jpg`);
+      await run(ffmpegPath(), ["-v", "error", "-y", "-ss", String(t), "-i", file, "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "5", out], { timeoutMs: 60_000 });
+      if (fs.existsSync(out)) { urls.push(`data:image/jpeg;base64,${fs.readFileSync(out).toString("base64")}`); times.push(t); }
+    }
+    if (!urls.length) return null;
+    const res = await runStep({
+      step: "shootview", role: "ideas", purpose: "shoot_ref", blog: null, json: true, maxTokens: 1500, images: urls, retries: 0,
+      system: "너는 숏폼 레퍼런스 분석가야. 한 릴스에서 시간 순서로 뽑은 사진들을 직접 보고, 화면에 얹힌 글자의 배치와 모양, 편집 호흡을 그대로 따라 만들 수 있게 정리한다. 보이는 것만 적는다. 답은 JSON만.",
+      prompt: `길이 ${duration.toFixed(1)}초, 화면이 바뀌는 지점 ${cutTimes.length}곳(컷 약 ${cutTimes.length + 1}개). 사진 시각: ${times.map((t, k) => `${k + 1}번=${t}초`).join(", ")}
+- fixedTitle: 여러 사진에 걸쳐 같은 자리에 계속 떠 있는 제목 글자(예: 위쪽 "POV: …"). 없으면 {"has":false}
+- caption: 컷마다 바뀌는 자막. 없으면 {"has":false}
+- pos 는 화면 세로 위치(top/middle/bottom), color·box·stroke 는 #rrggbb (글자색 / 글자 뒤 상자색 / 테두리색, 없으면 ""), size 는 s/m/l
+{"fixedTitle":{"has":true,"example":"보이는 글 그대로","pos":"top","color":"#ffffff","box":"","stroke":"#000000","size":"m"},"caption":{"has":true,"examples":["보이는 자막 그대로 2~4개"],"pos":"bottom","color":"#ffffff","box":"#000000","stroke":"","size":"m"},"opening":"첫 1~2초를 어떻게 여는지","pacing":"컷 길이·속도감·클로즈업 같은 편집 호흡","ending":"마지막을 어떻게 닫는지"}`,
+    });
+    const style = cleanRefStyle(extractJson(res.text), { title: st.title, duration, cuts: cutTimes.length + 1 });
+    await q("UPDATE study_reels SET analysis = analysis || jsonb_build_object('style', $2::jsonb) WHERE id=$1", [studyId, j(style)]);
+    return style;
+  } catch {
+    return null; // 뜯어보기에 실패해도 대본은 (요약만 참고해서) 계속
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+function styleText(st: RefStyle) {
+  const look = (l: { pos: string; color: string; box: string; stroke: string; size: string }) => `${{ top: "화면 위쪽", middle: "가운데", bottom: "아래쪽" }[l.pos] ?? l.pos}, ${{ s: "작게", m: "보통 크기", l: "크게" }[l.size] ?? ""}${l.box ? ", 글자 뒤 상자" : l.stroke ? ", 테두리 글자" : ""}`;
+  return [`길이 ${st.duration}초 · 컷 약 ${st.cuts}개 · 컷 하나 평균 ${st.avgCut}초`,
+    st.fixedTitle ? `고정 제목(영상 내내 떠 있음): "${st.fixedTitle.example}" — ${look(st.fixedTitle)}` : "고정 제목: 없음",
+    st.caption ? `컷 자막: ${st.caption.examples.map((x) => `"${x}"`).join(", ") || "(글 못 읽음)"} — ${look(st.caption)}` : "컷 자막: 없음 (화면 글자 없이 영상만)",
+    st.opening ? `여는 방식: ${st.opening}` : "", st.pacing ? `편집 호흡: ${st.pacing}` : "", st.ending ? `닫는 방식: ${st.ending}` : ""].filter(Boolean).join("\n");
+}
+
 /** 작업 ③: 대본 쓰기 (feedback 이 있으면 지금 대본을 그 요청대로 고침) */
 export async function runShootScript(id: string, feedback = "", wait = 0) {
   const s = await getShoot(id);
@@ -225,22 +275,30 @@ export async function runShootScript(id: string, feedback = "", wait = 0) {
   }
   try {
     const kind = shootKind(s.kind);
+    // 참고 릴스 뜯어보기 (첫 번째로 성공한 것의 호흡·글자 배치를 따름)
+    let style = s.ref_style;
+    if (!style && s.refs?.length) {
+      await setShoot(id, { message: "참고 릴스 뜯어보는 중 (컷 호흡·자막 배치)" });
+      for (const r of s.refs) if ((style = await refStyle(r))) break;
+      if (style) await setShoot(id, { ref_style: style });
+      await setShoot(id, { message: "대본 쓰는 중" });
+    }
     const voice = await q1<{ value: unknown }>("SELECT value FROM settings WHERE key='ig_voice'").catch(() => null);
     const voiceText = typeof voice?.value === "string" ? voice.value : String((voice?.value as { text?: string } | null)?.text ?? "");
     const cur = s.script;
-    const prev = feedback && cur ? `\n\n[지금 대본]\n${JSON.stringify({ name: cur.name, hooks: cur.hooks, cuts: cur.cuts.map(({ clip, from, to, caption, speed }) => ({ clip, from, to, speed: speed ?? 1, caption })) })}\n\n[수정 요청 — 이 요청을 반영해 이 대본을 다시 줘. 요청하지 않은 부분은 되도록 그대로 둬. variants 에는 고친 안 하나만]\n${feedback.slice(0, 1000)}` : "";
+    const prev = feedback && cur ? `\n\n[지금 대본]\n${JSON.stringify({ name: cur.name, hooks: cur.hooks, fixedTitle: cur.fixedTitle ?? "", cuts: cur.cuts.map(({ clip, from, to, caption, speed }) => ({ clip, from, to, speed: speed ?? 1, caption })) })}\n\n[수정 요청 — 이 요청을 반영해 이 대본을 다시 줘. 요청하지 않은 부분은 되도록 그대로 둬. variants 에는 고친 안 하나만]\n${feedback.slice(0, 1000)}` : "";
     const prompt = `[촬영 종류] ${kind.label}
 [이 종류의 구성 규칙] ${kind.rule}
 [목표 길이] 약 ${s.seconds}초 (컷 길이 합계가 ${Math.round(s.seconds * 0.8)}~${Math.round(s.seconds * 1.15)}초. 쓸 만한 장면이 모자라면 더 짧아도 됨)
 [촬영자 메모 — 사실은 여기 적힌 것만]
 ${s.memo || "(메모 없음)"}
 ${voiceText.trim() ? `\n[내 말투]\n${voiceText.trim().slice(0, 800)}\n` : ""}
-${ref.text ? `\n[참고 릴스 — 촬영자가 고른 레퍼런스. 첫 컷을 여는 방식·컷 길이와 호흡·자막 말투·흐름을 따라 하되, 문구를 그대로 베끼지 말고 내용(사실)은 가져오지 마. 내 클립에 없는 장면은 억지로 맞추지 마]\n${ref.text}\n` : ""}
+${style ? `\n[참고 릴스를 뜯어본 결과 — "${style.title}". 아래 형식을 그대로 따라 만든다]\n${styleText(style)}\n→ 컷 수는 ${Math.max(2, Math.round((s.seconds / style.duration) * style.cuts * 0.8))}~${Math.max(3, Math.round((s.seconds / style.duration) * style.cuts * 1.2))}개, 컷 하나는 ${Math.max(0.8, style.avgCut * 0.7).toFixed(1)}~${(style.avgCut * 1.4).toFixed(1)}초로 맞춘다 (쓸 장면이 모자라면 같은 클립의 다른 구간을 나눠 써도 됨).\n→ ${style.fixedTitle ? `fixedTitle 에 영상 내내 띄울 제목을 참고 릴스와 같은 말투·형식으로 쓴다 (예시의 틀은 따르되 내 영상 내용으로). 이때 첫 컷 자막(hooks)은 제목과 겹치지 않는 짧은 한마디로.` : `fixedTitle 은 빈 문자열.`}\n→ ${style.caption ? `컷 자막은 예시와 비슷한 길이·말투로.` : `참고 릴스처럼 컷 자막은 거의 쓰지 않는다 (caption 은 대부분 빈 문자열).`}\n` : ""}${ref.text ? `\n[참고 릴스 — 촬영자가 고른 레퍼런스. 첫 컷을 여는 방식·컷 길이와 호흡·자막 말투·흐름을 따라 하되, 문구를 그대로 베끼지 말고 내용(사실)은 가져오지 마. 내 클립에 없는 장면은 억지로 맞추지 마]\n${ref.text}\n` : ""}
 [촬영한 클립들 — AI가 장면 사진을 보고 정리한 것]
 ${clipsText(s.clips)}${prev}
 ${feedback ? "" : "\n[대본은 2안] 첫 컷과 흐름이 서로 다른 두 가지 구성으로 짜 줘 (예: 음식부터 보여 주는 안 / 궁금증으로 시작하는 안). 쓸 만한 장면이 적어 두 안이 거의 같아진다면 한 안만 줘.\n"}
 [답 형식]
-{"variants":[{"name":"A안 · 구성 이름(8자 이내)","concept":"이 안의 흐름 한 줄","title":"영상 제목(20자 이내)","hooks":["첫 컷 자막 후보1","후보2","후보3"],"cuts":[{"clip":클립 번호,"from":시작 초,"to":끝 초,"speed":1,"caption":"자막 또는 빈 문자열","note":"이 장면을 고른 이유 한 줄"}],"unused":[{"clip":번호,"reason":"안 쓴 이유"}],"check":["확인이 필요한 사실"]}],"post":{"caption":"인스타 릴스 캡션 2~4줄","hashtags":["해시태그",...5개],"shorts":{"title":"유튜브 쇼츠 제목","desc":"설명 1~2줄"},"clip":{"title":"네이버 클립 제목","desc":"설명 1~2줄"}}}`;
+{"variants":[{"name":"A안 · 구성 이름(8자 이내)","concept":"이 안의 흐름 한 줄","title":"영상 제목(20자 이내)","fixedTitle":"영상 내내 띄울 제목 또는 빈 문자열","hooks":["첫 컷 자막 후보1","후보2","후보3"],"cuts":[{"clip":클립 번호,"from":시작 초,"to":끝 초,"speed":1,"caption":"자막 또는 빈 문자열","note":"이 장면을 고른 이유 한 줄"}],"unused":[{"clip":번호,"reason":"안 쓴 이유"}],"check":["확인이 필요한 사실"]}],"post":{"caption":"인스타 릴스 캡션 2~4줄","hashtags":["해시태그",...5개],"shorts":{"title":"유튜브 쇼츠 제목","desc":"설명 1~2줄"},"clip":{"title":"네이버 클립 제목","desc":"설명 1~2줄"}}}`;
     const res = await runStep({ step: "shootscript", purpose: "shoot_script", blog: null, system: SYSTEM, prompt, json: true, maxTokens: 9000, retries: 0 });
     const got = cleanVariants(extractJson<Record<string, unknown>>(res.text), s.clips, { model: res.model, substitutedFor: res.substitutedFor });
     if (!got.length) throw new Error("대본에 쓸 수 있는 컷이 없었어요. '다시 하기'를 눌러 주세요.");
@@ -250,7 +308,7 @@ ${feedback ? "" : "\n[대본은 2안] 첫 컷과 흐름이 서로 다른 두 가
     const variants = feedback && old.length ? old.map((v, i) => (i === pick ? { ...got[0], name: got[0].name || v.name, shorts: got[0].shorts ?? v.shorts, clip: got[0].clip ?? v.clip, caption: got[0].caption || v.caption, hashtags: got[0].hashtags.length ? got[0].hashtags : v.hashtags } : v)) : got;
     const script = variants[pick];
     await setShoot(id, { script, variants, pick, status: "review", failed_at: "", message: `대본 준비 완료 · ${variants.length > 1 ? `${variants.length}안 · ` : ""}컷 ${script.cuts.length}개 · 약 ${Math.round(scriptSeconds(script))}초`, ...(script.title && !feedback && s.title.startsWith(kind.label) ? { title: script.title } : {}) }); // 제목을 안 적었으면 AI 제목으로
-    const brief = variants.map((v, i) => `${variants.length > 1 ? `\n【${v.name || `${i + 1}안`}】${v.concept ? ` ${v.concept}` : ""}\n` : "\n"}후킹: ${v.hooks[v.hook] ?? ""}\n컷 ${v.cuts.length}개 · 약 ${Math.round(scriptSeconds(v))}초\n${v.cuts.map((c, k) => `${k + 1}. 클립${c.clip} ${c.from}~${c.to}초${c.speed && c.speed !== 1 ? ` (${c.speed}배속)` : ""}${c.caption ? ` “${c.caption}”` : ""}`).join("\n")}${v.check.length ? `\n⚠ 확인: ${v.check.join(" / ")}` : ""}`).join("\n");
+    const brief = (style ? `🎯 참고 릴스 형식 반영: 컷 평균 ${style.avgCut}초${style.fixedTitle ? " · 고정 제목" : ""}\n` : "") + variants.map((v, i) => `${variants.length > 1 ? `\n【${v.name || `${i + 1}안`}】${v.concept ? ` ${v.concept}` : ""}\n` : "\n"}${v.fixedTitle ? `제목: ${v.fixedTitle}\n` : ""}후킹: ${v.hooks[v.hook] ?? ""}\n컷 ${v.cuts.length}개 · 약 ${Math.round(scriptSeconds(v))}초\n${v.cuts.map((c, k) => `${k + 1}. 클립${c.clip} ${c.from}~${c.to}초${c.speed && c.speed !== 1 ? ` (${c.speed}배속)` : ""}${c.caption ? ` “${c.caption}”` : ""}`).join("\n")}${v.check.length ? `\n⚠ 확인: ${v.check.join(" / ")}` : ""}`).join("\n");
     await notify(`📹 대본이 준비됐어요 — ${s.title}\n${brief}\n\n버튼을 누르면 그 안으로 바로 만들어요 (1분 안에 시작). 고치려면 앱에서 열어 주세요.`, id, variants.map((v, i) => ({ text: `✅ ${variants.length > 1 ? `${(v.name || `${i + 1}안`).split("·")[0].trim()}으로` : "이 대본으로"} 만들기`, callback_data: `sa:${id}:${i}` })));
   } catch (e) {
     await fail(id, "script", e);
@@ -308,7 +366,7 @@ export async function approveShoot(id: string, script?: unknown) {
   if (!s) throw new Error("찾을 수 없어요.");
   if (s.status !== "review") throw new Error("대본 승인 대기 중일 때만 승인할 수 있어요.");
   if (!s.script?.cuts.length) throw new Error("대본이 없어요.");
-  const doc = scriptToDoc(s.script, s.clips, `📹 현장 숏폼 ${id}\n${s.memo}`);
+  const doc = scriptToDoc(s.script, s.clips, `📹 현장 숏폼 ${id}\n${s.memo}`, s.ref_style);
   if (!doc.scenes.length) throw new Error("대본에 쓸 수 있는 컷이 없어요.");
   const reelId = newId("reel_");
   await q("INSERT INTO reel_projects (id, title, base_video_id, doc, status, message) VALUES ($1,$2,NULL,$3,'ready','')", [reelId, (s.script.title || s.title).slice(0, 120), j(doc)]);
