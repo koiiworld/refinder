@@ -490,9 +490,13 @@ export async function insightsReport(day = kstDay()) {
   const prev = (await getSetting<Record<string, Metrics>>("deals_insights_prev")) ?? {};
   const now: Record<string, Metrics> = {};
   const rows: { p: PostLog; m: Metrics; dv: number }[] = [];
+  const me = ((await threadsGet("/me", { fields: "username" }).catch(() => ({}))) as { username?: string }).username;
   for (const p of posts) {
     const m = await postInsights(p.id).catch(() => null);
     if (!m) continue; // 지워진 글 등
+    // 댓글 수: 우리 계정이 단 댓글(링크 댓글·자동 답글)은 빼고 다른 사람 댓글만 셈
+    const conv = await threadsGet(`/${p.id}/conversation`, { fields: "id,username", limit: "100" }).catch(() => null) as { data?: { username?: string }[] } | null;
+    if (conv?.data && me) m.replies = conv.data.filter((c) => c.username !== me).length;
     now[p.id] = m;
     rows.push({ p, m, dv: (m.views ?? 0) - (prev[p.id]?.views ?? 0) });
   }
@@ -512,7 +516,7 @@ export async function insightsReport(day = kstDay()) {
     const top = rows[0], low = rows[rows.length - 1];
     lines.push("", `👍 가장 많이 본 첫 줄: "${top.p.first.replace(/\s*\[광고\]\s*/, " ").trim().slice(0, 40)}"`, `👎 가장 적게 본 첫 줄: "${low.p.first.replace(/\s*\[광고\]\s*/, " ").trim().slice(0, 40)}"`);
   }
-  lines.push("", "※ 댓글 수에는 우리가 단 링크 댓글도 포함돼요.");
+  lines.push("", "※ 댓글 수는 우리 계정이 단 댓글을 뺀 숫자예요.");
   return lines.join("\n");
 }
 
