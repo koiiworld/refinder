@@ -425,11 +425,13 @@ const REPLY_RULES = `너는 스레드 계정 '자취방 살림고수'(살림 n�
 - 원글에 없는 가격·숫자·효능·재고·정품 여부는 절대 말하지 말 것. 모르면 "상품 페이지에서 확인해줘" 정도로
 - 링크는 쓰지 말 것 (필요하면 "링크는 첫 댓글에 있어" 라고만)
 - 구매를 압박하지 말 것, 과장 금지, 이모지는 0~1개
+- 첫마디를 고정하지 말 것: '맞아요/맞아'로 시작하지 말고, 댓글 내용을 짚어서 공감하거나(예: 'ㅋㅋ 치킨무 국물까지 챙기는 거 고수다', '고지서 숫자 보면 그렇게 되죠'), 한마디 보태거나, 가볍게 되묻는 식으로 매번 다르게. 아래 RECENT(최근 보낸 답글)와 시작 말·표현이 겹치지 않게
 - 공감·의견·경험 공유 댓글도 답글 대상이야 (짧게 공감하거나 원글 내용 한마디 보태기). 다른 살림/핫딜 계정이 단 댓글이라도 내용이 정상이면 답할 것
 - 악플·시비·정치/혐오·스팸·광고·개인정보(전화번호 등)·판단이 어려운 댓글은 답하지 말 것 (action: "skip")
 JSON 한 개로만 답해: {"action": "reply" | "skip", "reason": "짧게", "answer": "답글 (skip 이면 빈 문자열)"}`;
 
 const REVIEW_RULES = `너는 스레드 답글 검수자야. POST(원글), COMMENT(댓글), ANSWER(보낼 답글)를 보고 판단해.
+- ANSWER 가 '맞아요/맞아'로 시작하거나 RECENT 답글들과 시작 말이 같으면 다른 표현으로 고쳐
 - ANSWER 가 원글에 없는 사실·숫자·효능을 말하거나, 과장·단정·구매 압박이 있거나, 댓글 단 사람의 말투(존댓말/반말)와 다르거나(애매하면 존댓말), 댓글에 맞지 않으면 고쳐
 - 고칠 수 없거나 답하지 않는 게 나으면 action 을 "skip"
 JSON 한 개로만 답해: {"action": "reply" | "skip", "reason": "짧게", "answer": "최종 답글"}`;
@@ -463,7 +465,8 @@ export async function replyTick(now = new Date()) {
           log.unshift(entry);
           continue;
         }
-        const ctx = `POST:\n${post.body}\n\nCOMMENT (@${c.username}):\n${c.text}`;
+        const recent = log.filter((l) => l.action === "replied" && l.answer && l.answer !== post.kwReply).slice(0, 8).map((l) => `- ${l.answer}`).join("\n");
+        const ctx = `POST:\n${post.body}\n\nCOMMENT (@${c.username}):\n${c.text}\n\nRECENT (최근 보낸 답글, 시작 말 겹치지 말 것):\n${recent || "(없음)"}`;
         const a1 = await geminiJson(REPLY_RULES, ctx);
         if (a1.action !== "reply") { entry.reason = `1차: ${a1.reason ?? "skip"}`; }
         else {
