@@ -197,9 +197,22 @@ async function threadsCall(path: string, params: Record<string, string>) {
   return d.id;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function threadsPublish(text: string, replyTo?: string) {
-  const c = await threadsCall("/me/threads", { media_type: "TEXT", text, ...(replyTo ? { reply_to_id: replyTo } : {}) });
-  await sleep(Number(process.env.THREADS_WAIT_MS ?? 5000));
+async function threadsPublish(text: string, replyTo?: string, images: string[] = []) {
+  const wait = () => sleep(Number(process.env.THREADS_WAIT_MS ?? 5000));
+  let c: string;
+  if (images.length === 1) {
+    c = await threadsCall("/me/threads", { media_type: "IMAGE", image_url: images[0], text, ...(replyTo ? { reply_to_id: replyTo } : {}) });
+  } else if (images.length > 1) {
+    // 캐러셀: 사진마다 아이템 컨테이너 → 묶음 컨테이너
+    const children: string[] = [];
+    for (const url of images.slice(0, 10)) children.push(await threadsCall("/me/threads", { media_type: "IMAGE", image_url: url, is_carousel_item: "true" }));
+    await wait();
+    c = await threadsCall("/me/threads", { media_type: "CAROUSEL", children: children.join(","), text, ...(replyTo ? { reply_to_id: replyTo } : {}) });
+  } else {
+    c = await threadsCall("/me/threads", { media_type: "TEXT", text, ...(replyTo ? { reply_to_id: replyTo } : {}) });
+  }
+  await wait();
+  if (images.length) await wait(); // 사진은 처리 시간이 더 걸림
   return threadsCall("/me/threads_publish", { creation_id: c });
 }
 
@@ -212,17 +225,29 @@ export async function threadsMe() {
   return d.username;
 }
 
-type PostLog = { at: string; id: string; first: string; body?: string; reply?: string; replyId?: string | null };
+type PostLog = { at: string; id: string; first: string; body?: string; reply?: string; replyId?: string | null; kw?: string; kwReply?: string };
+/** 게시 옵션: images = 본문 사진(쿠팡 API 상품 이미지 등, 최대 10장), kw = 이 단어가 들어간 댓글엔 kwReply(링크+대가성 문구)로 자동 답글 */
+export type PostOpts = { images?: string[]; kw?: string; kwReply?: string };
 
 /** 게시: 본문 → 첫 댓글. 점검에 걸리면 올리지 않음 */
-export async function postThreads(body: string, reply = "", replies: string[] = []) {
+export async function postThreads(body: string, reply = "", replies: string[] = [], opts: PostOpts = {}) {
   // replies 가 있으면 본글 → 댓글1 → 댓글2 … 로 이어 달기 (마지막 댓글이 링크·대가성 문구). 없으면 reply 1개
   const chain = (replies.length ? replies : [reply]).map((r) => String(r ?? "").trim()).filter(Boolean);
   const last = chain.at(-1) ?? "";
   const problems = [...checkPost(body, last), ...chain.slice(0, -1).flatMap((r, i) => ([...r].length > 500 ? [`댓글${i + 1}이 500자를 넘어요`] : []))];
   if (/link\.coupang|https?:\/\//.test(chain.slice(0, -1).join("\n"))) problems.push("링크는 마지막 댓글에만 넣어요");
+  const images = (opts.images ?? []).map(String).filter((u) => /^https:\/\//.test(u));
+  const kw = opts.kw?.trim(), kwReply = opts.kwReply?.trim();
+  if (kw || kwReply) {
+    if (!kw || !kwReply) problems.push("키워드 답글은 kw 와 kwReply 가 둘 다 있어야 해요");
+    else {
+      if (!/\[광고\]|#광고/.test(body.split("\n").slice(0, 2).join("\n"))) problems.push("키워드 링크 글은 본문 첫 두 줄에 [광고] 표시가 있어야 해요");
+      if (!/수수료/.test(kwReply)) problems.push("키워드 답글에 대가성 문구(수수료)가 없어요");
+      if ([...kwReply].length > 500) problems.push("키워드 답글이 500자를 넘어요");
+    }
+  }
   if (problems.length) throw new Error("게시 안 함: " + problems.join(" / "));
-  const id = await threadsPublish(body.trim());
+  const id = await threadsPublish(body.trim(), undefined, images);
   let replyId: string | null = null;
   let parent = id;
   for (const r of chain) {
@@ -232,20 +257,20 @@ export async function postThreads(body: string, reply = "", replies: string[] = 
   }
   reply = chain.join("\n\n");
   const log = (await getSetting<PostLog[]>("deals_threads_log")) ?? [];
-  log.unshift({ at: new Date().toISOString(), id, first: body.split("\n")[0].slice(0, 80), body: body.trim(), reply: reply.trim(), replyId });
+  log.unshift({ at: new Date().toISOString(), id, first: body.split("\n")[0].slice(0, 80), body: body.trim(), reply: reply.trim(), replyId, ...(kw && kwReply ? { kw, kwReply } : {}) });
   await setSetting("deals_threads_log", log.slice(0, 100));
   return { id, replyId };
 }
 
 
 // ---------- 예약 게시 큐 (사용자가 "게시해" 승인한 원고만 넣음) ----------
-type QueueItem = { qid: string; at: string; body: string; replies: string[]; status: "wait" | "posted" | "error"; id?: string; err?: string };
+type QueueItem = { qid: string; at: string; body: string; replies: string[]; opts?: PostOpts; status: "wait" | "posted" | "error"; id?: string; err?: string };
 
 export async function queueList() {
   return (await getSetting<QueueItem[]>("deals_queue")) ?? [];
 }
 
-export async function queueAdd(items: { at: string; body: string; replies?: string[]; reply?: string }[]) {
+export async function queueAdd(items: { at: string; body: string; replies?: string[]; reply?: string; opts?: PostOpts }[]) {
   const q = await queueList();
   const added: QueueItem[] = [];
   for (const it of items) {
@@ -253,7 +278,7 @@ export async function queueAdd(items: { at: string; body: string; replies?: stri
     const problems = checkPost(String(it.body ?? ""), replies.at(-1) ?? "");
     if (isNaN(Date.parse(it.at))) problems.push("시간 형식이 틀려요");
     if (problems.length) throw new Error(`게시 안 함 (${String(it.body).split("\n")[0].slice(0, 30)}): ${problems.join(" / ")}`);
-    added.push({ qid: Math.random().toString(36).slice(2, 10), at: new Date(it.at).toISOString(), body: String(it.body).trim(), replies, status: "wait" });
+    added.push({ qid: Math.random().toString(36).slice(2, 10), at: new Date(it.at).toISOString(), body: String(it.body).trim(), replies, ...(it.opts ? { opts: it.opts } : {}), status: "wait" });
   }
   const all = [...q, ...added].sort((a, b) => a.at.localeCompare(b.at));
   await setSetting("deals_queue", all.slice(-300));
@@ -276,7 +301,7 @@ export async function queueTick(now = new Date()) {
   due.status = "posted"; // 먼저 표시해서 중복 게시 방지
   await setSetting("deals_queue", q);
   try {
-    const r = await postThreads(due.body, "", due.replies);
+    const r = await postThreads(due.body, "", due.replies, due.opts ?? {});
     due.id = r.id;
   } catch (e) {
     due.status = "error"; due.err = (e as Error).message.slice(0, 200);
@@ -429,6 +454,15 @@ export async function replyTick(now = new Date()) {
       handled[c.id] = new Date().toISOString();
       const entry: ReplyLog = { at: new Date().toISOString(), post: post.id, comment: c.id, user: c.username ?? "", text: c.text.slice(0, 300), action: "skipped" };
       try {
+        // 키워드 댓글: 미리 검수한 링크 답글을 그대로 (사람당 1번)
+        if (post.kw && post.kwReply && c.text.replace(/\s/g, "").includes(post.kw.replace(/\s/g, ""))) {
+          const already = log.some((l) => l.post === post.id && l.user === c.username && l.action === "replied" && l.answer === post.kwReply);
+          if (already) { entry.reason = "키워드 답글은 이미 보냄"; log.unshift(entry); continue; }
+          await threadsPublish(post.kwReply, c.id);
+          entry.action = "replied"; entry.answer = post.kwReply; tick++; todayCount++;
+          log.unshift(entry);
+          continue;
+        }
         const ctx = `POST:\n${post.body}\n\nCOMMENT (@${c.username}):\n${c.text}`;
         const a1 = await geminiJson(REPLY_RULES, ctx);
         if (a1.action !== "reply") { entry.reason = `1차: ${a1.reason ?? "skip"}`; }
